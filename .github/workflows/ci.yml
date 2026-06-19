@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: Build & Test (iOS Simulator)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Select an available iPhone simulator
+        id: sim
+        run: |
+          NAME=$(xcrun simctl list devices available \
+            | grep -Eo 'iPhone [0-9][^(]*' | head -1 | sed 's/ *$//')
+          if [ -z "$NAME" ]; then echo "No iPhone simulator available"; exit 1; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Using simulator: $NAME"
+
+      - name: Build & test
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Dealy.xcodeproj \
+            -scheme Dealy \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -derivedDataPath .derivedData \
+            clean test 2>&1
