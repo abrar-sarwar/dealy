@@ -11,12 +11,12 @@ struct DealRowCard: View {
         Button(action: onTap) {
             HStack(spacing: Spacing.sm) {
                 CategoryArtwork(category: deal.category, seed: deal.visualSeed)
-                    .frame(width: 76, height: 76)
+                    .frame(width: 92, height: 92)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(deal.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
                         .lineLimit(1)
                     Text(deal.merchant)

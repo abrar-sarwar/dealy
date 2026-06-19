@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+*.tsbuildinfo
+
+# env & secrets — NEVER commit real secrets
+.env
+.env.*
+!.env.example
+
+# prisma generated client
+src/generated/
+prisma/*.db
+
+# test
+coverage/
+
+# misc
+.DS_Store
+*.log

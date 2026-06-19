@@ -1,0 +1,1410 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe — process is up",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_root",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness alias",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Readiness probe — dependencies reachable",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "UsersController_me_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Current user profile, preferences, roles, interests",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_updateMe_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Update profile / onboarding / interests",
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_deleteMe_v1",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Delete (soft) the current account",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/me/preferences": {
+      "get": {
+        "operationId": "UsersController_preferences_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Get preferences",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "operationId": "UsersController_updatePreferences_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Update preferences (radius, notifications)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/schools": {
+      "get": {
+        "operationId": "ReferenceController_schools_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List schools and their campuses",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
+    "/v1/campuses": {
+      "get": {
+        "operationId": "ReferenceController_campuses_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all campuses/city anchors",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
+    "/v1/categories": {
+      "get": {
+        "operationId": "ReferenceController_categories_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List deal categories",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
+    "/v1/deals/{id}": {
+      "get": {
+        "operationId": "DealsController_getOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a published deal by id",
+        "tags": [
+          "deals"
+        ]
+      }
+    },
+    "/v1/feeds/nearby": {
+      "get": {
+        "operationId": "FeedsController_nearby_v1",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": 33.7531,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": -84.3857,
+              "type": "number"
+            }
+          },
+          {
+            "name": "radiusMiles",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Filter by category slug",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Published deals near a point, sorted by distance (cursor paginated)",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/recommended": {
+      "get": {
+        "operationId": "FeedsController_recommended_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Personalized, explainable recommendations (with reasons)",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/trending": {
+      "get": {
+        "operationId": "FeedsController_trending_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Trending deals by recent popularity",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/deals/{id}/swipes": {
+      "post": {
+        "operationId": "ActionsController_swipe_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSwipeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Record a swipe (right saves). Supports Idempotency-Key.",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/swipes/latest": {
+      "delete": {
+        "operationId": "ActionsController_undo_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Undo the latest swipe for this deal",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/save": {
+      "post": {
+        "operationId": "ActionsController_save_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      },
+      "delete": {
+        "operationId": "ActionsController_unsave_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/watch": {
+      "post": {
+        "operationId": "ActionsController_watch_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      },
+      "delete": {
+        "operationId": "ActionsController_unwatch_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/views": {
+      "post": {
+        "operationId": "ActionsController_view_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/clicks": {
+      "post": {
+        "operationId": "ActionsController_click_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/shares": {
+      "post": {
+        "operationId": "ActionsController_share_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/redemptions": {
+      "post": {
+        "operationId": "ActionsController_redeem_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Mark used — counts realized savings once per user+deal",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/me/saved-deals": {
+      "get": {
+        "operationId": "MeActionsController_saved_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "The current user's saved deals (most recent first)",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/me/watched-deals": {
+      "get": {
+        "operationId": "MeActionsController_watched_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "The current user's watched deals",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "operationId": "SearchController_run_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Full-text query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Category slug",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "online",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "student",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "minDiscount",
+            "required": false,
+            "in": "query",
+            "description": "Minimum discount %",
+            "schema": {
+              "minimum": 0,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "required": false,
+            "in": "query",
+            "description": "Max current price (dollars)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "relevance",
+                "newest",
+                "savings",
+                "priceLow",
+                "endingSoon"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search deals (full-text, filters, sort; typo-tolerant)",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/v1/push-tokens": {
+      "post": {
+        "operationId": "PushTokensController_register_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPushTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Register/refresh a device push token",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/push-tokens/{id}": {
+      "delete": {
+        "operationId": "PushTokensController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Remove a device push token",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "The current user's notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationsController_read_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Mark a notification read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/me/notification-preferences": {
+      "get": {
+        "operationId": "NotificationPrefsController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Get notification preferences",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "operationId": "NotificationPrefsController_update_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPrefsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Update notification preferences (toggles + quiet hours)",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/events": {
+      "post": {
+        "operationId": "AnalyticsController_track_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Record a client analytics event (distinctId = current user)",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/me/entitlements": {
+      "get": {
+        "operationId": "SubscriptionsController_entitlements_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Server-computed entitlements (Dealy+)",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/v1/subscriptions/apple/sync": {
+      "post": {
+        "operationId": "SubscriptionsController_sync_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleSyncDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Verify a StoreKit transaction and refresh entitlements",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/v1/webhooks/apple": {
+      "post": {
+        "operationId": "SubscriptionsController_webhook_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "App Store Server Notifications v2 webhook",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/roles": {
+      "post": {
+        "operationId": "AdminController_grantRole_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Grant a role to a user (audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/deals/{id}/publish": {
+      "post": {
+        "operationId": "AdminController_publish_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/deals/{id}/unpublish": {
+      "post": {
+        "operationId": "AdminController_unpublish_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/deals/{id}/expire": {
+      "post": {
+        "operationId": "AdminController_expire_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ingestion/failures": {
+      "get": {
+        "operationId": "AdminController_failures_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Recent ingestion failures",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/audit-logs": {
+      "get": {
+        "operationId": "AdminController_auditLogs_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Recent audit log entries",
+        "tags": [
+          "admin"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Dealy API",
+    "description": "Dealy production API — swipe-first, location-aware deals.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "supabase": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Supabase access token"
+      }
+    },
+    "schemas": {
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "graduationYear": {
+            "type": "number",
+            "minimum": 1950,
+            "maximum": 2100
+          },
+          "campusId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "onboardingCompleted": {
+            "type": "boolean"
+          },
+          "interests": {
+            "description": "Category slugs",
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpdatePreferencesDto": {
+        "type": "object",
+        "properties": {
+          "searchRadiusMiles": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "notificationsEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateSwipeDto": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "up"
+            ],
+            "description": "right also saves the deal"
+          }
+        },
+        "required": [
+          "direction"
+        ]
+      },
+      "RegisterPushTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android",
+              "web"
+            ]
+          }
+        },
+        "required": [
+          "token",
+          "platform"
+        ]
+      },
+      "UpdateNotificationPrefsDto": {
+        "type": "object",
+        "properties": {
+          "newNearbyDeals": {
+            "type": "boolean"
+          },
+          "priceDrops": {
+            "type": "boolean"
+          },
+          "expiringSaved": {
+            "type": "boolean"
+          },
+          "watchedUpdates": {
+            "type": "boolean"
+          },
+          "studentDeals": {
+            "type": "boolean"
+          },
+          "eventReminders": {
+            "type": "boolean"
+          },
+          "sponsored": {
+            "type": "boolean"
+          },
+          "quietHoursStart": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Quiet-hours start (local hour)"
+          },
+          "quietHoursEnd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "timezone": {
+            "type": "string",
+            "example": "America/New_York"
+          }
+        }
+      },
+      "TrackEventDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AppleSyncDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AppleWebhookDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GrantRoleDto": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

@@ -23,6 +23,8 @@ struct Deal: Identifiable, Codable, Hashable {
     let longitude: Double?
     /// Seed used to vary card artwork within a category.
     let visualSeed: Int
+    /// When this offer was published, used for accurate recent-first sorting.
+    var publishedAt: Date = .distantPast
 
     // MARK: Computed money
 

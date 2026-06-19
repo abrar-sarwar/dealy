@@ -152,4 +152,13 @@ final class AppStateTests: XCTestCase {
         app.setRadius(0)
         XCTAssertEqual(app.radius, Campus.minRadius)
     }
+
+    func testSelectingCampusWithRadiusUpdatesBothLocationFilters() {
+        let app = makeApp()
+
+        app.selectCampus(.georgiaTech, radius: 12)
+
+        XCTAssertEqual(app.currentCampus, .georgiaTech)
+        XCTAssertEqual(app.radius, 12)
+    }
 }

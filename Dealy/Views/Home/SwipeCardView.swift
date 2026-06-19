@@ -1,112 +1,130 @@
 import SwiftUI
 
-/// A single deal card in the swipe deck. Presentational: drag/overlay state is
-/// driven by `dragTranslation` (non-zero only for the top, draggable card).
 struct SwipeCardView: View {
     let deal: Deal
     let campus: Campus
     var dragTranslation: CGSize = .zero
 
-    private var swipeProgress: Double {
-        Double(max(min(dragTranslation.width / 120, 1), -1))
+    private var horizontalProgress: Double {
+        Double(max(min(dragTranslation.width / 110, 1), -1))
     }
-    private var nearCampus: Bool {
-        !deal.isOnline && !Set(deal.locationTags).isDisjoint(with: Set(campus.locationTags))
+
+    private var upwardProgress: Double {
+        Double(max(min(-dragTranslation.height / 90, 1), 0))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            artwork
-            info
+        ZStack(alignment: .bottom) {
+            CategoryArtwork(category: deal.category, seed: deal.visualSeed, symbolScale: 1.8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.08), .black.opacity(0.84)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            dealDetails
         }
-        .background(
-            RoundedRectangle(cornerRadius: Radius.xl, style: .continuous).fill(Theme.surface)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
+        .background(deal.category.gradient)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
-                .stroke(Theme.separator, lineWidth: 0.75)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(.white.opacity(0.24), lineWidth: 1)
         )
-        .dealyShadow(.card)
-        .overlay(stamps)
+        .overlay(edgeFeedback)
+        .shadow(color: .black.opacity(0.15), radius: 22, y: 10)
     }
 
-    private var artwork: some View {
-        ZStack(alignment: .top) {
-            CategoryArtwork(category: deal.category, seed: deal.visualSeed, symbolScale: 1.15)
-                .frame(height: 196)
-            HStack {
-                InfoChip(symbol: deal.category.symbol, text: deal.category.displayName,
-                         tint: .white)
-                    .background(.ultraThinMaterial, in: Capsule())
-                Spacer()
-                DealScoreBadge(score: deal.dealScore)
-            }
-            .padding(Spacing.sm)
-        }
-    }
+    private var dealDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            metadataRail
 
-    private var info: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(deal.title)
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(2)
-                Text(deal.merchant)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.mutedText)
-            }
+            HStack(alignment: .bottom, spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(deal.title)
+                        .font(.system(size: 25, weight: .bold, design: .rounded))
+                        .lineLimit(2)
+                    Text(deal.merchant)
+                        .font(.subheadline.weight(.medium))
+                        .opacity(0.82)
+                }
 
-            HStack(alignment: .firstTextBaseline) {
-                PriceView(deal: deal)
-                Spacer()
-                SavingsPill(deal: deal)
-            }
+                Spacer(minLength: Spacing.sm)
 
-            HStack(spacing: Spacing.xs) {
-                InfoChip(symbol: deal.isOnline ? "globe" : "location.fill",
-                         text: Format.distance(deal.distanceMiles, isOnline: deal.isOnline),
-                         tint: Theme.primary)
-                ExpiryChip(date: deal.expirationDate)
-            }
-
-            if nearCampus {
-                Text("Near \(campus.shortName)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.mutedText)
-            } else if deal.isOnline {
-                Text("Ships anywhere")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.mutedText)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(Format.price(deal.currentPrice))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                    if deal.savingsPercentage > 0 {
+                        Text("\(deal.savingsPercentage)% off")
+                            .font(.caption.weight(.semibold))
+                            .opacity(0.82)
+                    }
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.md)
-    }
-
-    /// SAVE / SKIP stamps revealed as the card is dragged.
-    private var stamps: some View {
-        ZStack {
-            stamp(text: "SAVE", color: Theme.save, rotation: -16)
-                .opacity(max(swipeProgress, 0))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            stamp(text: "SKIP", color: Theme.skip, rotation: 16)
-                .opacity(max(-swipeProgress, 0))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        }
+        .foregroundStyle(.white)
         .padding(Spacing.lg)
     }
 
-    private func stamp(text: String, color: Color, rotation: Double) -> some View {
-        Text(text)
-            .font(.system(size: 34, weight: .heavy, design: .rounded))
-            .foregroundStyle(color)
-            .padding(.vertical, 6)
-            .padding(.horizontal, Spacing.sm)
-            .overlay(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .stroke(color, lineWidth: 4))
-            .rotationEffect(.degrees(rotation))
-            .accessibilityHidden(true)
+    private var metadataRail: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(DealCardMetadata.items(for: deal).enumerated()), id: \.offset) { index, item in
+                if index > 0 {
+                    Circle().fill(.white.opacity(0.56)).frame(width: 3, height: 3)
+                }
+                Text(item)
+                    .lineLimit(1)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var edgeFeedback: some View {
+        ZStack {
+            edgeGlow(color: Theme.skip, alignment: .leading)
+                .opacity(max(-horizontalProgress, 0))
+            edgeGlow(color: Theme.save, alignment: .trailing)
+                .opacity(max(horizontalProgress, 0))
+            bottomGlow
+                .opacity(upwardProgress)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func edgeGlow(color: Color, alignment: Alignment) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: alignment == .leading
+                        ? [color.opacity(0.9), color.opacity(0)]
+                        : [color.opacity(0), color.opacity(0.9)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: 86)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .blur(radius: 12)
+    }
+
+    private var bottomGlow: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, Theme.primary.opacity(0.95)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(height: 100)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .blur(radius: 12)
     }
 }

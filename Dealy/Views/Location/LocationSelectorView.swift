@@ -13,6 +13,8 @@ struct LocationSelectorView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.sm) {
+                    currentLocationCard
+
                     Text("Your campus or city sets which mock deals appear nearby. Changing it won’t remove anything you’ve saved.")
                         .font(.footnote)
                         .foregroundStyle(Theme.mutedText)
@@ -57,5 +59,41 @@ struct LocationSelectorView: View {
                 radius = app.radius
             }
         }
+    }
+
+    /// Preview of the upcoming GPS auto-detect feature. Disabled until the
+    /// backend + CoreLocation permission flow ships.
+    private var currentLocationCard: some View {
+        HStack(spacing: Spacing.sm) {
+            ZStack {
+                Circle().fill(Theme.brandGradient).frame(width: 42, height: 42)
+                Image(systemName: "location.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Use my current location")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Text("Auto-detect deals right around you")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedText)
+            }
+            Spacer(minLength: Spacing.xs)
+            Text("Coming soon")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Theme.primary)
+                .padding(.vertical, 5)
+                .padding(.horizontal, Spacing.xs)
+                .background(Capsule().fill(Theme.primary.opacity(0.12)))
+        }
+        .padding(Spacing.md)
+        .dealyCardSurface()
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                .strokeBorder(Theme.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Use my current location. Coming soon.")
     }
 }

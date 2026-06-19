@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class HomeFeedViewModel {
     var selectedCategory: DealCategory? = nil
+    var filters = DealFeedFilters()
     private(set) var deck: [Deal] = []
 
     /// Recompute the deck from current app state, excluding already-swiped deals.
@@ -14,11 +15,13 @@ final class HomeFeedViewModel {
         let active = DealFilter.active(app.allDeals)
         let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
         let categorized = DealFilter.byCategory(located, category: selectedCategory)
-        let unseen = categorized.filter { !app.swipedDealIDs.contains($0.id) }
-        deck = DealRanker.rank(unseen,
-                               interests: app.interests,
-                               campus: app.currentCampus,
-                               radius: app.radius)
+        let refined = DealFilter.advanced(categorized, filters: filters)
+        let unseen = refined.filter { !app.swipedDealIDs.contains($0.id) }
+        let recommended = DealRanker.rank(unseen,
+                                          interests: app.interests,
+                                          campus: app.currentCampus,
+                                          radius: app.radius)
+        deck = filters.sort.sort(recommended)
     }
 
     var topDeal: Deal? { deck.first }
@@ -42,8 +45,9 @@ final class HomeFeedViewModel {
         let active = DealFilter.active(app.allDeals)
         let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
         let categorized = DealFilter.byCategory(located, category: selectedCategory)
-        if categorized.isEmpty {
-            return selectedCategory == nil ? .noneInArea : .filteredOut
+        let refined = DealFilter.advanced(categorized, filters: filters)
+        if refined.isEmpty {
+            return selectedCategory == nil && !filters.isActive ? .noneInArea : .filteredOut
         }
         return .allSwiped
     }

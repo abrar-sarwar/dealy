@@ -10,14 +10,14 @@ struct DealTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
                     CategoryArtwork(category: deal.category, seed: deal.visualSeed)
-                        .frame(height: 104)
+                        .frame(height: 132)
                     SavingsPill(deal: deal)
                         .padding(Spacing.xs)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(deal.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
                         .lineLimit(2, reservesSpace: true)
                         .multilineTextAlignment(.leading)
@@ -39,7 +39,7 @@ struct DealTile: View {
                 }
                 .padding(Spacing.sm)
             }
-            .frame(width: 180)
+            .frame(width: 210)
             .background(
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(Theme.surface)
             )

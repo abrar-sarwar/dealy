@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 /// Full deal detail, presented as a sheet. Reads/writes shared state through
 /// AppState so saved/watched/used stay consistent everywhere.
@@ -40,7 +41,7 @@ struct DealDetailView: View {
                     scoreCard
                     section("About this deal", deal.detailedDescription)
                     whyGood
-                    if !deal.isOnline { mapPlaceholder }
+                    if !deal.isOnline { mapSnippet }
                     section("Redemption & terms", deal.terms)
                     Color.clear.frame(height: 96) // room for the sticky action bar
                 }
@@ -161,25 +162,39 @@ struct DealDetailView: View {
         .dealyCardSurface()
     }
 
-    private var mapPlaceholder: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
+    private var mapSnippet: some View {
+        let coord = DealGeo.coordinate(for: deal, around: app.currentCampus)
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("Location").font(.headline).foregroundStyle(Theme.primaryText)
-            ZStack {
-                LinearGradient(colors: [Theme.primary.opacity(0.18), Theme.bright.opacity(0.10)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                VStack(spacing: Spacing.xs) {
-                    Image(systemName: "map.fill")
-                        .font(.largeTitle).foregroundStyle(Theme.primary)
-                    Text("\(Format.distance(deal.distanceMiles, isOnline: false)) from \(app.currentCampus.shortName)")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.primaryText)
-                    Text("Map preview — backend coming soon")
-                        .font(.caption).foregroundStyle(Theme.mutedText)
+            Map(initialPosition: .region(MKCoordinateRegion(
+                center: coord,
+                span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)))) {
+                Annotation(deal.merchant, coordinate: coord) {
+                    ZStack {
+                        Circle().fill(deal.category.gradient)
+                            .frame(width: 38, height: 38)
+                            .overlay(Circle().stroke(.white, lineWidth: 2.5))
+                            .dealyShadow(.soft)
+                        Image(systemName: deal.category.symbol)
+                            .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                    }
                 }
+                .annotationTitles(.hidden)
             }
-            .frame(height: 130)
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
+            .frame(height: 150)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
                 .stroke(Theme.separator, lineWidth: 0.75))
+            .allowsHitTesting(false)
+            .overlay(alignment: .bottomLeading) {
+                Text("\(Format.distance(deal.distanceMiles, isOnline: false)) from \(app.currentCampus.shortName) · approximate")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .padding(.vertical, 5).padding(.horizontal, Spacing.xs)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(Spacing.xs)
+            }
         }
     }
 

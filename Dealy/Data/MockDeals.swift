@@ -40,7 +40,8 @@ enum MockDeals {
                 dealScore: score, isOnline: isOnline,
                 shortDescription: short, detailedDescription: detail, terms: terms,
                 locationTags: tags, couponCode: coupon, destinationURL: url,
-                latitude: nil, longitude: nil, visualSeed: seed
+                latitude: nil, longitude: nil, visualSeed: seed,
+                publishedAt: reference.addingTimeInterval(-Double(max(seed, 1)) * 3 * 3600)
             )
         }
     }
