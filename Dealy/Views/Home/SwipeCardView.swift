@@ -10,6 +10,9 @@ struct SwipeCardView: View {
     private var swipeProgress: Double {
         Double(max(min(dragTranslation.width / 120, 1), -1))
     }
+    private var upwardProgress: Double {
+        Double(max(min(-dragTranslation.height / 100, 1), 0))
+    }
     private var nearCampus: Bool {
         !deal.isOnline && !Set(deal.locationTags).isDisjoint(with: Set(campus.locationTags))
     }
@@ -34,7 +37,7 @@ struct SwipeCardView: View {
     private var artwork: some View {
         ZStack(alignment: .top) {
             CategoryArtwork(category: deal.category, seed: deal.visualSeed, symbolScale: 1.15)
-                .frame(height: 196)
+                .frame(height: 230)
             HStack {
                 InfoChip(symbol: deal.category.symbol, text: deal.category.displayName,
                          tint: .white)
@@ -85,15 +88,18 @@ struct SwipeCardView: View {
         .padding(Spacing.md)
     }
 
-    /// SAVE / SKIP stamps revealed as the card is dragged.
+    /// Directional stamps revealed as the card is dragged.
     private var stamps: some View {
         ZStack {
             stamp(text: "SAVE", color: Theme.save, rotation: -16)
                 .opacity(max(swipeProgress, 0))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            stamp(text: "SKIP", color: Theme.skip, rotation: 16)
+            stamp(text: "BYE", color: Theme.skip, rotation: 16)
                 .opacity(max(-swipeProgress, 0))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            stamp(text: "GET DEAL", color: Theme.primary, rotation: 0)
+                .opacity(upwardProgress)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         }
         .padding(Spacing.lg)
     }
