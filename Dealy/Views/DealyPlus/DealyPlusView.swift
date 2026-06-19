@@ -69,7 +69,7 @@ struct DealyPlusView: View {
                         .font(.system(size: 40, weight: .bold))
                         .foregroundStyle(.white)
                     Text("Dealy+")
-                        .font(.system(size: 30, design: .rounded, weight: .bold))
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                 }
             }

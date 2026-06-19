@@ -115,7 +115,7 @@ struct AboutSheet: View {
                     .resizable().scaledToFit().frame(width: 96, height: 96)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .dealyShadow(.card)
-                Text("Dealy").font(.system(size: 30, design: .rounded, weight: .bold))
+                Text("Dealy").font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.primaryText)
                 Text("Swipe. Save. Repeat.").font(.headline).foregroundStyle(Theme.primary)
                 Text("A swipe-first, location-aware savings app. This MVP is a frontend preview built with SwiftUI and local mock data — launching around Atlanta and Georgia campuses.")
