@@ -12,6 +12,8 @@ struct ProfileView: View {
     @State private var confirmResetOnboarding = false
     @State private var confirmResetHistory = false
     @State private var confirmRestoreData = false
+    @AppStorage(AppearancePreference.storageKey)
+    private var appearanceRawValue = AppearancePreference.defaultValue.rawValue
 
     private var interestList: [DealCategory] {
         DealCategory.allCases.filter { app.interests.contains($0) }
@@ -127,6 +129,17 @@ struct ProfileView: View {
 
     private var preferencesSection: some View {
         Section("Preferences") {
+            Picker(selection: $appearanceRawValue) {
+                ForEach(AppearancePreference.allCases) { appearance in
+                    Label(appearance.displayName, systemImage: appearance.symbol)
+                        .tag(appearance.rawValue)
+                }
+            } label: {
+                Label("Appearance", systemImage: "circle.lefthalf.filled")
+                    .foregroundStyle(Theme.primaryText)
+            }
+            .pickerStyle(.menu)
+
             Button { showLocation = true } label: {
                 settingRow("mappin.circle.fill", "Campus & radius", detail: app.currentCampus.shortName)
             }

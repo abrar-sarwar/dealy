@@ -1,0 +1,161 @@
+import type { Deal, Category } from '@prisma/client';
+import type { DealDto } from './deal.dto';
+
+/** Minor units (cents) → dollars as a JS number. Never floating-point math on storage. */
+function minorToDollars(minor: bigint | null): number {
+  if (minor === null) return 0;
+  return Number(minor) / 100;
+}
+
+/** Normalized inputs shared by the Prisma-row and raw-SQL-row mappers. */
+interface NormalizedDeal {
+  id: string;
+  title: string;
+  merchant: string;
+  categorySlug: string;
+  shortDescription: string;
+  detailedDescription: string;
+  terms: string;
+  currentPriceMinor: bigint | null;
+  originalPriceMinor: bigint | null;
+  currency: string;
+  dealScore: number;
+  isOnline: boolean;
+  isStudentOnly: boolean;
+  couponCode: string | null;
+  destinationUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationTags: string[];
+  visualSeed: number;
+  createdAt: Date;
+  startAt: Date | null;
+  expiresAt: Date;
+}
+
+function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
+  const currentPrice = minorToDollars(n.currentPriceMinor);
+  const originalPrice = minorToDollars(n.originalPriceMinor);
+  const savingsAmount = Math.max(originalPrice - currentPrice, 0);
+  const savingsPercentage =
+    originalPrice > 0 ? Math.round((savingsAmount / originalPrice) * 100) : 0;
+
+  return {
+    id: n.id,
+    title: n.title,
+    merchant: n.merchant,
+    category: n.categorySlug,
+    currentPrice,
+    originalPrice,
+    currency: n.currency,
+    savingsAmount,
+    savingsPercentage,
+    distanceMiles: distanceMiles === null ? null : Math.round(distanceMiles * 10) / 10,
+    dealScore: n.dealScore,
+    isOnline: n.isOnline,
+    isStudentOnly: n.isStudentOnly,
+    shortDescription: n.shortDescription,
+    detailedDescription: n.detailedDescription,
+    terms: n.terms,
+    couponCode: n.couponCode,
+    destinationUrl: n.destinationUrl,
+    latitude: n.latitude,
+    longitude: n.longitude,
+    locationTags: n.locationTags,
+    visualSeed: n.visualSeed,
+    publishedAt: n.createdAt.toISOString(),
+    startAt: n.startAt ? n.startAt.toISOString() : null,
+    expiresAt: n.expiresAt.toISOString(),
+  };
+}
+
+/** Map a Prisma deal (with its category relation) — used by deal detail. */
+export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles: number | null) {
+  return toDealDto(
+    {
+      id: deal.id,
+      title: deal.title,
+      merchant: deal.merchant,
+      categorySlug: deal.category.slug,
+      shortDescription: deal.shortDescription,
+      detailedDescription: deal.detailedDescription,
+      terms: deal.terms,
+      currentPriceMinor: deal.currentPriceMinor,
+      originalPriceMinor: deal.originalPriceMinor,
+      currency: deal.currency,
+      dealScore: deal.dealScore,
+      isOnline: deal.isOnline,
+      isStudentOnly: deal.isStudentOnly,
+      couponCode: deal.couponCode,
+      destinationUrl: deal.destinationUrl,
+      latitude: deal.latitude,
+      longitude: deal.longitude,
+      locationTags: deal.locationTags,
+      visualSeed: deal.visualSeed,
+      createdAt: deal.createdAt,
+      startAt: deal.startAt,
+      expiresAt: deal.expiresAt,
+    },
+    distanceMiles,
+  );
+}
+
+/** Raw row returned by the nearby PostGIS query (snake_case + distance_meters). */
+export interface NearbyRow {
+  id: string;
+  title: string;
+  merchant: string;
+  category_slug: string;
+  short_description: string;
+  detailed_description: string;
+  terms: string;
+  current_price_minor: bigint | null;
+  original_price_minor: bigint | null;
+  currency: string;
+  deal_score: number;
+  is_online: boolean;
+  is_student_only: boolean;
+  coupon_code: string | null;
+  destination_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_tags: string[];
+  visual_seed: number;
+  created_at: Date;
+  start_at: Date | null;
+  expires_at: Date;
+  distance_meters: number;
+}
+
+const METERS_PER_MILE = 1609.344;
+
+/** Map a raw nearby row, converting metres → miles. */
+export function mapNearbyRow(row: NearbyRow) {
+  return toDealDto(
+    {
+      id: row.id,
+      title: row.title,
+      merchant: row.merchant,
+      categorySlug: row.category_slug,
+      shortDescription: row.short_description,
+      detailedDescription: row.detailed_description,
+      terms: row.terms,
+      currentPriceMinor: row.current_price_minor,
+      originalPriceMinor: row.original_price_minor,
+      currency: row.currency,
+      dealScore: row.deal_score,
+      isOnline: row.is_online,
+      isStudentOnly: row.is_student_only,
+      couponCode: row.coupon_code,
+      destinationUrl: row.destination_url,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      locationTags: row.location_tags,
+      visualSeed: row.visual_seed,
+      createdAt: row.created_at,
+      startAt: row.start_at,
+      expiresAt: row.expires_at,
+    },
+    Number(row.distance_meters) / METERS_PER_MILE,
+  );
+}

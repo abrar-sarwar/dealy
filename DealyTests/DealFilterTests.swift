@@ -7,13 +7,16 @@ final class DealFilterTests: XCTestCase {
 
     private func deal(_ id: String, category: DealCategory, distance: Double,
                       online: Bool = false, tags: [String], expiresInHours: Double = 24,
-                      title: String = "Deal", merchant: String = "Store") -> Deal {
+                      title: String = "Deal", merchant: String = "Store",
+                      currentPrice: Decimal = 5, originalPrice: Decimal = 10,
+                      score: Int = 80, publishedHoursAgo: Double = 12) -> Deal {
         Deal(id: id, title: title, merchant: merchant, category: category,
-             currentPrice: 5, originalPrice: 10, distanceMiles: distance,
+             currentPrice: currentPrice, originalPrice: originalPrice, distanceMiles: distance,
              expirationDate: ref.addingTimeInterval(expiresInHours * 3600),
-             dealScore: 80, isOnline: online, shortDescription: "s",
+             dealScore: score, isOnline: online, shortDescription: "s",
              detailedDescription: "d", terms: "t", locationTags: tags,
-             couponCode: nil, destinationURL: nil, latitude: nil, longitude: nil, visualSeed: 0)
+             couponCode: nil, destinationURL: nil, latitude: nil, longitude: nil,
+             visualSeed: 0, publishedAt: ref.addingTimeInterval(-publishedHoursAgo * 3600))
     }
 
     func testCategoryFilter() {
@@ -66,5 +69,31 @@ final class DealFilterTests: XCTestCase {
         let ranked = DealRanker.rank([techDeal, foodDeal], interests: [.food],
                                      campus: .georgiaState, radius: 3, reference: ref)
         XCTAssertEqual(ranked.first?.id, "food")
+    }
+
+    func testAdvancedFiltersApplyPriceAndToggles() {
+        let matching = deal("match", category: .tech, distance: 1, online: true, tags: ["Online"],
+                            expiresInHours: 4, currentPrice: 20, originalPrice: 50)
+        let expensive = deal("expensive", category: .tech, distance: 1, online: true, tags: ["Online"],
+                             expiresInHours: 4, currentPrice: 80, originalPrice: 100)
+        let local = deal("local", category: .tech, distance: 1, tags: ["Atlanta"],
+                         expiresInHours: 4, currentPrice: 20, originalPrice: 50)
+        let filters = DealFeedFilters(minPrice: 10, maxPrice: 50, onlineOnly: true,
+                                      endingSoonOnly: true, strongDiscountOnly: true)
+
+        XCTAssertEqual(DealFilter.advanced([matching, expensive, local], filters: filters, reference: ref).map(\.id),
+                       ["match"])
+    }
+
+    func testSortOptionsUseRealDealFields() {
+        let olderPopular = deal("popular", category: .food, distance: 1, tags: ["Atlanta"],
+                                currentPrice: 30, originalPrice: 60, score: 99, publishedHoursAgo: 24)
+        let recentCheap = deal("recent", category: .food, distance: 1, tags: ["Atlanta"],
+                               currentPrice: 10, originalPrice: 12, score: 70, publishedHoursAgo: 1)
+
+        XCTAssertEqual(DealSortOption.mostPopular.sort([recentCheap, olderPopular]).first?.id, "popular")
+        XCTAssertEqual(DealSortOption.mostRecent.sort([olderPopular, recentCheap]).first?.id, "recent")
+        XCTAssertEqual(DealSortOption.lowestPrice.sort([olderPopular, recentCheap]).first?.id, "recent")
+        XCTAssertEqual(DealSortOption.biggestDiscount.sort([recentCheap, olderPopular]).first?.id, "popular")
     }
 }

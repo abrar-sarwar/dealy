@@ -3,87 +3,92 @@ import SwiftUI
 struct SwipeTutorialView: View {
     let onDismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var cue = 0
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.42)
-                .ignoresSafeArea()
+            glow(color: Theme.skip, alignment: .leading)
+                .opacity(cue == 0 ? 1 : 0.16)
+            glow(color: Theme.save, alignment: .trailing)
+                .opacity(cue == 1 ? 1 : 0.16)
+            bottomGlow
+                .opacity(cue == 2 ? 1 : 0.16)
 
-            VStack(spacing: Spacing.lg) {
-                VStack(spacing: 5) {
-                    Text("Deals move with you")
-                        .font(.system(.title2, design: .rounded, weight: .bold))
-                        .foregroundStyle(Theme.primaryText)
-                    Text("Three swipes. That’s the whole game.")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedText)
-                }
+            edgeLabel("Bye", symbol: "xmark", color: Theme.skip)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 10)
+            edgeLabel("Save", symbol: "bookmark.fill", color: Theme.save)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 10)
+            edgeLabel("Get deal", symbol: "arrow.up", color: Theme.primary)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 18)
 
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    gesture(
-                        symbol: "arrow.left",
-                        title: "BYE",
-                        detail: "Not this one",
-                        tint: Theme.skip
-                    )
-                    gesture(
-                        symbol: "arrow.up",
-                        title: "GET DEAL",
-                        detail: "Use the offer",
-                        tint: Theme.primary
-                    )
-                    gesture(
-                        symbol: "arrow.right",
-                        title: "SAVE",
-                        detail: "Keep it",
-                        tint: Theme.save
-                    )
-                }
-
-                Button("Start swiping") {
-                    onDismiss()
-                }
-                .buttonStyle(.primaryDealy)
+            VStack(spacing: 8) {
+                Text("Swipe the card")
+                    .font(.headline.weight(.bold))
+                Text("Left to pass · right to save · up to get it")
+                    .font(.caption)
+                    .opacity(0.84)
+                Button("Got it") { onDismiss() }
+                    .font(.subheadline.weight(.bold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(.white, in: Capsule())
+                    .foregroundStyle(.black)
             }
-            .padding(Spacing.lg)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
-                    .fill(Theme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
-                    .stroke(Theme.separator, lineWidth: 0.75)
-            )
-            .dealyShadow(.card)
-            .padding(Spacing.lg)
+            .foregroundStyle(.white)
+            .padding(14)
+            .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 18))
+            .padding(.top, 16)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .accessibilityElement(children: .contain)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .task {
+            guard !reduceMotion else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1.15))
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    cue = (cue + 1) % 3
+                }
+            }
+        }
     }
 
-    private func gesture(
-        symbol: String,
-        title: String,
-        detail: String,
-        tint: Color
-    ) -> some View {
-        VStack(spacing: Spacing.xs) {
-            Image(systemName: symbol)
-                .font(.system(size: 25, weight: .heavy))
-                .foregroundStyle(tint)
-                .frame(width: 54, height: 54)
-                .background(Circle().fill(tint.opacity(0.12)))
+    private func edgeLabel(_ text: String, symbol: String, color: Color) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(color.opacity(0.9), in: Capsule())
+    }
 
-            Text(title)
-                .font(.caption.weight(.heavy))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+    private func glow(color: Color, alignment: Alignment) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: alignment == .leading
+                        ? [color, color.opacity(0)]
+                        : [color.opacity(0), color],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: 82)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .blur(radius: 16)
+    }
 
-            Text(detail)
-                .font(.caption2)
-                .foregroundStyle(Theme.mutedText)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
+    private var bottomGlow: some View {
+        LinearGradient(
+            colors: [.clear, Theme.primary],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 94)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .blur(radius: 16)
     }
 }

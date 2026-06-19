@@ -1,0 +1,569 @@
+// Dealy Prisma schema.
+// Phase 1: datasource + PostGIS extension + a smoke model to prove migrations.
+// The full domain schema (users, deals, PostGIS geography columns, etc.) is
+// added incrementally in Phases 2–9. PostGIS geography columns are managed via
+// raw-SQL migrations because Prisma has no native geography type (see decisions.md).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+  // The postgis/postgis image pre-creates these; declare them all so Prisma
+  // treats them as managed (no false drift). Dealy only queries `postgis`.
+  extensions = [postgis, postgis_topology, postgis_tiger_geocoder, fuzzystrmatch]
+}
+
+/// Phase 1 smoke model — confirms migrations + the Prisma client work end to end.
+model HealthCheck {
+  id        String   @id @default(uuid()) @db.Uuid
+  note      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("health_checks")
+}
+
+// ===========================================================================
+// Phase 2 — identity, profile, preferences, schools/campuses, categories.
+// Roles live in a server-controlled table (NEVER trusted from JWT metadata).
+// ===========================================================================
+
+enum UserRole {
+  user
+  business_member
+  business_owner
+  moderator
+  admin
+
+  @@map("user_role")
+}
+
+/// App identity, linked 1:1 to a Supabase auth user by `supabaseUserId` (the JWT `sub`).
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  supabaseUserId String    @unique @map("supabase_user_id") @db.Uuid
+  email          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  /// Soft-delete marker for account deletion (data purged by a worker job).
+  deletedAt      DateTime? @map("deleted_at")
+
+  profile             UserProfile?
+  preferences         UserPreferences?
+  categoryPreferences UserCategoryPreference[]
+  roles               UserRoleAssignment[]
+  savedDeals          SavedDeal[]
+  watchedDeals        WatchedDeal[]
+  swipes              DealSwipe[]
+  redemptions         DealRedemption[]
+  interactions        DealInteraction[]
+  pushTokens          PushToken[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreferences?
+  subscriptions       Subscription[]
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Server-controlled authorization. Multiple roles per user supported.
+model UserRoleAssignment {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      UserRole
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+  @@map("user_roles")
+}
+
+model UserProfile {
+  userId              String    @id @map("user_id") @db.Uuid
+  displayName         String?   @map("display_name")
+  graduationYear      Int?      @map("graduation_year")
+  campusId            String?   @map("campus_id") @db.Uuid
+  onboardingCompleted Boolean   @default(false) @map("onboarding_completed")
+  consentAt           DateTime? @map("consent_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus Campus? @relation(fields: [campusId], references: [id], onDelete: SetNull)
+
+  @@map("user_profiles")
+}
+
+model UserPreferences {
+  userId               String   @id @map("user_id") @db.Uuid
+  searchRadiusMiles    Int      @default(5) @map("search_radius_miles")
+  notificationsEnabled Boolean  @default(false) @map("notifications_enabled")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserCategoryPreference {
+  userId     String   @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+  @@index([categoryId])
+  @@map("user_category_preferences")
+}
+
+/// Stable category taxonomy. `slug` mirrors the iOS `DealCategory` rawValue.
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  displayName String   @map("display_name")
+  symbol      String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userPreferences UserCategoryPreference[]
+  deals           Deal[]
+
+  @@map("categories")
+}
+
+// ===========================================================================
+// Phase 3 — stores, deals, geospatial. `geog` is a STORED generated geography
+// column (from lat/lng) with a GiST index — created via raw SQL in the
+// migration because Prisma can't author generated/geography columns. It's typed
+// `Unsupported` here so Prisma tracks it (no false drift) but never queries it;
+// all spatial queries use raw SQL (see decisions.md ADR-003).
+// ===========================================================================
+
+enum DealStatus {
+  draft
+  published
+  archived
+  expired
+
+  @@map("deal_status")
+}
+
+enum ModerationStatus {
+  pending
+  approved
+  rejected
+
+  @@map("moderation_status")
+}
+
+model Store {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  deals Deal[]
+
+  @@map("stores")
+}
+
+model Deal {
+  id                  String           @id @default(uuid()) @db.Uuid
+  /// Stable provider/seed identifier for idempotent upserts + dedupe.
+  externalId          String?          @unique @map("external_id")
+  title               String
+  merchant            String
+  storeId             String?          @map("store_id") @db.Uuid
+  categoryId          String           @map("category_id") @db.Uuid
+  shortDescription    String           @default("") @map("short_description")
+  detailedDescription String           @default("") @map("detailed_description")
+  terms               String           @default("")
+  /// Money as integer minor units (cents). Never floating point.
+  currentPriceMinor   BigInt?          @map("current_price_minor")
+  originalPriceMinor  BigInt?          @map("original_price_minor")
+  currency            String           @default("USD")
+  dealScore           Int              @default(50) @map("deal_score")
+  isOnline            Boolean          @default(false) @map("is_online")
+  isStudentOnly       Boolean          @default(false) @map("is_student_only")
+  couponCode          String?          @map("coupon_code")
+  destinationUrl      String?          @map("destination_url")
+  latitude            Float?
+  longitude           Float?
+  geog                Unsupported("geography(Point, 4326)")?
+  locationTags        String[]         @map("location_tags")
+  visualSeed          Int              @default(0) @map("visual_seed")
+  status              DealStatus       @default(published)
+  moderationStatus    ModerationStatus @default(approved) @map("moderation_status")
+  source              String           @default("seed")
+  /// Cross-source dedup fingerprint (merchant+title+location+price+category).
+  fingerprint         String?
+  startAt             DateTime?        @map("start_at")
+  expiresAt           DateTime         @map("expires_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  store        Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  category     Category          @relation(fields: [categoryId], references: [id])
+  savedBy      SavedDeal[]
+  watchedBy    WatchedDeal[]
+  swipes       DealSwipe[]
+  redemptions  DealRedemption[]
+  interactions DealInteraction[]
+  priceHistory PriceHistory[]
+  notifications Notification[]
+
+  @@index([status, expiresAt])
+  @@index([categoryId])
+  @@index([fingerprint])
+  @@map("deals")
+}
+
+// ===========================================================================
+// Phase 6 — ingestion runs + failures (provider framework observability).
+// ===========================================================================
+
+enum IngestionStatus {
+  running
+  succeeded
+  failed
+
+  @@map("ingestion_status")
+}
+
+model IngestionRun {
+  id         String          @id @default(uuid()) @db.Uuid
+  provider   String
+  status     IngestionStatus @default(running)
+  fetched    Int             @default(0)
+  upserted   Int             @default(0)
+  deduped    Int             @default(0)
+  failed     Int             @default(0)
+  error      String?
+  startedAt  DateTime        @default(now()) @map("started_at")
+  finishedAt DateTime?       @map("finished_at")
+
+  failures IngestionFailure[]
+
+  @@index([provider, startedAt])
+  @@map("ingestion_runs")
+}
+
+model IngestionFailure {
+  id         String   @id @default(uuid()) @db.Uuid
+  runId      String   @map("run_id") @db.Uuid
+  externalId String?  @map("external_id")
+  reason     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run IngestionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("ingestion_failures")
+}
+
+// ===========================================================================
+// Phase 7 — notifications, push tokens, preferences, price history.
+// ===========================================================================
+
+enum DevicePlatform {
+  ios
+  android
+  web
+
+  @@map("device_platform")
+}
+
+enum NotificationType {
+  new_nearby_deal
+  price_drop
+  expiring_saved
+  watched_update
+  student_deal
+  event_reminder
+  sponsored
+  account
+
+  @@map("notification_type")
+}
+
+model PushToken {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  token      String         @unique
+  platform   DevicePlatform
+  invalid    Boolean        @default(false)
+  lastSeenAt DateTime       @default(now()) @map("last_seen_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+model NotificationPreferences {
+  userId          String   @id @map("user_id") @db.Uuid
+  newNearbyDeals  Boolean  @default(true) @map("new_nearby_deals")
+  priceDrops      Boolean  @default(true) @map("price_drops")
+  expiringSaved   Boolean  @default(true) @map("expiring_saved")
+  watchedUpdates  Boolean  @default(true) @map("watched_updates")
+  studentDeals    Boolean  @default(true) @map("student_deals")
+  eventReminders  Boolean  @default(true) @map("event_reminders")
+  sponsored       Boolean  @default(false) @map("sponsored")
+  /// Local-time quiet-hours window [start, end) in 0–23; null = disabled.
+  quietHoursStart Int?     @map("quiet_hours_start")
+  quietHoursEnd   Int?     @map("quiet_hours_end")
+  timezone        String   @default("America/New_York")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  dealId    String?          @map("deal_id") @db.Uuid
+  data      Json?
+  /// Dedupe/idempotency key, e.g. "price_drop:<dealId>". Unique per user.
+  dedupeKey String?          @map("dedupe_key")
+  readAt    DateTime?        @map("read_at")
+  sentAt    DateTime?        @map("sent_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal? @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid()) @db.Uuid
+  dealId     String   @map("deal_id") @db.Uuid
+  priceMinor BigInt   @map("price_minor")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, recordedAt])
+  @@map("price_history")
+}
+
+// ===========================================================================
+// Phase 9 — subscriptions (Dealy+) + admin audit. Entitlements are computed
+// SERVER-side from verified App Store transactions; the client boolean is
+// never trusted.
+// ===========================================================================
+
+enum SubscriptionStatus {
+  active
+  expired
+  in_grace
+  revoked
+
+  @@map("subscription_status")
+}
+
+model Subscription {
+  id                    String             @id @default(uuid()) @db.Uuid
+  userId                String             @map("user_id") @db.Uuid
+  source                String             @default("app_store")
+  productId             String             @map("product_id")
+  status                SubscriptionStatus @default(active)
+  originalTransactionId String             @unique @map("original_transaction_id")
+  expiresAt             DateTime?          @map("expires_at")
+  autoRenew             Boolean            @default(true) @map("auto_renew")
+  environment           String             @default("sandbox")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events SubscriptionEvent[]
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model SubscriptionEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  type           String
+  transactionId  String?  @map("transaction_id")
+  payload        Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  /// Idempotency for replayed App Store notifications.
+  @@unique([subscriptionId, transactionId, type])
+  @@map("subscription_events")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorUserId, createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ===========================================================================
+// Phase 4 — user actions. Saves/watches/redemptions are naturally idempotent
+// via composite PKs; swipes are append-only with soft-undo. `idempotency_keys`
+// makes unsafe POST retries safe.
+// ===========================================================================
+
+enum SwipeDirection {
+  left
+  right
+  up
+
+  @@map("swipe_direction")
+}
+
+enum InteractionType {
+  view
+  click
+  share
+
+  @@map("interaction_type")
+}
+
+model SavedDeal {
+  userId  String   @map("user_id") @db.Uuid
+  dealId  String   @map("deal_id") @db.Uuid
+  savedAt DateTime @default(now()) @map("saved_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dealId])
+  @@index([userId, savedAt])
+  @@map("saved_deals")
+}
+
+model WatchedDeal {
+  userId    String   @map("user_id") @db.Uuid
+  dealId    String   @map("deal_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dealId])
+  @@index([userId])
+  @@map("watched_deals")
+}
+
+model DealSwipe {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  dealId         String         @map("deal_id") @db.Uuid
+  direction      SwipeDirection
+  /// Saved state before this swipe, so undo restores it exactly.
+  wasSavedBefore Boolean        @default(false) @map("was_saved_before")
+  undone         Boolean        @default(false)
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("deal_swipes")
+}
+
+/// Realized savings — counted once per (user, deal). Mirrors iOS `savingsEvents`.
+model DealRedemption {
+  userId       String   @map("user_id") @db.Uuid
+  dealId       String   @map("deal_id") @db.Uuid
+  savingsMinor BigInt   @map("savings_minor")
+  currency     String   @default("USD")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dealId])
+  @@index([userId, createdAt])
+  @@map("deal_redemptions")
+}
+
+model DealInteraction {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  dealId    String          @map("deal_id") @db.Uuid
+  type      InteractionType
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, type])
+  @@index([userId, createdAt])
+  @@map("deal_interactions")
+}
+
+model IdempotencyKey {
+  key       String   @id
+  userId    String   @map("user_id") @db.Uuid
+  response  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+model School {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  shortName String   @map("short_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  campuses Campus[]
+
+  @@map("schools")
+}
+
+/// A campus/city anchor. lat/lng are the source for the PostGIS `geog` column
+/// added in Phase 3 (with a GiST index) for nearby queries.
+model Campus {
+  id            String   @id @default(uuid()) @db.Uuid
+  schoolId      String?  @map("school_id") @db.Uuid
+  slug          String   @unique
+  name          String
+  shortName     String   @map("short_name")
+  cityContext   String   @map("city_context")
+  latitude      Float
+  longitude     Float
+  defaultRadius Int      @default(5) @map("default_radius")
+  locationTags  String[] @map("location_tags")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  school   School?       @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  profiles UserProfile[]
+
+  @@index([schoolId])
+  @@map("campuses")
+}

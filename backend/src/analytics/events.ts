@@ -1,0 +1,20 @@
+/** Typed product-analytics taxonomy. Shared by server emits and the iOS app. */
+export enum DealyEvent {
+  onboarding_started = 'onboarding_started',
+  onboarding_completed = 'onboarding_completed',
+  feed_loaded = 'feed_loaded',
+  deal_viewed = 'deal_viewed',
+  swipe_dismissed = 'swipe_dismissed',
+  swipe_saved = 'swipe_saved',
+  deal_unsaved = 'deal_unsaved',
+  search_submitted = 'search_submitted',
+  search_result_selected = 'search_result_selected',
+  deal_shared = 'deal_shared',
+  deal_watched = 'deal_watched',
+  deal_redeemed = 'deal_redeemed',
+  notification_opened = 'notification_opened',
+  subscription_started = 'subscription_started',
+  subscription_activated = 'subscription_activated',
+  sponsored_impression = 'sponsored_impression',
+  sponsored_click = 'sponsored_click',
+}

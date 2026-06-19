@@ -35,4 +35,19 @@ enum DealFilter {
     static func active(_ deals: [Deal], reference: Date = Date()) -> [Deal] {
         deals.filter { $0.expirationDate > reference }
     }
+
+    static func advanced(
+        _ deals: [Deal],
+        filters: DealFeedFilters,
+        reference: Date = Date()
+    ) -> [Deal] {
+        deals.filter { deal in
+            let price = NSDecimalNumber(decimal: deal.currentPrice).doubleValue
+            guard price >= filters.minPrice, price <= filters.maxPrice else { return false }
+            if filters.onlineOnly && !deal.isOnline { return false }
+            if filters.endingSoonOnly && !deal.isEndingSoon(reference: reference) { return false }
+            if filters.strongDiscountOnly && deal.savingsPercentage < 40 { return false }
+            return true
+        }
+    }
 }

@@ -9,100 +9,80 @@ struct HomeView: View {
     @State private var isSwiping = false
     @State private var selectedDeal: Deal?
     @State private var getDeal: Deal?
-    @State private var showLocation = false
-    @State private var saveBurst = 0
+    @State private var showFilters = false
     @AppStorage(SwipeTutorialState.key) private var hasSeenSwipeTutorial = false
 
     var body: some View {
-        VStack(spacing: Spacing.sm) {
+        VStack(spacing: 10) {
             header
-            CategoryFilterBar(selection: $viewModel.selectedCategory) {
-                rebuild()
-            }
-            if viewModel.topDeal != nil { deckCounter }
             deckArea
-            if viewModel.topDeal != nil, app.lastSwipe != nil {
-                actionBar
-            }
         }
-        .padding(.top, Spacing.xs)
+        .padding(.top, 4)
         .background(Theme.background.ignoresSafeArea())
-        .overlay { SaveBurstView(trigger: saveBurst).allowsHitTesting(false) }
         .onChange(of: app.loadState) { _, _ in rebuild() }
         .onChange(of: app.currentCampus.id) { _, _ in rebuild() }
         .onChange(of: app.radius) { _, _ in rebuild() }
         .onAppear { if viewModel.deck.isEmpty { rebuild() } }
         .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
         .sheet(item: $getDeal) { GetDealSheet(deal: $0) }
-        .sheet(isPresented: $showLocation) { LocationSelectorView() }
-        .overlay {
-            if !hasSeenSwipeTutorial, viewModel.topDeal != nil {
-                SwipeTutorialView {
-                    hasSeenSwipeTutorial = true
-                }
-                .transition(.opacity)
-            }
+        .sheet(isPresented: $showFilters) {
+            HomeFilterSheet(
+                selectedCategory: $viewModel.selectedCategory,
+                filters: $viewModel.filters,
+                onChange: rebuild
+            )
         }
     }
 
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: Spacing.sm) {
-            HStack(spacing: Spacing.xs) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Theme.brandGradient)
-                    .frame(width: 34, height: 34)
-                    .overlay(
-                        Image("DealyGlyph")
-                            .resizable().scaledToFit()
-                            .padding(7)
-                    )
-                    .dealyShadow(.soft)
+        ZStack {
+            HStack(spacing: 2) {
+                Image("DealyMonochrome")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 46, height: 38)
+                    .foregroundStyle(Theme.primaryText)
+
                 Text("Dealy")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .font(.system(size: 31, weight: .semibold, design: .serif))
+                    .tracking(-0.8)
                     .foregroundStyle(Theme.primaryText)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Dealy")
 
-            Spacer()
-
-            Button { showLocation = true } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin.circle.fill")
-                    Text(app.currentCampus.shortName).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+            HStack {
+                Button { undo() } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 42, height: 42)
+                        .background(Theme.surface, in: Circle())
+                        .overlay(Circle().stroke(Theme.separator, lineWidth: 1))
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.primary)
-                .padding(.vertical, 7).padding(.horizontal, Spacing.sm)
-                .background(Capsule().fill(Theme.primary.opacity(0.12)))
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.primaryText)
+                .disabled(app.lastSwipe == nil)
+                .opacity(app.lastSwipe == nil ? 0.32 : 1)
+                .accessibilityLabel("Undo last swipe")
+
+                Spacer()
+
+                Button { showFilters = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 42, height: 42)
+                        .background(Theme.surface, in: Circle())
+                        .overlay(Circle().stroke(Theme.separator, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.primaryText)
+                .accessibilityLabel("Open location, range, and category filters")
             }
-            .accessibilityLabel("Change location, currently \(app.currentCampus.name)")
-
         }
-        .padding(.horizontal, Spacing.lg)
-    }
-
-    // MARK: Deck
-
-    /// Slim row above the deck: how many deals remain + an interaction hint.
-    private var deckCounter: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "rectangle.stack.fill")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(Theme.primary)
-            Text("\(viewModel.deck.count) deal\(viewModel.deck.count == 1 ? "" : "s") nearby")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.mutedText)
-            Spacer()
-            Label("Left · Right · Up", systemImage: "hand.draw")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(Theme.faintText)
-                .labelStyle(.titleAndIcon)
-        }
-        .padding(.horizontal, Spacing.lg)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(viewModel.deck.count) deals nearby")
+        .padding(.horizontal, 14)
     }
 
     private var deckArea: some View {
@@ -125,7 +105,8 @@ struct HomeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.lg)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
     }
 
     private var cardStack: some View {
@@ -145,6 +126,16 @@ struct HomeView: View {
                     .onTapGesture { if isTop { selectedDeal = deal } }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(deal.title) at \(deal.merchant). \(saveSkipHint)")
+            }
+
+            if !hasSeenSwipeTutorial, viewModel.topDeal != nil {
+                SwipeTutorialView {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        hasSeenSwipeTutorial = true
+                    }
+                }
+                .zIndex(100)
+                .transition(.opacity)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.deck.map(\.id))
@@ -173,19 +164,6 @@ struct HomeView: View {
                 viewModel.selectedCategory = nil; rebuild()
             } : nil
         )
-    }
-
-    // MARK: Action bar
-
-    private var actionBar: some View {
-        Button { undo() } label: {
-            Label("Undo last swipe", systemImage: "arrow.uturn.backward")
-                .font(.footnote.weight(.semibold))
-        }
-        .buttonStyle(GhostButtonStyle())
-        .transition(.opacity.combined(with: .scale))
-        .padding(.bottom, Spacing.sm)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: app.lastSwipe?.id)
     }
 
     // MARK: Gesture & actions
@@ -230,8 +208,6 @@ struct HomeView: View {
         guard !isSwiping, let deal = viewModel.topDeal else { return }
         isSwiping = true
         Haptics.impact(direction.isSave ? .medium : .light)
-        if direction.isSave { saveBurst += 1 }
-
         let commit = {
             app.recordSwipe(dealID: deal.id, direction: direction)
             viewModel.popTop()
@@ -269,41 +245,20 @@ struct HomeView: View {
     }
 }
 
-/// A celebratory heart that pops and fades each time `trigger` increments.
-struct SaveBurstView: View {
-    let trigger: Int
-    @State private var phase: CGFloat = 1   // 1 == settled/invisible
-
-    var body: some View {
-        Image(systemName: "heart.fill")
-            .font(.system(size: 132, weight: .bold))
-            .foregroundStyle(Theme.save)
-            .scaleEffect(0.5 + phase * 0.85)
-            .opacity(Double(1 - phase) * 0.92)
-            .opacity(trigger == 0 ? 0 : 1)   // hidden until the first save
-            .onChange(of: trigger) { _, _ in
-                phase = 0
-                withAnimation(.easeOut(duration: 0.55)) { phase = 1 }
-            }
-    }
-}
-
 /// Skeleton shown while the mock service "loads".
 struct LoadingDeckView: View {
     var body: some View {
-        VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(Theme.fieldBackground)
-                .frame(height: 196)
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 RoundedRectangle(cornerRadius: 6).fill(Theme.fieldBackground).frame(height: 22).frame(maxWidth: 220)
                 RoundedRectangle(cornerRadius: 6).fill(Theme.fieldBackground).frame(height: 16).frame(maxWidth: 120)
                 RoundedRectangle(cornerRadius: 6).fill(Theme.fieldBackground).frame(height: 28).frame(maxWidth: 160)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Spacing.md)
+            .padding(Spacing.lg)
         }
-        .dealyCardSurface(cornerRadius: Radius.xl)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .redacted(reason: .placeholder)
         .accessibilityLabel("Loading deals")
     }

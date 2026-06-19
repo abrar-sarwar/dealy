@@ -6,6 +6,7 @@ struct ExploreView: View {
     @State private var searchText = ""
     @State private var activeCategory: DealCategory?
     @State private var selectedDeal: Deal?
+    @State private var showMap = false
 
     /// Deals available in the current area (used for browsing & search).
     private var areaDeals: [Deal] {
@@ -41,7 +42,18 @@ struct ExploreView: View {
             .navigationTitle("Explore")
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Search deals, stores, categories")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showMap = true } label: {
+                        Image(systemName: "map")
+                    }
+                    .accessibilityLabel("View deals on map")
+                }
+            }
             .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
+            .sheet(isPresented: $showMap) {
+                DealsMapView(deals: areaDeals, campus: app.currentCampus)
+            }
         }
     }
 
