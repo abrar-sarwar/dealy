@@ -7,6 +7,8 @@ export interface DecodedTransaction {
   expiresDateMs?: number;
   revocationDateMs?: number;
   environment: string;
+  /** Apple's per-user binding (the app sets this to the user id at purchase). */
+  appAccountToken?: string;
 }
 
 export interface DecodedNotification {

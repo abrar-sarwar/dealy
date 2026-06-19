@@ -91,4 +91,3 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_deal_id_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "price_history" ADD CONSTRAINT "price_history_deal_id_fkey" FOREIGN KEY ("deal_id") REFERENCES "deals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

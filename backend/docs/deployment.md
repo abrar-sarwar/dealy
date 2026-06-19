@@ -16,7 +16,7 @@ api.dealy.app ──► dealy-api (Railway, Dockerfile, node dist/main.js)
 3. **Settings → API**: `SUPABASE_URL`, publishable/anon key → `SUPABASE_PUBLISHABLE_KEY`, **service-role/secret key → `SUPABASE_SECRET_KEY` (server only)**. `SUPABASE_JWKS_URL = ${SUPABASE_URL}/auth/v1/.well-known/jwks.json`.
 4. Enable PostGIS: it's installed by our first migration (`CREATE EXTENSION postgis`). If Supabase restricts that, enable PostGIS from **Database → Extensions** first.
 5. **Storage**: create buckets `deal-images`, `business-assets` with explicit policies (no public write).
-6. Run the Supabase **database + security advisors** after the schema is applied; enable RLS on every API-exposed table (RLS policies are defense-in-depth — the API already enforces ownership).
+6. After migrations, **apply RLS**: `psql "$DIRECT_DATABASE_URL" -f prisma/rls/enable-rls.sql` (ownership policies + deny-all internal tables; the service-role API bypasses RLS). Then run the Supabase **database + security advisors**. Also supply `APPLE_ROOT_CA_BASE64` (DER of "Apple Root CA - G3") — the subscription verifier **fails closed** without it.
 
 ## 2. Railway
 1. New project → connect this GitHub repo.

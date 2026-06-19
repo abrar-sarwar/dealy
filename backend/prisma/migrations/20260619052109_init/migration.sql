@@ -21,4 +21,3 @@ CREATE TABLE "health_checks" (
 
     CONSTRAINT "health_checks_pkey" PRIMARY KEY ("id")
 );
-

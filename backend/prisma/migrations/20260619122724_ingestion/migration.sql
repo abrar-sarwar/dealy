@@ -42,4 +42,3 @@ CREATE INDEX "deals_fingerprint_idx" ON "deals"("fingerprint");
 
 -- AddForeignKey
 ALTER TABLE "ingestion_failures" ADD CONSTRAINT "ingestion_failures_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "ingestion_runs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

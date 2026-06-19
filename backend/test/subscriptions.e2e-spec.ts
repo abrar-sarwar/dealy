@@ -14,6 +14,7 @@ import {
 
 const SUB_A = 'aaaaaaaa-0000-4000-8000-0000000000a1';
 const SUB_EXP = 'aaaaaaaa-0000-4000-8000-0000000000a2';
+const SUB_B = 'aaaaaaaa-0000-4000-8000-0000000000a3';
 
 // Stub verifier: the test controls the decoded payload via the JSON it "signs".
 const verifierStub: AppStoreVerifier = {
@@ -71,14 +72,14 @@ describe('Subscriptions (e2e)', () => {
     await prisma.subscription.deleteMany({
       where: { originalTransactionId: { in: ['otx-1', 'otx-2'] } },
     });
-    await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_EXP] } } });
+    await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_EXP, SUB_B] } } });
   });
 
   afterAll(async () => {
     await prisma.subscription.deleteMany({
       where: { originalTransactionId: { in: ['otx-1', 'otx-2'] } },
     });
-    await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_EXP] } } });
+    await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_EXP, SUB_B] } } });
     await app.close();
   });
 
@@ -107,6 +108,24 @@ describe('Subscriptions (e2e)', () => {
 
     const ent = await app.inject({ method: 'GET', url: '/v1/me/entitlements', headers: bare(t) });
     expect(ent.json().dealyPlus).toBe(true);
+  });
+
+  it('refuses to reassign a transaction to another account (403)', async () => {
+    const tB = await token(SUB_B);
+    const steal = await app.inject({
+      method: 'POST',
+      url: '/v1/subscriptions/apple/sync',
+      headers: json(tB),
+      payload: { signedTransactionInfo: tx({}) }, // same otx-1, owned by SUB_A
+    });
+    expect(steal.statusCode).toBe(403);
+
+    // Ownership is unchanged and B has no entitlement.
+    const sub = await prisma.subscription.findUnique({ where: { originalTransactionId: 'otx-1' } });
+    const a = await prisma.user.findUnique({ where: { supabaseUserId: SUB_A } });
+    expect(sub!.userId).toBe(a!.id);
+    const entB = await app.inject({ method: 'GET', url: '/v1/me/entitlements', headers: bare(tB) });
+    expect(entB.json().dealyPlus).toBe(false);
   });
 
   it('is idempotent (re-sync does not duplicate the event)', async () => {

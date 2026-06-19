@@ -117,4 +117,3 @@ ALTER TABLE "deal_interactions" ADD CONSTRAINT "deal_interactions_user_id_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "deal_interactions" ADD CONSTRAINT "deal_interactions_deal_id_fkey" FOREIGN KEY ("deal_id") REFERENCES "deals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

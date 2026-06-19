@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -72,21 +72,39 @@ export class SubscriptionsService {
     tx: DecodedTransaction,
     eventType: string,
   ): Promise<void> {
+    const existing = await this.prisma.subscription.findUnique({
+      where: { originalTransactionId: tx.originalTransactionId },
+    });
+
+    // Ownership is bound on first sync and is IMMUTABLE — a transaction can never
+    // be reassigned to whoever submits its JWS.
+    if (existing && existing.userId !== userId) {
+      throw new ForbiddenException('This transaction belongs to a different account');
+    }
+    // Stronger binding when the app sets appAccountToken to the user id.
+    if (!existing && tx.appAccountToken && tx.appAccountToken !== userId) {
+      throw new ForbiddenException('This transaction is bound to a different account');
+    }
+
     const status = this.statusFor(tx, eventType);
     const expiresAt = tx.expiresDateMs ? new Date(tx.expiresDateMs) : null;
 
-    const sub = await this.prisma.subscription.upsert({
-      where: { originalTransactionId: tx.originalTransactionId },
-      update: { userId, productId: tx.productId, status, expiresAt, environment: tx.environment },
-      create: {
-        userId,
-        productId: tx.productId,
-        status,
-        expiresAt,
-        environment: tx.environment,
-        originalTransactionId: tx.originalTransactionId,
-      },
-    });
+    const sub = existing
+      ? await this.prisma.subscription.update({
+          where: { id: existing.id },
+          // NOTE: userId is intentionally NOT updated.
+          data: { productId: tx.productId, status, expiresAt, environment: tx.environment },
+        })
+      : await this.prisma.subscription.create({
+          data: {
+            userId,
+            productId: tx.productId,
+            status,
+            expiresAt,
+            environment: tx.environment,
+            originalTransactionId: tx.originalTransactionId,
+          },
+        });
 
     // Idempotent event record (replayed notifications are ignored).
     try {

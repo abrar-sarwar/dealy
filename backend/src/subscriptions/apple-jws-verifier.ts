@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { X509Certificate } from 'node:crypto';
 import { compactVerify, importX509 } from 'jose';
 import type { Env } from '../config/env.schema';
 import type {
@@ -15,6 +16,7 @@ interface RawTransaction {
   expiresDate?: number;
   revocationDate?: number;
   environment?: string;
+  appAccountToken?: string;
 }
 interface RawNotification {
   notificationType: string;
@@ -23,20 +25,23 @@ interface RawNotification {
 }
 
 /**
- * Verifies App Store Server JWS (x5c-signed). In production the signature is
- * checked against the leaf certificate in the JWS header.
+ * Verifies App Store Server JWS. SECURITY: the x5c leaf signature alone proves
+ * only that *someone* signed the payload — so we ALSO validate the full
+ * certificate chain terminates at Apple's root CA (configured via
+ * `APPLE_ROOT_CA_BASE64`, the DER of "Apple Root CA - G3"). Without that root,
+ * the verifier FAILS CLOSED and grants nothing — a forged self-signed cert can
+ * never mint an entitlement.
  *
- * NOTE / AWAITING CREDENTIALS: full chain pinning to Apple's root CA is the
- * remaining production hardening (the leaf signature IS verified here). Not yet
- * exercised against real App Store transactions — tests inject a stub verifier.
+ * Tests inject a stub verifier; this implementation is exercised only with real
+ * Apple transactions + the configured root.
  */
 @Injectable()
 export class AppleJwsVerifier implements AppStoreVerifier {
-  private readonly logger = new Logger(AppleJwsVerifier.name);
-  private readonly isProd: boolean;
+  private readonly appleRoot: X509Certificate | null;
 
   constructor(config: ConfigService<Env, true>) {
-    this.isProd = config.get('APPLE_APPSTORE_ENV', { infer: true }) === 'production';
+    const rootB64 = config.get('APPLE_ROOT_CA_BASE64', { infer: true });
+    this.appleRoot = rootB64 ? new X509Certificate(Buffer.from(rootB64, 'base64')) : null;
   }
 
   async verifyTransaction(signedTransactionInfo: string): Promise<DecodedTransaction> {
@@ -54,26 +59,51 @@ export class AppleJwsVerifier implements AppStoreVerifier {
   }
 
   private async verifyJws(jws: string): Promise<unknown> {
+    if (!this.appleRoot) {
+      // Fail closed: never trust a transaction we can't anchor to Apple's root.
+      throw new Error('App Store verification not configured (APPLE_ROOT_CA_BASE64 missing)');
+    }
+
     const [headerB64] = jws.split('.');
     const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8')) as {
       alg: string;
       x5c?: string[];
     };
-
-    if (header.x5c && header.x5c.length > 0) {
-      const leafPem = this.derToPem(header.x5c[0]);
-      const key = await importX509(leafPem, header.alg);
-      const { payload } = await compactVerify(jws, key); // throws on bad signature
-      return JSON.parse(new TextDecoder().decode(payload));
+    if (!header.x5c || header.x5c.length < 2) {
+      throw new Error('App Store JWS is missing its certificate chain');
     }
 
-    if (this.isProd) {
-      throw new Error('Rejected unsigned App Store payload in production');
+    // 1) The chain must be valid and terminate at Apple's root.
+    this.assertValidAppleChain(header.x5c);
+
+    // 2) The JWS must be signed by the (now-trusted) leaf certificate.
+    const key = await importX509(this.derToPem(header.x5c[0]), header.alg);
+    const { payload } = await compactVerify(jws, key);
+    return JSON.parse(new TextDecoder().decode(payload));
+  }
+
+  /** Validates x5c: each cert in date range, each signed by the next, chain ends at Apple root. */
+  private assertValidAppleChain(x5c: string[]): void {
+    const root = this.appleRoot;
+    if (!root) throw new Error('App Store verification not configured');
+
+    const certs = x5c.map((c) => new X509Certificate(Buffer.from(c, 'base64')));
+    const now = Date.now();
+    for (const cert of certs) {
+      if (Date.parse(cert.validFrom) > now || Date.parse(cert.validTo) < now) {
+        throw new Error('Certificate outside its validity period');
+      }
     }
-    this.logger.warn(
-      'App Store payload has no x5c chain — decoding without verification (non-prod).',
-    );
-    return JSON.parse(Buffer.from(jws.split('.')[1], 'base64url').toString('utf8'));
+    for (let i = 0; i < certs.length - 1; i++) {
+      if (!certs[i].verify(certs[i + 1].publicKey)) {
+        throw new Error('Broken certificate chain');
+      }
+    }
+    const top = certs[certs.length - 1];
+    const anchored = top.fingerprint256 === root.fingerprint256 || top.verify(root.publicKey);
+    if (!anchored) {
+      throw new Error('Certificate chain does not terminate at Apple Root CA');
+    }
   }
 
   private derToPem(derBase64: string): string {
@@ -89,6 +119,7 @@ export class AppleJwsVerifier implements AppStoreVerifier {
       expiresDateMs: raw.expiresDate,
       revocationDateMs: raw.revocationDate,
       environment: raw.environment ?? 'sandbox',
+      appAccountToken: raw.appAccountToken,
     };
   }
 }

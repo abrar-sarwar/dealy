@@ -144,4 +144,3 @@ ALTER TABLE "user_category_preferences" ADD CONSTRAINT "user_category_preference
 
 -- AddForeignKey
 ALTER TABLE "campuses" ADD CONSTRAINT "campuses_school_id_fkey" FOREIGN KEY ("school_id") REFERENCES "schools"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-

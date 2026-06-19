@@ -25,13 +25,12 @@ async function main(): Promise<void> {
 
   const document = SwaggerModule.createDocument(app, config);
   writeFileSync('docs/openapi.json', `${JSON.stringify(document, null, 2)}\n`);
-  // eslint-disable-next-line no-console
+
   console.log(`Wrote docs/openapi.json (${Object.keys(document.paths).length} paths).`);
   await app.close();
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error(err);
   process.exit(1);
 });

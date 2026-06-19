@@ -49,6 +49,8 @@ export const envSchema = z
     APPLE_ISSUER_ID: optionalString,
     APPLE_KEY_ID: optionalString,
     APPLE_PRIVATE_KEY_BASE64: optionalString,
+    /** DER (base64) of "Apple Root CA - G3" — required to verify StoreKit JWS. */
+    APPLE_ROOT_CA_BASE64: optionalString,
     APPLE_APPSTORE_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
     SENTRY_DSN: optionalString,
     POSTHOG_API_KEY: optionalString,
