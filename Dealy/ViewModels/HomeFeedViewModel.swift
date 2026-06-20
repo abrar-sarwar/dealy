@@ -11,10 +11,11 @@ final class HomeFeedViewModel {
     private(set) var deck: [Deal] = []
 
     /// Recompute the deck from current app state, excluding already-swiped deals.
+    /// The deal service already returns discovery-eligible inventory, so we do
+    /// NOT re-apply location filtering here — only active/category/advanced/unseen.
     func rebuild(using app: AppState) {
         let active = DealFilter.active(app.allDeals)
-        let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
-        let categorized = DealFilter.byCategory(located, category: selectedCategory)
+        let categorized = DealFilter.byCategory(active, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)
         let unseen = refined.filter { !app.swipedDealIDs.contains($0.id) }
         let recommended = DealRanker.rank(unseen,
@@ -43,8 +44,7 @@ final class HomeFeedViewModel {
     /// Whether the deck is empty because filters hid everything vs. fully swiped.
     func emptyReason(using app: AppState) -> EmptyReason {
         let active = DealFilter.active(app.allDeals)
-        let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
-        let categorized = DealFilter.byCategory(located, category: selectedCategory)
+        let categorized = DealFilter.byCategory(active, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)
         if refined.isEmpty {
             return selectedCategory == nil && !filters.isActive ? .noneInArea : .filteredOut

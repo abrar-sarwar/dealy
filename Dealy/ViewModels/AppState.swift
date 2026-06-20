@@ -93,6 +93,13 @@ final class AppState {
         try await placeResolver.resolve(query)
     }
 
+    /// Resolve the device's current center WITHOUT applying it, for editors that
+    /// stage a draft before committing. Throws a typed `LocationProviderError`.
+    @MainActor
+    func resolveDeviceCenter() async throws -> DiscoveryCenter {
+        try await locationProvider.currentCenter()
+    }
+
     // MARK: - Onboarding
 
     var hasCompletedOnboarding: Bool { persisted.hasCompletedOnboarding }

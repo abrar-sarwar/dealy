@@ -7,11 +7,20 @@ struct ExploreView: View {
     @State private var activeCategory: DealCategory?
     @State private var selectedDeal: Deal?
     @State private var showMap = false
+    @State private var showLocation = false
 
-    /// Deals available in the current area (used for browsing & search).
+    /// Deals available for browsing & search. The service already returns
+    /// discovery-eligible inventory, so we only drop expired ones here.
     private var areaDeals: [Deal] {
-        let active = DealFilter.active(app.allDeals)
-        return DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
+        DealFilter.active(app.allDeals)
+    }
+
+    /// Short label for the discovery chip near the search surface.
+    private var locationLabel: String {
+        switch app.discovery.mode {
+        case .anywhere: return "Online anywhere"
+        case .nearby: return "\(app.discovery.center.displayName) · \(app.discovery.radiusMiles) mi"
+        }
     }
 
     private var isSearching: Bool {
@@ -29,6 +38,7 @@ struct ExploreView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
+                    locationChip
                     categoryShortcuts
                     if isSearching {
                         resultsSection
@@ -54,7 +64,35 @@ struct ExploreView: View {
             .sheet(isPresented: $showMap) {
                 DealsMapView(deals: areaDeals, campus: app.currentCampus)
             }
+            .sheet(isPresented: $showLocation) {
+                LocationSelectorView()
+            }
         }
+    }
+
+    // MARK: Location chip
+
+    private var locationChip: some View {
+        Button { showLocation = true } label: {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: app.discovery.mode == .anywhere ? "globe" : "mappin.circle.fill")
+                    .foregroundStyle(Theme.primary)
+                Text(locationLabel)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Spacer(minLength: Spacing.xs)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.mutedText)
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, 10)
+            .dealyCardSurface()
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Spacing.lg)
+        .accessibilityLabel("Change location. Currently \(locationLabel)")
     }
 
     // MARK: Category shortcuts
@@ -144,7 +182,11 @@ struct ExploreView: View {
             if sections.isEmpty {
                 EmptyStateView(symbol: "map",
                                title: "Nothing here yet",
-                               message: "No deals match \(app.currentCampus.shortName) at this radius. Widen your radius from the Home location picker.")
+                               message: app.discovery.mode == .anywhere
+                                ? "No online deals to show right now. Check back soon."
+                                : "No deals match \(app.discovery.center.displayName) at \(app.discovery.radiusMiles) mi. Tap the location chip to widen your radius or browse Anywhere.",
+                               primaryTitle: "Change location",
+                               primaryAction: { showLocation = true })
                     .padding(.top, Spacing.xl)
             } else {
                 ForEach(sections) { section in

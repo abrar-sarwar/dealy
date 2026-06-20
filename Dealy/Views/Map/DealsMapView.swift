@@ -1,16 +1,16 @@
 import SwiftUI
 import MapKit
 
-/// Full-screen map of nearby deals, scattered around the current campus.
-/// Tapping a pin reveals a card; tapping the card opens full detail.
+/// Dealy+ map PREVIEW. The full interactive deal map is a Dealy+ feature, so the
+/// free entry point shows a non-interactive teaser: a few obscured pins, no pan,
+/// zoom, pin selection, or "Search this area" — only an unlock call-to-action.
 struct DealsMapView: View {
     let deals: [Deal]
     let campus: Campus
 
     @Environment(\.dismiss) private var dismiss
     @State private var position: MapCameraPosition
-    @State private var selectedID: String?
-    @State private var detailDeal: Deal?
+    @State private var showUnlock = false
 
     /// Only physical deals get a pin; online deals have no location.
     private var mappable: [Deal] { deals.filter { !$0.isOnline } }
@@ -25,38 +25,66 @@ struct DealsMapView: View {
 
     var body: some View {
         NavigationStack {
-            Map(position: $position) {
-                Annotation(campus.shortName,
-                           coordinate: CLLocationCoordinate2D(latitude: campus.latitude,
-                                                              longitude: campus.longitude)) {
-                    campusPin
-                }
-                .annotationTitles(.hidden)
-
-                ForEach(mappable) { deal in
-                    Annotation(deal.merchant, coordinate: DealGeo.coordinate(for: deal, around: campus)) {
-                        DealMapPin(deal: deal, selected: selectedID == deal.id)
-                            .onTapGesture {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    selectedID = (selectedID == deal.id) ? nil : deal.id
-                                }
-                                Haptics.selection()
-                            }
+            ZStack {
+                // Non-interactive: empty interactionModes disables pan/zoom.
+                Map(position: $position, interactionModes: []) {
+                    Annotation(campus.shortName,
+                               coordinate: CLLocationCoordinate2D(latitude: campus.latitude,
+                                                                  longitude: campus.longitude)) {
+                        campusPin
                     }
                     .annotationTitles(.hidden)
+
+                    ForEach(Array(mappable.prefix(6))) { deal in
+                        Annotation(deal.merchant, coordinate: DealGeo.coordinate(for: deal, around: campus)) {
+                            DealMapPin(deal: deal, selected: false)
+                        }
+                        .annotationTitles(.hidden)
+                    }
                 }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                .blur(radius: 4)
+                .allowsHitTesting(false)        // no pin selection / interaction
+                .ignoresSafeArea(edges: .bottom)
+
+                unlockOverlay
             }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .top) { approximateNote }
-            .overlay(alignment: .bottom) { selectedCard }
-            .navigationTitle("Deals nearby")
+            .navigationTitle("Deals map")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Done") { dismiss() } }
             }
-            .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
+            .sheet(isPresented: $showUnlock) { DealyPlusView() }
         }
+    }
+
+    private var unlockOverlay: some View {
+        VStack(spacing: Spacing.md) {
+            Spacer()
+            ZStack {
+                Circle().fill(Theme.brandGradient).frame(width: 72, height: 72)
+                Image(systemName: "map.fill").font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            Text("Unlock the full deal map with Dealy+")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+                .multilineTextAlignment(.center)
+            Text("See every nearby deal on an interactive map — pan, zoom, and tap pins to open offers.")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.lg)
+            Button("Unlock with Dealy+") { showUnlock = true }
+                .buttonStyle(.primaryDealy)
+                .padding(.horizontal, Spacing.lg)
+            Spacer()
+        }
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThinMaterial)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("The full deal map is a Dealy+ feature. Unlock with Dealy+.")
     }
 
     private var campusPin: some View {
@@ -64,25 +92,7 @@ struct DealsMapView: View {
             Circle().fill(.white).frame(width: 20, height: 20).dealyShadow(.soft)
             Circle().fill(Theme.primary).frame(width: 12, height: 12)
         }
-        .accessibilityLabel("\(campus.shortName) campus")
-    }
-
-    @ViewBuilder private var approximateNote: some View {
-        Text("Approximate locations · \(mappable.count) deals")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Theme.mutedText)
-            .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
-            .background(.ultraThinMaterial, in: Capsule())
-            .padding(.top, Spacing.xs)
-    }
-
-    @ViewBuilder private var selectedCard: some View {
-        if let id = selectedID, let deal = mappable.first(where: { $0.id == id }) {
-            DealRowCard(deal: deal) { detailDeal = deal }
-                .padding(.horizontal, Spacing.lg)
-                .padding(.bottom, Spacing.sm)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -102,6 +112,6 @@ private struct DealMapPin: View {
                 .font(.system(size: selected ? 19 : 15, weight: .bold))
                 .foregroundStyle(.white)
         }
-        .accessibilityLabel("\(deal.title) at \(deal.merchant)")
+        .accessibilityHidden(true)
     }
 }

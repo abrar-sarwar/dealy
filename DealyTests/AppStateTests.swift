@@ -320,6 +320,23 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(app.discovery, preference)
         XCTAssertEqual(app.interests, [.tech])
     }
+
+    // MARK: - Search-owned discovery (Task 6)
+
+    func testChangingSearchDiscoveryPreservesSavedDeals() async {
+        let app = makeApp()
+        await app.loadDeals()
+        app.save("food-bogo-pizza")
+        let replacement = DiscoveryPreference.nearby(
+            center: .legacyCampus(.uga),
+            radiusMiles: 25
+        )
+
+        await app.applyDiscovery(replacement)
+
+        XCTAssertEqual(app.discovery, replacement)
+        XCTAssertTrue(app.isSaved("food-bogo-pizza"))
+    }
 }
 
 // MARK: - Test doubles

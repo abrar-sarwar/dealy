@@ -74,6 +74,22 @@ final class DealFilterTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), ["online"])
     }
 
+    // Far-future expiry so they're active against the default `reference` (now).
+    private var onlineDeal: Deal {
+        deal("online", category: .tech, distance: 0, online: true, tags: ["Online"], expiresInHours: 1_000_000)
+    }
+    private var localDeal: Deal {
+        deal("local", category: .food, distance: 2, tags: ["Atlanta"], expiresInHours: 1_000_000)
+    }
+
+    func testAnywhereEligibilityExcludesPhysicalDeals() {
+        let deals = [onlineDeal, localDeal]
+        XCTAssertEqual(
+            DealFilter.byDiscovery(deals, preference: .default.switching(to: .anywhere)).map(\.id),
+            [onlineDeal.id]
+        )
+    }
+
     func testRadiusWidensResults() {
         let d = deal("d", category: .food, distance: 5, tags: ["Athens"])
         let campus = Campus.uga

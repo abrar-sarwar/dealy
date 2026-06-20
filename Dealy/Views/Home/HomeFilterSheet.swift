@@ -5,16 +5,12 @@ struct HomeFilterSheet: View {
     @Binding var filters: DealFeedFilters
     let onChange: () -> Void
 
-    @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedCampus: Campus = .georgiaState
-    @State private var radius: Int = Campus.georgiaState.defaultRadius
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    locationAndRange
                     sortSection
                     priceSection
                     dealTypeSection
@@ -43,17 +39,12 @@ struct HomeFilterSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        app.selectCampus(selectedCampus, radius: radius)
                         onChange()
                         Haptics.impact(.light)
                         dismiss()
                     }
                         .fontWeight(.semibold)
                 }
-            }
-            .onAppear {
-                selectedCampus = app.currentCampus
-                radius = app.radius
             }
         }
         .presentationDetents([.medium, .large])
@@ -147,38 +138,6 @@ struct HomeFilterSheet: View {
             }
         }
         .tint(Theme.primary)
-    }
-
-    private var locationAndRange: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                Label("Location", systemImage: "location.fill")
-                    .font(.headline)
-                    .foregroundStyle(Theme.primaryText)
-
-                Picker("Location", selection: $selectedCampus) {
-                    ForEach(Campus.all) { campus in
-                        Text(campus.name).tag(campus)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(Theme.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Spacing.sm)
-                .padding(.vertical, 8)
-                .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: Radius.md))
-            }
-
-            Divider()
-
-            RadiusControl(radius: $radius)
-        }
-        .padding(Spacing.md)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .stroke(Theme.separator, lineWidth: 1)
-        )
     }
 
     private func filterButton(
