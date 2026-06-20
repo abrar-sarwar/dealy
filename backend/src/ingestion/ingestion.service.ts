@@ -196,6 +196,14 @@ export class IngestionService {
       status: 'published',
       moderationStatus: 'approved',
       source,
+      sourceUrl: rec.sourceUrl,
+      providerAttribution: rec.providerAttribution,
+      // A successful provider fetch is a fresh source confirmation, so the deal
+      // lands verified. The daily re-verification job keeps this honest.
+      verificationStatus: 'verified',
+      lastVerifiedAt: new Date(),
+      lastVerificationAttemptAt: new Date(),
+      verificationFailureReason: null,
       fingerprint,
       startAt: rec.startAt,
       expiresAt: rec.expiresAt,

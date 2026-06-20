@@ -6,6 +6,28 @@ import type { DealDto } from '../deals/deal.dto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { DealyEvent } from '../analytics/events';
 
+export interface InteractionSignals {
+  distanceMiles?: number;
+  priceMinor?: number;
+  category?: string;
+  freshnessDays?: number;
+}
+
+/**
+ * Build the stored metadata for an interaction. Distance is bucketed to 0.5-mile
+ * resolution and precise coordinates are never accepted or stored, so a deal's
+ * exact location can't be reconstructed from interaction history (spec §9).
+ */
+function sanitizeSignals(s?: InteractionSignals): Prisma.InputJsonValue | undefined {
+  if (!s) return undefined;
+  const out: Record<string, number | string> = {};
+  if (s.distanceMiles != null) out.distanceMilesBucket = Math.round(s.distanceMiles * 2) / 2;
+  if (s.priceMinor != null) out.priceMinor = Math.round(s.priceMinor);
+  if (s.category) out.category = s.category;
+  if (s.freshnessDays != null) out.freshnessDays = Math.round(s.freshnessDays);
+  return Object.keys(out).length ? out : undefined;
+}
+
 @Injectable()
 export class ActionsService {
   constructor(
@@ -97,16 +119,61 @@ export class ActionsService {
     return { watching: false };
   }
 
-  // --- Lightweight interactions (analytics) ---
+  // --- Lightweight interactions (signals for the later personalization phase) ---
 
+  /**
+   * Record an interaction event. Optional `signals` are sanitized (never precise
+   * coordinates — distance is bucketed). An optional `dedupeKey` collapses
+   * duplicate events (e.g. one impression per user+deal+day). Recording is
+   * best-effort: a write failure returns `{ recorded: false }` and never blocks
+   * the user experience.
+   */
   async recordInteraction(
     userId: string,
     dealId: string,
     type: InteractionType,
-  ): Promise<{ recorded: true }> {
+    opts?: { signals?: InteractionSignals; dedupeKey?: string },
+  ): Promise<{ recorded: boolean }> {
     await this.requireDeal(dealId);
-    await this.prisma.dealInteraction.create({ data: { userId, dealId, type } });
-    return { recorded: true };
+    const metadata = sanitizeSignals(opts?.signals);
+    try {
+      if (opts?.dedupeKey) {
+        // Idempotent: a duplicate (same user + dedupeKey) is a no-op update.
+        await this.prisma.dealInteraction.upsert({
+          where: { userId_dedupeKey: { userId, dedupeKey: opts.dedupeKey } },
+          update: {},
+          create: { userId, dealId, type, dedupeKey: opts.dedupeKey, metadata },
+        });
+      } else {
+        await this.prisma.dealInteraction.create({ data: { userId, dealId, type, metadata } });
+      }
+      return { recorded: true };
+    } catch {
+      // Tracking is non-critical — never surface a 500 for a missed signal.
+      return { recorded: false };
+    }
+  }
+
+  /** Impression: deduped to one per user+deal+UTC-day. */
+  async recordImpression(
+    userId: string,
+    dealId: string,
+    signals?: InteractionSignals,
+  ): Promise<{ recorded: boolean }> {
+    const day = new Date().toISOString().slice(0, 10);
+    return this.recordInteraction(userId, dealId, InteractionType.impression, {
+      signals,
+      dedupeKey: `impression:${dealId}:${day}`,
+    });
+  }
+
+  /** Open (deal detail viewed): append-only, carries the same optional signals. */
+  async recordOpen(
+    userId: string,
+    dealId: string,
+    signals?: InteractionSignals,
+  ): Promise<{ recorded: boolean }> {
+    return this.recordInteraction(userId, dealId, InteractionType.open, { signals });
   }
 
   // --- Redemption (realized savings, counted once per user+deal) ---

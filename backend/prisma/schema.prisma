@@ -102,7 +102,7 @@ model UserProfile {
 
 model UserPreferences {
   userId               String   @id @map("user_id") @db.Uuid
-  searchRadiusMiles    Int      @default(5) @map("search_radius_miles")
+  searchRadiusMiles    Int      @default(10) @map("search_radius_miles")
   notificationsEnabled Boolean  @default(false) @map("notifications_enabled")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
@@ -165,6 +165,20 @@ enum ModerationStatus {
   @@map("moderation_status")
 }
 
+/// Server-controlled trust signal. NEVER trusted from a client. A deal counts as
+/// shown-able only when `verified`; `unreachable` means a transient provider
+/// failure (kept briefly under a grace policy), `invalid`/`expired` mean the
+/// authoritative source no longer confirms the offer.
+enum VerificationStatus {
+  pending
+  verified
+  unreachable
+  invalid
+  expired
+
+  @@map("verification_status")
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -204,6 +218,16 @@ model Deal {
   status              DealStatus       @default(published)
   moderationStatus    ModerationStatus @default(approved) @map("moderation_status")
   source              String           @default("seed")
+  /// Source provenance: canonical URL / external identifier the deal was confirmed
+  /// against, and the human-facing attribution string required by some providers.
+  sourceUrl           String?          @map("source_url")
+  providerAttribution String?          @map("provider_attribution")
+  /// Server-controlled verification lifecycle. Defaults to `pending`; the ingest
+  /// + daily re-verification jobs are the only writers. Clients never set these.
+  verificationStatus  VerificationStatus @default(pending) @map("verification_status")
+  lastVerifiedAt      DateTime?        @map("last_verified_at")
+  lastVerificationAttemptAt DateTime?  @map("last_verification_attempt_at")
+  verificationFailureReason String?    @map("verification_failure_reason")
   /// Cross-source dedup fingerprint (merchant+title+location+price+category).
   fingerprint         String?
   startAt             DateTime?        @map("start_at")
@@ -224,6 +248,9 @@ model Deal {
   @@index([status, expiresAt])
   @@index([categoryId])
   @@index([fingerprint])
+  // Feed gating reads on (status, verification, expiry); re-verification sweeps on (verification, expiry).
+  @@index([status, verificationStatus, expiresAt])
+  @@index([verificationStatus, expiresAt])
   @@map("deals")
 }
 
@@ -268,6 +295,43 @@ model IngestionFailure {
 
   @@index([runId])
   @@map("ingestion_failures")
+}
+
+/// Daily re-verification run. Mirrors IngestionRun for operational monitoring:
+/// how many active deals were re-checked and what happened to them.
+model VerificationRun {
+  id          String          @id @default(uuid()) @db.Uuid
+  provider    String
+  status      IngestionStatus @default(running)
+  checked     Int             @default(0)
+  confirmed   Int             @default(0)
+  invalidated Int             @default(0)
+  expired     Int             @default(0)
+  unreachable Int             @default(0)
+  error       String?
+  startedAt   DateTime        @default(now()) @map("started_at")
+  finishedAt  DateTime?       @map("finished_at")
+
+  outcomes VerificationOutcome[]
+
+  @@index([provider, startedAt])
+  @@map("verification_runs")
+}
+
+model VerificationOutcome {
+  id         String   @id @default(uuid()) @db.Uuid
+  runId      String   @map("run_id") @db.Uuid
+  dealId     String?  @map("deal_id") @db.Uuid
+  externalId String?  @map("external_id")
+  /// confirmed | invalid | expired | unreachable
+  outcome    String
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run VerificationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("verification_outcomes")
 }
 
 // ===========================================================================
@@ -446,6 +510,8 @@ enum InteractionType {
   view
   click
   share
+  impression
+  open
 
   @@map("interaction_type")
 }
@@ -514,11 +580,18 @@ model DealInteraction {
   userId    String          @map("user_id") @db.Uuid
   dealId    String          @map("deal_id") @db.Uuid
   type      InteractionType
+  /// Structured signals for the later personalization phase (distance bucket,
+  /// freshness, price/value, category). NEVER contains precise coordinates.
+  metadata  Json?
+  /// Optional dedupe key, e.g. "impression:<dealId>:<yyyy-mm-dd>". Unique per
+  /// user so repeated impressions of the same deal in a day collapse to one row.
+  dedupeKey String?         @map("dedupe_key")
   createdAt DateTime        @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, dedupeKey])
   @@index([dealId, type])
   @@index([userId, createdAt])
   @@map("deal_interactions")

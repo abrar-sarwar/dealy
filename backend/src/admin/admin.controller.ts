@@ -6,6 +6,7 @@ import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { AdminService } from './admin.service';
 import { AuditService } from './audit.service';
+import { CoverageService } from '../coverage/coverage.service';
 
 export class GrantRoleDto {
   @IsEnum(UserRole)
@@ -20,6 +21,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly audit: AuditService,
+    private readonly coverage: CoverageService,
   ) {}
 
   @Post('users/:id/roles')
@@ -57,5 +59,13 @@ export class AdminController {
   @ApiOperation({ summary: 'Recent audit log entries' })
   auditLogs() {
     return this.audit.list();
+  }
+
+  @Get('coverage')
+  @ApiOperation({
+    summary: 'Density-first coverage report: verified inventory, zone readiness, provider health',
+  })
+  coverageReport() {
+    return this.coverage.report();
   }
 }

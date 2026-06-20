@@ -14,6 +14,10 @@ export interface DealDto {
   savingsPercentage: number;
   distanceMiles: number | null;
   dealScore: number;
+  /** Server-controlled trust signal: Dealy recently confirmed this deal through
+   * its authoritative source. NEVER derived from a client-supplied value. */
+  verified: boolean;
+  verifiedAt: string | null;
   isOnline: boolean;
   isStudentOnly: boolean;
   shortDescription: string;
@@ -44,7 +48,7 @@ export class NearbyFeedQuery {
   @IsLongitude()
   lng!: number;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 5 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 10 })
   @IsOptional()
   @IsInt()
   @Min(1)

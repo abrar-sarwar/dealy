@@ -194,4 +194,53 @@ describe('Actions (e2e)', () => {
     });
     expect(res.statusCode).toBe(201);
   });
+
+  it('records impressions and dedupes repeats within the same day', async () => {
+    const t = await token(SUB_A);
+    const user = await prisma.user.findUnique({ where: { supabaseUserId: SUB_A } });
+    const post = () =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/deals/${dealIds[4]}/impressions`,
+        headers: json(t),
+        payload: { distanceMiles: 2.34, priceMinor: 599, category: 'food', freshnessDays: 1 },
+      });
+    expect((await post()).statusCode).toBe(201);
+    expect((await post()).statusCode).toBe(201);
+
+    const rows = await prisma.dealInteraction.findMany({
+      where: { userId: user!.id, dealId: dealIds[4], type: 'impression' },
+    });
+    expect(rows.length).toBe(1); // deduped
+  });
+
+  it('buckets distance and never stores precise coordinates in metadata', async () => {
+    const t = await token(SUB_A);
+    const user = await prisma.user.findUnique({ where: { supabaseUserId: SUB_A } });
+    await app.inject({
+      method: 'POST',
+      url: `/v1/deals/${dealIds[5]}/opens`,
+      headers: json(t),
+      payload: { distanceMiles: 2.34, priceMinor: 599, category: 'food' },
+    });
+    const row = await prisma.dealInteraction.findFirst({
+      where: { userId: user!.id, dealId: dealIds[5], type: 'open' },
+    });
+    const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+    expect(meta.distanceMilesBucket).toBe(2.5); // rounded to 0.5mi bucket
+    expect(meta).not.toHaveProperty('latitude');
+    expect(meta).not.toHaveProperty('longitude');
+    expect(meta).not.toHaveProperty('distanceMiles');
+  });
+
+  it('rejects precise coordinates in an interaction payload (whitelist)', async () => {
+    const t = await token(SUB_A);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/deals/${dealIds[5]}/impressions`,
+      headers: json(t),
+      payload: { latitude: 33.75, longitude: -84.39 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

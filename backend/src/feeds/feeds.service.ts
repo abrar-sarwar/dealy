@@ -6,20 +6,33 @@ import type { DealPage, NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.d
 
 const METERS_PER_MILE = 1609.344;
 
-function encodeCursor(distanceMeters: number, id: string): string {
-  return Buffer.from(`${distanceMeters}:${id}`).toString('base64url');
+function encodeCursor(sortKey: number, id: string): string {
+  return Buffer.from(`${sortKey}:${id}`).toString('base64url');
 }
 
-function decodeCursor(cursor: string): { distanceMeters: number; id: string } | null {
+function decodeCursor(cursor: string): { sortKey: number; id: string } | null {
   try {
     const [d, id] = Buffer.from(cursor, 'base64url').toString('utf8').split(':');
-    const distanceMeters = Number(d);
-    if (!id || Number.isNaN(distanceMeters)) return null;
-    return { distanceMeters, id };
+    const sortKey = Number(d);
+    if (!id || Number.isNaN(sortKey)) return null;
+    return { sortKey, id };
   } catch {
     return null;
   }
 }
+
+/**
+ * Distance + freshness ranking weight. A deal's effective sort key is its real
+ * distance in metres MINUS a freshness credit proportional to how recently it was
+ * created: each hour of extra age costs FRESHNESS_METERS_PER_HOUR equivalent
+ * metres. Only the *difference* in created_at between deals matters, so the key
+ * depends solely on row-fixed values (distance + created_at) — never on `now()`.
+ * That keeps keyset pagination stable across requests while ensuring a much
+ * fresher deal is not beaten by a marginally-closer very-stale one. Active deals
+ * are short-lived (bounded by expiry), so no explicit age cap is needed. Real
+ * distance shown to the user is unaffected.
+ */
+const FRESHNESS_METERS_PER_HOUR = 40;
 
 /** Online-feed cursor: `${createdAt ISO}:${uuid}`. The UUID has no colons, so
  * the final colon is the separator (the ISO timestamp contains colons). */
@@ -46,13 +59,15 @@ export class FeedsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Nearby published deals within radius, sorted by distance, cursor-paginated.
-   * Uses the GiST-indexed `geog` column via ST_DWithin (indexed) + ST_Distance.
-   * Online deals (no geography) are excluded.
+   * Nearby deals within radius, ranked by distance + freshness, cursor-paginated.
+   * Returns ONLY active, source-verified, physical deals: status published,
+   * verification_status verified, not expired, not online, with geography inside
+   * the radius (GiST-indexed ST_DWithin + ST_Distance). Online-only deals are
+   * never blended in (spec §6).
    */
   async nearby(q: NearbyFeedQuery): Promise<DealPage> {
     const limit = q.limit ?? 20;
-    const radiusMeters = (q.radiusMiles ?? 5) * METERS_PER_MILE;
+    const radiusMeters = (q.radiusMiles ?? 10) * METERS_PER_MILE;
     const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
     const cursor = q.cursor ? decodeCursor(q.cursor) : null;
 
@@ -60,9 +75,13 @@ export class FeedsService {
       ? Prisma.sql`AND d.category_id = (SELECT id FROM categories WHERE slug = ${q.category})`
       : Prisma.empty;
 
+    // Cast the cursor key to double precision so the keyset comparison is
+    // float8 = float8. Binding the JS number as `numeric` would promote the
+    // float8 sort_key to its full decimal, which never equals the shortest-decimal
+    // param — the boundary row would then re-appear on the next page.
     const cursorFilter = cursor
-      ? Prisma.sql`WHERE (distance_meters > ${cursor.distanceMeters})
-                      OR (distance_meters = ${cursor.distanceMeters} AND id > ${cursor.id}::uuid)`
+      ? Prisma.sql`WHERE (sort_key > ${cursor.sortKey}::double precision)
+                      OR (sort_key = ${cursor.sortKey}::double precision AND id > ${cursor.id}::uuid)`
       : Prisma.empty;
 
     const rows = await this.prisma.$queryRaw<NearbyRow[]>(Prisma.sql`
@@ -72,11 +91,22 @@ export class FeedsService {
                d.current_price_minor, d.original_price_minor, d.currency,
                d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
                d.latitude, d.longitude, d.location_tags, d.visual_seed,
+               d.verification_status, d.last_verified_at,
                d.created_at, d.start_at, d.expires_at,
-               ST_Distance(d.geog, ${center}) AS distance_meters
+               ST_Distance(d.geog, ${center}) AS distance_meters,
+               -- Round to whole metres so the key is an integer-valued double that
+               -- survives the PG -> JS number -> PG keyset round-trip EXACTLY.
+               -- (A fractional float8 is sent back as a rounded decimal string and
+               -- the boundary row would re-appear on the next page.) Whole-metre
+               -- ranking precision is irrelevant.
+               round(ST_Distance(d.geog, ${center})
+                 - EXTRACT(EPOCH FROM d.created_at) / 3600.0 * ${FRESHNESS_METERS_PER_HOUR}
+               )::double precision AS sort_key
         FROM deals d
         JOIN categories cat ON cat.id = d.category_id
         WHERE d.status = 'published'::deal_status
+          AND d.verification_status = 'verified'::verification_status
+          AND d.is_online = false
           AND d.expires_at > now()
           AND d.geog IS NOT NULL
           AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
@@ -84,22 +114,23 @@ export class FeedsService {
       )
       SELECT * FROM candidates
       ${cursorFilter}
-      ORDER BY distance_meters ASC, id ASC
+      ORDER BY sort_key ASC, id ASC
       LIMIT ${limit + 1}
     `);
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const last = page.at(-1);
-    const nextCursor = hasMore && last ? encodeCursor(Number(last.distance_meters), last.id) : null;
+    const nextCursor = hasMore && last ? encodeCursor(Number(last.sort_key), last.id) : null;
 
     return { items: page.map(mapNearbyRow), nextCursor };
   }
 
   /**
-   * Active online-only published deals, newest first, cursor-paginated.
-   * Keyset pagination on (createdAt DESC, id DESC) for stable, overlap-free
-   * pages. Online deals have no geography, so distance is always null.
+   * Anywhere feed: active, source-verified, ONLINE-only deals, newest first,
+   * cursor-paginated. Requires no location. Physical deals are never returned
+   * here, so denying location access never surfaces physical Atlanta inventory
+   * (spec §6). Keyset pagination on (createdAt DESC, id DESC).
    */
   async online(q: OnlineFeedQuery): Promise<DealPage> {
     const limit = q.limit ?? 20;
@@ -117,6 +148,7 @@ export class FeedsService {
     const rows = await this.prisma.deal.findMany({
       where: {
         status: 'published',
+        verificationStatus: 'verified',
         isOnline: true,
         expiresAt: { gt: new Date() },
         ...cursorFilter,

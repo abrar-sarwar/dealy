@@ -4,6 +4,7 @@ import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { AppModule } from '../src/app.module';
 import { IngestionService } from '../src/ingestion/ingestion.service';
+import { VerificationService } from '../src/ingestion/verification.service';
 import { SearchIndexer } from '../src/search/search-indexer.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { handleDealsJob, type DealsJob } from '../src/ingestion/jobs';
@@ -36,6 +37,7 @@ describe('Deals queue (BullMQ, e2e)', () => {
 
   it('processes an ingest job placed on the queue', async () => {
     const ingestion = app.get(IngestionService);
+    const verification = app.get(VerificationService);
     const search = app.get(SearchIndexer);
     const notifications = app.get(NotificationsService);
 
@@ -46,7 +48,8 @@ describe('Deals queue (BullMQ, e2e)', () => {
     const completed = new Promise<Record<string, unknown>>((resolve, reject) => {
       worker = new Worker(
         TEST_QUEUE,
-        (job) => handleDealsJob(job.data as DealsJob, { ingestion, search, notifications }),
+        (job) =>
+          handleDealsJob(job.data as DealsJob, { ingestion, verification, search, notifications }),
         { connection: workerConn },
       );
       worker.on('completed', (_job, result) => resolve(result as Record<string, unknown>));

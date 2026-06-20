@@ -4,7 +4,7 @@ import { InteractionType, SwipeDirection } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { ActionsService } from './actions.service';
-import { CreateSwipeDto } from './actions.dto';
+import { CreateSwipeDto, InteractionSignalsDto } from './actions.dto';
 
 @ApiTags('actions')
 @ApiBearerAuth('supabase')
@@ -52,6 +52,26 @@ export class ActionsController {
   @Delete(':id/watch')
   unwatch(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.actions.unwatch(user.id, id);
+  }
+
+  @Post(':id/impressions')
+  @ApiOperation({ summary: 'Record an impression (deduped per day). No precise coordinates.' })
+  impression(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() signals: InteractionSignalsDto,
+  ) {
+    return this.actions.recordImpression(user.id, id, signals);
+  }
+
+  @Post(':id/opens')
+  @ApiOperation({ summary: 'Record a deal open (detail view) with optional signals' })
+  open(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() signals: InteractionSignalsDto,
+  ) {
+    return this.actions.recordOpen(user.id, id, signals);
   }
 
   @Post(':id/views')

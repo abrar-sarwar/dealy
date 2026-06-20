@@ -28,6 +28,8 @@ interface NormalizedDeal {
   longitude: number | null;
   locationTags: string[];
   visualSeed: number;
+  verificationStatus: string;
+  lastVerifiedAt: Date | null;
   createdAt: Date;
   startAt: Date | null;
   expiresAt: Date;
@@ -52,6 +54,8 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     savingsPercentage,
     distanceMiles: distanceMiles === null ? null : Math.round(distanceMiles * 10) / 10,
     dealScore: n.dealScore,
+    verified: n.verificationStatus === 'verified',
+    verifiedAt: n.lastVerifiedAt ? n.lastVerifiedAt.toISOString() : null,
     isOnline: n.isOnline,
     isStudentOnly: n.isStudentOnly,
     shortDescription: n.shortDescription,
@@ -92,6 +96,8 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       longitude: deal.longitude,
       locationTags: deal.locationTags,
       visualSeed: deal.visualSeed,
+      verificationStatus: deal.verificationStatus,
+      lastVerifiedAt: deal.lastVerifiedAt,
       createdAt: deal.createdAt,
       startAt: deal.startAt,
       expiresAt: deal.expiresAt,
@@ -121,10 +127,14 @@ export interface NearbyRow {
   longitude: number | null;
   location_tags: string[];
   visual_seed: number;
+  verification_status: string;
+  last_verified_at: Date | null;
   created_at: Date;
   start_at: Date | null;
   expires_at: Date;
   distance_meters: number;
+  /** Distance + freshness ranking key (lower = higher rank). Ordering only. */
+  sort_key: number;
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -152,6 +162,8 @@ export function mapNearbyRow(row: NearbyRow) {
       longitude: row.longitude,
       locationTags: row.location_tags,
       visualSeed: row.visual_seed,
+      verificationStatus: row.verification_status,
+      lastVerifiedAt: row.last_verified_at,
       createdAt: row.created_at,
       startAt: row.start_at,
       expiresAt: row.expires_at,

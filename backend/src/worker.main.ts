@@ -4,6 +4,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type { Env } from './config/env.schema';
 import { IngestionService } from './ingestion/ingestion.service';
+import { VerificationService } from './ingestion/verification.service';
 import { SearchIndexer } from './search/search-indexer.service';
 import { NotificationsService } from './notifications/notifications.service';
 import { handleDealsJob, type DealsJob } from './ingestion/jobs';
@@ -25,12 +26,13 @@ async function bootstrapWorker(): Promise<void> {
   }
 
   const ingestion = app.get(IngestionService);
+  const verification = app.get(VerificationService);
   const search = app.get(SearchIndexer);
   const notifications = app.get(NotificationsService);
 
   const workerConn = redisConnection(url);
   const worker = createDealsWorker(workerConn, (job) =>
-    handleDealsJob(job.data as DealsJob, { ingestion, search, notifications }),
+    handleDealsJob(job.data as DealsJob, { ingestion, verification, search, notifications }),
   );
   worker.on('completed', (job) =>
     logger.log(`Job ${job.id} [${(job.data as DealsJob).type}] completed`),
@@ -42,6 +44,17 @@ async function bootstrapWorker(): Promise<void> {
   const queue = createDealsQueue(queueConn);
   await queue.add('ingest-fixture', { type: 'ingest', provider: 'fixture' } satisfies DealsJob, {
     repeat: { pattern: '0 */6 * * *' },
+  });
+  await queue.add(
+    'ingest-editorial',
+    { type: 'ingest', provider: 'editorial' } satisfies DealsJob,
+    {
+      repeat: { pattern: '15 */6 * * *' },
+    },
+  );
+  // Daily re-verification of every active deal against its authoritative source.
+  await queue.add('verify', { type: 'verify' } satisfies DealsJob, {
+    repeat: { pattern: '30 3 * * *' },
   });
   await queue.add('expire', { type: 'expire' } satisfies DealsJob, {
     repeat: { pattern: '0 * * * *' },
