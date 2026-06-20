@@ -126,6 +126,10 @@ final class AppState {
         try await locationProvider.currentCenter()
     }
 
+    /// Current location-permission state (for showing share/Settings prompts).
+    @MainActor
+    var locationAuthorization: LocationAuthorization { locationProvider.authorization }
+
     // MARK: - Onboarding
 
     var hasCompletedOnboarding: Bool { persisted.hasCompletedOnboarding }

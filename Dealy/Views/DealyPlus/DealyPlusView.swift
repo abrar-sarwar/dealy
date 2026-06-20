@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DealyPlusView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedPlan: Plan = .student
     @State private var showComingSoon = false
 
@@ -49,6 +50,9 @@ struct DealyPlusView: View {
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Dealy+")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+            }
             .alert("Payments coming soon", isPresented: $showComingSoon) {
                 Button("OK", role: .cancel) {}
             } message: {

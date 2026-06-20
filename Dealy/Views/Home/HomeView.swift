@@ -78,7 +78,7 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.primaryText)
-                .accessibilityLabel("Open category and deal filters")
+                .accessibilityLabel("Open location, category, and deal filters")
             }
         }
         .padding(.horizontal, 14)
@@ -112,11 +112,11 @@ struct HomeView: View {
         ZStack {
             ForEach(Array(viewModel.visibleCards.enumerated()), id: \.element.id) { idx, deal in
                 let isTop = idx == 0
+                // Show one card; the next sits directly behind it (no peeking
+                // stack) and is revealed only as the top card is swiped away.
                 SwipeCardView(deal: deal,
                               campus: app.currentCampus,
                               dragTranslation: isTop ? dragOffset : .zero)
-                    .scaleEffect(1 - CGFloat(idx) * 0.05)
-                    .offset(y: CGFloat(idx) * 26)
                     .offset(isTop ? dragOffset : .zero)
                     .rotationEffect(.degrees(isTop ? Double(dragOffset.width) / 18 : 0))
                     .zIndex(Double(viewModel.visibleCards.count - idx))

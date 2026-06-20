@@ -14,13 +14,14 @@ struct MainTabView: View {
                 .tabItem { Label("Explore", systemImage: "magnifyingglass") }
                 .tag(AppTab.explore)
 
+            // Center tab: the Dealy+ map preview.
+            DealsMapView()
+                .tabItem { Label("Map", systemImage: "map.fill") }
+                .tag(AppTab.map)
+
             SavedView()
                 .tabItem { Label("Saved", systemImage: "heart.fill") }
                 .tag(AppTab.saved)
-
-            DealyPlusView()
-                .tabItem { Label("Dealy+", systemImage: "crown.fill") }
-                .tag(AppTab.plus)
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }

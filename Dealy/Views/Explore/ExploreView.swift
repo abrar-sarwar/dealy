@@ -6,21 +6,12 @@ struct ExploreView: View {
     @State private var searchText = ""
     @State private var activeCategory: DealCategory?
     @State private var selectedDeal: Deal?
-    @State private var showMap = false
     @State private var showLocation = false
 
     /// Deals available for browsing & search. The service already returns
     /// discovery-eligible inventory, so we only drop expired ones here.
     private var areaDeals: [Deal] {
         DealFilter.active(app.allDeals)
-    }
-
-    /// Short label for the discovery chip near the search surface.
-    private var locationLabel: String {
-        switch app.discovery.mode {
-        case .anywhere: return "Online anywhere"
-        case .nearby: return "\(app.discovery.center.displayName) · \(app.discovery.radiusMiles) mi"
-        }
     }
 
     private var isSearching: Bool {
@@ -38,7 +29,6 @@ struct ExploreView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    locationChip
                     categoryShortcuts
                     if isSearching {
                         resultsSection
@@ -52,47 +42,11 @@ struct ExploreView: View {
             .navigationTitle("Explore")
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Search deals, stores, categories")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showMap = true } label: {
-                        Image(systemName: "map")
-                    }
-                    .accessibilityLabel("View deals on map")
-                }
-            }
             .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
-            .sheet(isPresented: $showMap) {
-                DealsMapView(deals: areaDeals, campus: app.currentCampus)
-            }
             .sheet(isPresented: $showLocation) {
                 LocationSelectorView()
             }
         }
-    }
-
-    // MARK: Location chip
-
-    private var locationChip: some View {
-        Button { showLocation = true } label: {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: app.discovery.mode == .anywhere ? "globe" : "mappin.circle.fill")
-                    .foregroundStyle(Theme.primary)
-                Text(locationLabel)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-                Spacer(minLength: Spacing.xs)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.mutedText)
-            }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, 10)
-            .dealyCardSurface()
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, Spacing.lg)
-        .accessibilityLabel("Change location. Currently \(locationLabel)")
     }
 
     // MARK: Category shortcuts
