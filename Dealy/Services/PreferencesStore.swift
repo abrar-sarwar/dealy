@@ -11,6 +11,8 @@ struct PersistedState: Codable, Equatable {
     var swipeHistory: [SwipeAction] = []      // capped, newest last
     var savingsEvents: [SavingsEvent] = []    // realized mock savings, deduped by dealID
     var notificationsEnabled = false
+    /// User intentionally chose to stay in Anywhere — suppresses repeat nudges.
+    var anywhereNudgeDismissed = false
 
     init() {}
 
@@ -25,6 +27,7 @@ struct PersistedState: Codable, Equatable {
         case swipeHistory
         case savingsEvents
         case notificationsEnabled
+        case anywhereNudgeDismissed
     }
 
     init(from decoder: Decoder) throws {
@@ -51,6 +54,7 @@ struct PersistedState: Codable, Equatable {
         swipeHistory = try container.decodeIfPresent([SwipeAction].self, forKey: .swipeHistory) ?? []
         savingsEvents = try container.decodeIfPresent([SavingsEvent].self, forKey: .savingsEvents) ?? []
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
+        anywhereNudgeDismissed = try container.decodeIfPresent(Bool.self, forKey: .anywhereNudgeDismissed) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -63,6 +67,7 @@ struct PersistedState: Codable, Equatable {
         try container.encode(swipeHistory, forKey: .swipeHistory)
         try container.encode(savingsEvents, forKey: .savingsEvents)
         try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try container.encode(anywhereNudgeDismissed, forKey: .anywhereNudgeDismissed)
     }
 
     static let `default` = PersistedState()

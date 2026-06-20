@@ -23,6 +23,15 @@ struct InfoChip: View {
     }
 }
 
+/// "Verified" chip — means Dealy recently confirmed this deal through its
+/// authoritative source. Server-controlled; never derived on the client.
+struct VerifiedBadge: View {
+    var body: some View {
+        InfoChip(symbol: "checkmark.seal.fill", text: "Verified", tint: Theme.save)
+            .accessibilityLabel("Verified — recently confirmed with the source")
+    }
+}
+
 /// Deal score badge with an explainer affordance handled by the parent.
 struct DealScoreBadge: View {
     let score: Int

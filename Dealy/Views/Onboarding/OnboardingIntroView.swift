@@ -9,7 +9,7 @@ struct OnboardingPage {
     static let page1 = OnboardingPage(
         symbol: "mappin.and.ellipse",
         title: "Find deals around you",
-        subtitle: "Discover food, tech, student supplies, groceries, and more near your campus or city.",
+        subtitle: "Discover food, groceries, local events, and more — verified and near your current location.",
         tint: [Color(hex: 0x3B82F6), Color(hex: 0x1D4ED8)]
     )
     static let page2 = OnboardingPage(

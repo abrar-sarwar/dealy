@@ -1,21 +1,21 @@
 import SwiftUI
 
-/// Location step: explain why we ask, offer current-location (When-In-Use) and a
-/// city/ZIP fallback, and let the user set a 1–100 mile radius. Permission is
-/// never mandatory — a manual place works just as well. Continue is disabled
-/// until a valid nearby center has been selected.
+/// Location step: Dealy's Nearby feed uses the device's current location. We ask
+/// for When-In-Use permission here. If it's unavailable, the app is never blocked
+/// — the user drops into Anywhere (online-only) deals and can enable Nearby later.
+/// There is no city/ZIP entry: Nearby is device-location-only.
 struct OnboardingLocationView: View {
     @Binding var discovery: DiscoveryPreference
     var onContinue: () -> Void
 
     @Environment(AppState.self) private var app
 
-    @State private var query = ""
-    @State private var candidates: [PlaceCandidate] = []
     @State private var isLocating = false
-    @State private var isResolving = false
     @State private var errorMessage: String?
-    @State private var hasSelectedCenter = false
+    /// A choice has been made (Nearby located, or Anywhere selected).
+    @State private var resolved = false
+
+    private var isNearby: Bool { discovery.mode == .nearby && resolved }
 
     private var radiusBinding: Binding<Int> {
         Binding(
@@ -28,7 +28,7 @@ struct OnboardingLocationView: View {
         VStack(spacing: 0) {
             OnboardingHeader(
                 title: "Where are you?",
-                subtitle: "We use your location to show deals near you. Use your current location or enter a city or ZIP — your choice."
+                subtitle: "Dealy shows deals near your current location. Turn on location for Nearby deals, or browse online-only deals in Anywhere."
             )
 
             ScrollView {
@@ -42,20 +42,16 @@ struct OnboardingLocationView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    manualSearchField
+                    anywhereButton
 
-                    if !candidates.isEmpty {
-                        LocationSearchResultsView(candidates: candidates) { candidate in
-                            select(candidate.center)
-                        }
-                    }
-
-                    if hasSelectedCenter {
+                    if isNearby {
                         selectedCenterCard
                         DealyCard {
                             RadiusControl(radius: radiusBinding)
                         }
                         .padding(.top, Spacing.xs)
+                    } else if resolved {
+                        anywhereCard
                     }
                 }
                 .padding(.horizontal, Spacing.lg)
@@ -69,8 +65,8 @@ struct OnboardingLocationView: View {
                 }
             }
             .buttonStyle(.primaryDealy)
-            .disabled(!hasSelectedCenter)
-            .opacity(hasSelectedCenter ? 1 : 0.5)
+            .disabled(!resolved)
+            .opacity(resolved ? 1 : 0.5)
             .padding(.horizontal, Spacing.lg)
             .padding(.bottom, Spacing.xl)
         }
@@ -98,7 +94,7 @@ struct OnboardingLocationView: View {
                     Text("Use my current location")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
-                    Text("Find deals right around you")
+                    Text("Find verified deals right around you")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedText)
                 }
@@ -116,18 +112,22 @@ struct OnboardingLocationView: View {
     private func useCurrentLocation() {
         isLocating = true
         errorMessage = nil
-        candidates = []
         Task { @MainActor in
             defer { isLocating = false }
             do {
                 try await app.refreshFromDeviceLocation()
                 discovery = app.discovery
-                hasSelectedCenter = true
+                resolved = true
                 Haptics.selection()
             } catch let error as LocationProviderError {
+                // Honest fallback: stage Anywhere so the user is never blocked.
+                discovery = discovery.switching(to: .anywhere)
+                resolved = true
                 errorMessage = Self.message(for: error)
             } catch {
-                errorMessage = "We couldn't get your location. Try a city or ZIP instead."
+                discovery = discovery.switching(to: .anywhere)
+                resolved = true
+                errorMessage = "We couldn't get your location. You can browse Anywhere for now."
             }
         }
     }
@@ -135,72 +135,62 @@ struct OnboardingLocationView: View {
     private static func message(for error: LocationProviderError) -> String {
         switch error {
         case .denied:
-            return "Location access is off. Enter a city or ZIP below — no permission needed."
+            return "Location access is off, so we've set you to Anywhere (online deals). Enable location in Settings to see Nearby deals."
         case .restricted:
-            return "Location is restricted on this device. Enter a city or ZIP below."
+            return "Location is restricted on this device. You can browse Anywhere (online deals)."
         case .unavailable, .timeout:
-            return "We couldn't get your location right now. Try a city or ZIP instead."
+            return "We couldn't get your location right now. You can browse Anywhere, or try again."
         }
     }
 
-    // MARK: Manual search
+    // MARK: Anywhere
 
-    private var manualSearchField: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Theme.mutedText)
-            TextField("City or ZIP code", text: $query)
-                .textInputAutocapitalization(.words)
-                .submitLabel(.search)
-                .onSubmit(runSearch)
-            if isResolving {
-                ProgressView()
-            } else if !query.isEmpty {
-                Button("Search", action: runSearch)
+    private var anywhereButton: some View {
+        Button {
+            discovery = discovery.switching(to: .anywhere)
+            resolved = true
+            errorMessage = nil
+            Haptics.selection()
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "globe").foregroundStyle(Theme.primary)
+                Text("Browse online deals (Anywhere)")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.primary)
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
             }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .dealyCardSurface()
         }
-        .padding(Spacing.md)
-        .dealyCardSurface()
-    }
-
-    private func runSearch() {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        isResolving = true
-        errorMessage = nil
-        candidates = []
-        Task { @MainActor in
-            defer { isResolving = false }
-            do {
-                let results = try await app.resolvePlaces(trimmed)
-                if results.isEmpty {
-                    errorMessage = "No places found for “\(trimmed)”."
-                } else if results.count == 1 {
-                    select(results[0].center)
-                } else {
-                    candidates = results
-                }
-            } catch {
-                errorMessage = "Location search is unavailable right now."
-            }
-        }
-    }
-
-    private func select(_ center: DiscoveryCenter) {
-        discovery = .nearby(center: center, radiusMiles: discovery.radiusMiles)
-        candidates = []
-        errorMessage = nil
-        hasSelectedCenter = true
+        .buttonStyle(.plain)
+        .accessibilityLabel("Browse online deals anywhere")
     }
 
     private var selectedCenterCard: some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: "mappin.circle.fill").foregroundStyle(Theme.primary)
+            Image(systemName: "location.fill").foregroundStyle(Theme.primary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Selected location")
+                Text("Nearby")
                     .font(.caption).foregroundStyle(Theme.mutedText)
-                Text(discovery.center.displayName)
+                Text("Using your current location")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+            }
+            Spacer()
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dealyCardSurface()
+    }
+
+    private var anywhereCard: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "globe").foregroundStyle(Theme.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Anywhere")
+                    .font(.caption).foregroundStyle(Theme.mutedText)
+                Text("Online deals, no location needed")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
             }

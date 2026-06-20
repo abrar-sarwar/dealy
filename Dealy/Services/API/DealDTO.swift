@@ -18,6 +18,8 @@ struct DealDTO: Decodable {
     let currency: String
     let distanceMiles: Double?
     let dealScore: Int
+    /// Server-controlled trust signal; absent on older payloads → treated as false.
+    let verified: Bool?
     let isOnline: Bool
     let isStudentOnly: Bool
     let shortDescription: String
@@ -55,7 +57,8 @@ struct DealDTO: Decodable {
             latitude: latitude,
             longitude: longitude,
             visualSeed: visualSeed,
-            publishedAt: publishedAt
+            publishedAt: publishedAt,
+            verified: verified ?? false
         )
     }
 }

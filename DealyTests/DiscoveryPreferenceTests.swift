@@ -8,7 +8,7 @@ final class DiscoveryPreferenceTests: XCTestCase {
             latitude: 33.7531,
             longitude: -84.3857,
             displayName: "Atlanta, GA",
-            source: .manual
+            source: .device
         )
         XCTAssertEqual(DiscoveryPreference.nearby(center: center, radiusMiles: 0).radiusMiles, 1)
         XCTAssertEqual(DiscoveryPreference.nearby(center: center, radiusMiles: 101).radiusMiles, 100)

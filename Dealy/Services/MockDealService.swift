@@ -34,7 +34,13 @@ final class MockDealService: DealServicing {
         case .nearby(let p): preference = p
         case .anywhere: preference = .default.switching(to: .anywhere)
         }
+        // Mock inventory is curated/trusted, so it stands in for verified deals.
         let items = DealFilter.byDiscovery(all, preference: preference, reference: reference)
+            .map { deal -> Deal in
+                var d = deal
+                d.verified = true
+                return d
+            }
         return DealPage(items: items, nextCursor: nil)
     }
 }

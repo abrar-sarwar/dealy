@@ -13,8 +13,7 @@ struct DealyApp: App {
         let service: DealServicing = useRemote ? RemoteDealService() : MockDealService()
         _appState = State(initialValue: AppState(
             dealService: service,
-            locationProvider: CoreLocationProvider(),
-            placeResolver: ApplePlaceResolver()
+            locationProvider: CoreLocationProvider()
         ))
     }
 

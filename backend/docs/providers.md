@@ -29,7 +29,8 @@ work continues when credentials are absent.
 
 | Provider | Category | Classification | Reality |
 |---|---|---|---|
-| **Ticketmaster Discovery API** | Events | ✅ Public API | Documented public API (key from developer.ticketmaster.com). **First real provider.** Rate-limited; attribution required. |
+| **Editorial (curated)** | Food / Groceries | ✅ Built-in (no key) | Hand-curated Atlanta food/grocery deals (`providers/editorial-deals.ts`) — **carries the no-API pilot categories**. Deterministic `verify()` against the checked-in list. Replace records with real curated deals; superseded by Kroger/affiliate feeds as they land. NOT scraping. |
+| **Ticketmaster Discovery API** | Events | ✅ Public API | Documented public API (key from developer.ticketmaster.com). **First real provider; re-verifiable** via `verify()` (404→invalid, past→expired). Rate-limited; attribution required. |
 | **Eventbrite** | Events | 🟡 Partner | Public API exists but **search/discovery of others' events was restricted**; only your own org's events are reliably available. Implement interface, gate behind approval. |
 | DoorDash / Uber Eats / Grubhub | Food | 🔴 Unavailable | No public consumer "deals" API; merchant/Drive APIs are partner-only and don't expose promos for aggregation. Scraping prohibited by ToS. **Do not build.** Use admin/business ingestion instead. |
 | Walmart / Target / Best Buy | Retail | 🟠/🟡 | Walmart/BestBuy have affiliate/product APIs (approval, affiliate program); not general "deals." Target has no public API. Treat as affiliate-feed (approval) or manual. |

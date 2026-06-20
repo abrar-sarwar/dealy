@@ -3,34 +3,39 @@
 **Swipe. Save. Repeat.** Dealy is a swipe-first, location-aware savings app — a
 "Tinder/TikTok for deals." This repository is a polished, compile-ready SwiftUI
 app that runs on local mock data by default and can talk to the Dealy API when
-`DEALY_API_ENV` is set. Location-first discovery uses **Apple Core Location +
-geocoding only** — no paid third-party location API and no background location.
+`DEALY_API_ENV` is set. Discovery uses the **device's current location only**
+(Apple Core Location, When-In-Use) — no paid third-party location API, no
+background location, and **no manual city/ZIP entry**.
 
-The app is themed around Atlanta and Georgia campuses, but discovery is
-location-first: the user's current location or any city/ZIP drives the feed.
+The app is themed around Atlanta and Georgia campuses; the live backend runs a
+density-first Atlanta verified-inventory pilot (food, groceries, local events).
 
 ---
 
-## Location-first discovery
+## Device-location-only discovery
 
-- **Permission:** only **When-In-Use** Core Location is requested, and it is
-  never mandatory — a city/ZIP fallback (Apple geocoding) works just as well.
-  No background location, no paid location SDK.
+- **Permission:** only **When-In-Use** Core Location is requested during
+  onboarding. If location is unavailable (denied/restricted/failed), the app is
+  never blocked — the user drops into **Anywhere** (online-only) and can enable
+  Nearby later via a calm "Enable Nearby deals" action (→ Settings when denied).
 - **Search owns location.** One shared `DiscoveryPreference` (mode, center,
-  radius) drives both Home and Explore; changing it in Search refreshes Home
-  immediately and never affects saved deals or swipe history.
-- **Radius:** 1–100 miles (default 10).
-- **Nearby vs Anywhere:** Nearby is location-first but blended — local deals
-  lead, online deals are clearly labeled and capped at ~30% of the page. Anywhere
-  returns online-only inventory. API routes: `GET /v1/feeds/nearby` (with
-  `lat`/`lng`/`radiusMiles`) and `GET /v1/feeds/online`.
+  radius) drives Home, Map, and Explore; changing it refreshes Home immediately
+  and never affects saved deals or swipe history. Precise coordinates are never
+  shown in the UI or sent to analytics.
+- **Radius:** 1–100 miles (default 10). Changing it immediately refreshes Home.
+- **Nearby vs Anywhere:** Nearby returns only **active, source-verified, physical**
+  deals within the radius, ranked by distance + freshness — online deals are never
+  blended in. Anywhere returns verified online-only inventory and needs no
+  location. API routes: `GET /v1/feeds/nearby` (`lat`/`lng`/`radiusMiles`) and
+  `GET /v1/feeds/online`. The **Verified** badge means Dealy recently confirmed
+  the deal with its authoritative source.
 - **Map:** the full interactive deal map is a Dealy+ feature; the free entry is a
   non-interactive preview.
 
 ## What's inside
 
 - **Branded startup** transition (respects Reduce Motion) over a static launch screen.
-- **Onboarding**: 3 intro pages → current location or city/ZIP + 1–100 mi radius → interests → confirmation.
+- **Onboarding**: 3 intro pages → enable current location (or choose Anywhere) + 1–100 mi radius → interests → confirmation.
 - **Home swipe deck** (the hero): draggable cards with rotation, SAVE/SKIP stamps,
   velocity-aware completion, haptics, button-driven save/skip on the same path,
   **Undo**, category filters, ShareLink, watch, and rich empty states.
@@ -42,9 +47,9 @@ location-first: the user's current location or any city/ZIP drives the feed.
   Ending soon).
 - **Saved**: potential-vs-realized savings summary, category filter, swipe to
   remove / watch, empty state that routes back to Home.
-- **Location selector** (Search-owned): current location / city / ZIP, Nearby vs
-  Anywhere, and a 1–100 mi radius slider (applies on Apply, never destroys saved
-  deals).
+- **Location selector** (Search-owned): use current location (device only), Nearby
+  vs Anywhere, and a 1–100 mi radius slider (applies on Apply, never destroys saved
+  deals). When location is denied, an Open Settings affordance is offered.
 - **Dealy+**: tasteful subscription **preview** (Student $2.99 / Regular $5.99),
   no StoreKit, no dark patterns.
 - **Profile/Settings**: stats, interests, location, notification preferences,
@@ -110,8 +115,9 @@ When `DEALY_API_ENV` is unset, `MockDealService` powers previews and offline dev
 
 Core Location needs a simulated position: **Simulator → Features → Location →
 Custom Location…** (or pick a city). On a fresh install, **Allow** the
-When-In-Use prompt and the center becomes the simulated location; **Deny** it and
-use the city/ZIP fallback to finish onboarding.
+When-In-Use prompt and the center becomes the simulated location for Nearby;
+**Deny** it and the app drops into Anywhere (online-only), with an "Enable Nearby
+deals" action to switch back once permission is granted.
 
 ## Architecture
 

@@ -148,6 +148,17 @@ struct HomeView: View {
     private var emptyState: some View {
         let reason = viewModel.emptyReason(using: app)
         switch reason {
+        case .noneInArea where app.discovery.mode == .nearby && app.locationAuthorization != .authorizedWhenInUse:
+            // Nearby needs location access — explain calmly and offer to enable it.
+            EmptyStateView(
+                symbol: "location.slash",
+                title: "Nearby needs your location",
+                message: "Turn on location to see verified deals around you, or browse online deals from Anywhere.",
+                primaryTitle: "Enable Nearby deals",
+                primaryAction: { enableNearby() },
+                secondaryTitle: "Browse online",
+                secondaryAction: { browseOnline() }
+            )
         case .noneInArea where app.discovery.mode == .nearby:
             // Offer explicit choices instead of silently widening the search.
             EmptyStateView(
@@ -184,6 +195,10 @@ struct HomeView: View {
 
     private func browseOnline() {
         Task { await app.applyDiscovery(app.discovery.switching(to: .anywhere)) }
+    }
+
+    private func enableNearby() {
+        Task { await app.switchToNearby() }
     }
 
     private func widenRange() {

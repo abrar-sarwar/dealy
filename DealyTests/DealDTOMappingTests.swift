@@ -70,4 +70,14 @@ final class DealDTOMappingTests: XCTestCase {
         XCTAssertEqual(page.items[0].toDeal().category, .food)
         XCTAssertTrue(page.items[0].toDeal().isOnline)
     }
+
+    func testVerifiedMapsThroughAndDefaultsFalseWhenAbsent() throws {
+        // Absent in the sample payload → server-controlled flag defaults to false.
+        let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: sampleJSON)
+        XCTAssertFalse(page.items[0].toDeal().verified)
+
+        let verifiedJSON = #"{"items":[{"id":"v","title":"t","merchant":"m","category":"food","currentPrice":1,"originalPrice":2,"currency":"USD","dealScore":50,"verified":true,"isOnline":false,"isStudentOnly":false,"shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":null,"latitude":null,"longitude":null,"locationTags":[],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let verified = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: verifiedJSON)
+        XCTAssertTrue(verified.items[0].toDeal().verified)
+    }
 }

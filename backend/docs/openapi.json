@@ -258,7 +258,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 100,
-              "default": 5,
+              "default": 10,
               "type": "number"
             }
           },
@@ -597,6 +597,84 @@
             "supabase": []
           }
         ],
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/impressions": {
+      "post": {
+        "operationId": "ActionsController_impression_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractionSignalsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Record an impression (deduped per day). No precise coordinates.",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/v1/deals/{id}/opens": {
+      "post": {
+        "operationId": "ActionsController_open_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractionSignalsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Record a deal open (detail view) with optional signals",
         "tags": [
           "actions"
         ]
@@ -1285,6 +1363,26 @@
           "admin"
         ]
       }
+    },
+    "/v1/admin/coverage": {
+      "get": {
+        "operationId": "AdminController_coverageReport_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Density-first coverage report: verified inventory, zone readiness, provider health",
+        "tags": [
+          "admin"
+        ]
+      }
     }
   },
   "info": {
@@ -1363,6 +1461,27 @@
         "required": [
           "direction"
         ]
+      },
+      "InteractionSignalsDto": {
+        "type": "object",
+        "properties": {
+          "distanceMiles": {
+            "type": "number",
+            "description": "Distance to the deal at impression time (miles)."
+          },
+          "priceMinor": {
+            "type": "number",
+            "description": "Deal price in minor units (cents)."
+          },
+          "category": {
+            "type": "string",
+            "description": "Category slug shown."
+          },
+          "freshnessDays": {
+            "type": "number",
+            "description": "Deal freshness in days at impression time."
+          }
+        }
       },
       "RegisterPushTokenDto": {
         "type": "object",

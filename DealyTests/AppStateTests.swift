@@ -9,23 +9,30 @@ final class AppStateTests: XCTestCase {
     private func makeApp(
         _ initial: PersistedState = .default,
         locationProvider: LocationProviding = MockLocationProvider(),
-        placeResolver: PlaceResolving = MockPlaceResolver(),
         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()
     ) -> AppState {
         AppState(store: InMemoryPreferencesStore(initial),
                  dealService: MockDealService(reference: Date(timeIntervalSince1970: 1_750_000_000),
                                               artificialDelay: .zero),
                  locationProvider: locationProvider,
-                 placeResolver: placeResolver,
                  redemptionHandler: MockRedemptionHandler(),
                  interactionRecorder: interactionRecorder)
+    }
+
+    private func withDiscovery(_ preference: DiscoveryPreference) -> PersistedState {
+        var state = PersistedState.default
+        state.discovery = preference
+        return state
     }
 
     func testLoadPopulatesDeals() async {
         let app = makeApp()
         await app.loadDeals()
         XCTAssertEqual(app.loadState, .loaded)
-        XCTAssertGreaterThanOrEqual(app.allDeals.count, 36)
+        // Default discovery is Nearby (Atlanta), which now returns physical deals
+        // only — online deals are never blended in (spec §6).
+        XCTAssertGreaterThanOrEqual(app.allDeals.count, 20)
+        XCTAssertTrue(app.allDeals.allSatisfy { !$0.isOnline })
         XCTAssertNotNil(app.deal(id: "food-bogo-pizza"))
     }
 
@@ -140,7 +147,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(reloaded.interests, [.tech, .food])
     }
 
-    func testSetDiscoveryPersistsManualCenterWithoutFallback() {
+    func testSetDiscoveryPersistsDeviceCenterWithoutFallback() {
         let store = InMemoryPreferencesStore()
         let app = AppState(store: store,
                            dealService: MockDealService(artificialDelay: .zero))
@@ -148,8 +155,8 @@ final class AppStateTests: XCTestCase {
             center: DiscoveryCenter(
                 latitude: 34.0722,
                 longitude: -84.2941,
-                displayName: "Alpharetta, GA",
-                source: .manual
+                displayName: "Current location",
+                source: .device
             ),
             radiusMiles: 18,
             updatedAt: ref
@@ -200,15 +207,14 @@ final class AppStateTests: XCTestCase {
         let app = AppState(
             store: InMemoryPreferencesStore(),
             dealService: service,
-            locationProvider: MockLocationProvider(),
-            placeResolver: MockPlaceResolver()
+            locationProvider: MockLocationProvider()
         )
         let preference = DiscoveryPreference.nearby(
             center: DiscoveryCenter(
                 latitude: 34.0522,
                 longitude: -118.2437,
-                displayName: "Los Angeles, CA",
-                source: .manual
+                displayName: "Current location",
+                source: .device
             ),
             radiusMiles: 25
         )
@@ -249,8 +255,7 @@ final class AppStateTests: XCTestCase {
         let app = AppState(
             store: InMemoryPreferencesStore(),
             dealService: RecordingDealService(),
-            locationProvider: MockLocationProvider(authorization: .authorizedWhenInUse, result: .success(center)),
-            placeResolver: MockPlaceResolver()
+            locationProvider: MockLocationProvider(authorization: .authorizedWhenInUse, result: .success(center))
         )
 
         try await app.refreshFromDeviceLocation()
@@ -259,20 +264,90 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(app.discovery.mode, .nearby)
     }
 
-    func testResolvePlacesForwardsToResolver() async throws {
-        let candidate = PlaceCandidate(displayName: "Chicago, IL", latitude: 41.8781, longitude: -87.6298)
-        let app = AppState(
-            store: InMemoryPreferencesStore(),
-            dealService: RecordingDealService(),
-            locationProvider: MockLocationProvider(),
-            placeResolver: MockPlaceResolver(result: .success([candidate]))
-        )
+    // MARK: - Permission-aware discovery + Anywhere fallback
 
-        let results = try await app.resolvePlaces("60601")
-        XCTAssertEqual(results, [candidate])
+    func testDefaultRadiusIsTenMiles() {
+        XCTAssertEqual(DiscoveryPreference.defaultRadius, 10)
     }
 
-    // MARK: - Onboarding with current/manual location (Task 5)
+    func testDeniedLocationFallsBackToAnywhere() async {
+        let app = makeApp(
+            locationProvider: MockLocationProvider(authorization: .denied, result: .failure(.denied))
+        )
+        let error = await app.enableNearbyOrFallbackToAnywhere()
+        XCTAssertEqual(error, .denied)
+        XCTAssertEqual(app.discovery.mode, .anywhere)
+    }
+
+    func testEnableNearbyAfterPermissionBecomesAvailable() async {
+        // Start in Anywhere (e.g. user previously denied), then grant + enable.
+        let center = DiscoveryCenter(latitude: 47.6, longitude: -122.3,
+                                     displayName: "Current location", source: .device)
+        let app = makeApp(
+            locationProvider: MockLocationProvider(authorization: .authorizedWhenInUse,
+                                                   result: .success(center))
+        )
+        await app.switchToAnywhere()
+        XCTAssertEqual(app.discovery.mode, .anywhere)
+
+        let error = await app.switchToNearby()
+        XCTAssertNil(error)
+        XCTAssertEqual(app.discovery.mode, .nearby)
+        XCTAssertEqual(app.discovery.center, center)
+    }
+
+    func testTemporaryFailureKeepsLastValidDeviceLocation() async {
+        // A prior device fix is staged; a transient failure must preserve it.
+        let lastValid = DiscoveryCenter(latitude: 40.0, longitude: -83.0,
+                                        displayName: "Current location", source: .device)
+        let initial = withDiscovery(.nearby(center: lastValid, radiusMiles: 10))
+        let app = makeApp(
+            initial,
+            locationProvider: MockLocationProvider(authorization: .authorizedWhenInUse,
+                                                   result: .failure(.timeout))
+        )
+        let error = await app.switchToNearby()
+        XCTAssertNil(error)
+        XCTAssertEqual(app.discovery.mode, .nearby)
+        XCTAssertEqual(app.discovery.center, lastValid) // last valid preserved
+    }
+
+    func testNoValidLocationFallsBackToAnywhere() async {
+        // No real device fix has ever been recorded (legacy center) + provider
+        // fails → use Anywhere rather than fabricated/default coordinates.
+        let app = makeApp(
+            locationProvider: MockLocationProvider(authorization: .denied, result: .failure(.denied))
+        )
+        let error = await app.switchToNearby()
+        XCTAssertEqual(error, .denied)
+        XCTAssertEqual(app.discovery.mode, .anywhere)
+    }
+
+    func testRadiusChangeImmediatelyReloadsHome() async {
+        let service = RecordingDealService()
+        let app = AppState(store: InMemoryPreferencesStore(), dealService: service)
+        await app.setRadiusAndReload(42)
+        XCTAssertEqual(app.discovery.radiusMiles, 42)
+        // A reload was triggered for the new preference.
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    func testRadiusChangeClampsToBounds() async {
+        let app = makeApp()
+        await app.setRadiusAndReload(500)
+        XCTAssertEqual(app.discovery.radiusMiles, DiscoveryPreference.maxRadius)
+        await app.setRadiusAndReload(0)
+        XCTAssertEqual(app.discovery.radiusMiles, DiscoveryPreference.minRadius)
+    }
+
+    func testAnywhereNudgeCanBeDismissed() {
+        let app = makeApp()
+        XCTAssertFalse(app.anywhereNudgeDismissed)
+        app.dismissAnywhereNudge()
+        XCTAssertTrue(app.anywhereNudgeDismissed)
+    }
+
+    // MARK: - Onboarding with device location
 
     func testDeviceLocationCanCompleteOnboarding() async throws {
         let center = DiscoveryCenter(
@@ -294,21 +369,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(app.hasCompletedOnboarding)
         XCTAssertEqual(app.discovery.center, center)
         XCTAssertEqual(app.discovery.radiusMiles, 10)
-    }
-
-    func testManualCandidateCanReplaceDeniedDeviceLocation() async throws {
-        let candidate = PlaceCandidate(
-            displayName: "Chicago, IL",
-            latitude: 41.8781,
-            longitude: -87.6298
-        )
-        let app = makeApp(
-            locationProvider: MockLocationProvider(authorization: .denied, result: .failure(.denied)),
-            placeResolver: MockPlaceResolver(result: .success([candidate]))
-        )
-        let results = try await app.resolvePlaces("60601")
-        await app.applyDiscovery(.nearby(center: results[0].center, radiusMiles: 10))
-        XCTAssertEqual(app.discovery.center.displayName, "Chicago, IL")
     }
 
     func testCompleteOnboardingWithInterestsPreservesSelectedDiscovery() async {

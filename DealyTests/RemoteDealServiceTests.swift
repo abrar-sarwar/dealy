@@ -9,14 +9,15 @@ final class RemoteDealServiceTests: XCTestCase {
 
     // MARK: MockDealService feed behavior
 
-    func testNearbyMockFeedLeadsWithLocalAndCapsOnlineShare() async throws {
+    func testNearbyMockFeedIsPhysicalOnlyAndVerified() async throws {
         let service = MockDealService(reference: reference, artificialDelay: .zero)
         let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 25)
         let page = try await service.fetchDeals(for: .nearby(preference))
         XCTAssertFalse(page.items.isEmpty)
-        XCTAssertFalse(page.items.first?.isOnline ?? true)
-        let onlineCount = page.items.filter(\.isOnline).count
-        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(page.items.count), 0.30)
+        // Nearby never includes online deals (spec §6).
+        XCTAssertTrue(page.items.allSatisfy { !$0.isOnline })
+        // Mock inventory stands in for verified deals.
+        XCTAssertTrue(page.items.allSatisfy(\.verified))
     }
 
     func testAnywhereMockFeedContainsOnlyOnlineDeals() async throws {
@@ -43,7 +44,7 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertEqual(page.items.map(\.id), ["o1", "o2"])
     }
 
-    func testNearbyRoutesToBothFeedsAndBlendsLocalFirst() async throws {
+    func testNearbyRoutesToNearbyFeedOnlyAndNeverBlendsOnline() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.responder = { path in
             switch path {
@@ -59,12 +60,10 @@ final class RemoteDealServiceTests: XCTestCase {
 
         let page = try await service.fetchDeals(for: .nearby(preference))
 
-        XCTAssertEqual(Set(StubURLProtocol.paths), ["/v1/feeds/nearby", "/v1/feeds/online"])
-        // Local deals lead.
-        XCTAssertFalse(page.items.first?.isOnline ?? true)
-        // Online capped at 30% of the blended page.
-        let onlineCount = page.items.filter(\.isOnline).count
-        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(page.items.count), 0.30)
+        // Nearby hits ONLY the nearby feed — the online feed is never queried (spec §6).
+        XCTAssertEqual(StubURLProtocol.paths, ["/v1/feeds/nearby"])
+        XCTAssertEqual(page.items.map(\.id), ["l1", "l2", "l3"])
+        XCTAssertTrue(page.items.allSatisfy { !$0.isOnline })
     }
 
     // MARK: Helpers
