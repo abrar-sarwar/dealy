@@ -76,6 +76,10 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    # gitleaks-action lists PR commits via the API; without these it 403s.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
