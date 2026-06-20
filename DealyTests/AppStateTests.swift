@@ -127,7 +127,8 @@ final class AppStateTests: XCTestCase {
         // Reloading from the same store recovers the state.
         let reloaded = store.load()
         XCTAssertTrue(reloaded.hasCompletedOnboarding)
-        XCTAssertEqual(reloaded.campusID, Campus.georgiaTech.id)
+        XCTAssertEqual(reloaded.discovery.center, .legacyCampus(.georgiaTech))
+        XCTAssertEqual(reloaded.discovery.radiusMiles, 5)
         XCTAssertEqual(reloaded.interests, [.tech, .food])
     }
 

@@ -20,6 +20,27 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(decoded, state)
     }
 
+    func testLegacyPersistedStateDecodesIntoDiscoveryPreference() throws {
+        let json = """
+        {
+          "hasCompletedOnboarding": true,
+          "campusID": "uga",
+          "radius": 9,
+          "interests": [],
+          "savedDealIDs": [],
+          "watchedDealIDs": [],
+          "swipeHistory": [],
+          "savingsEvents": [],
+          "notificationsEnabled": false
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(PersistedState.self, from: json)
+        XCTAssertEqual(decoded.discovery.center.displayName, Campus.uga.name)
+        XCTAssertEqual(decoded.discovery.radiusMiles, 9)
+        XCTAssertEqual(decoded.discovery.center.source, .legacyCampus)
+    }
+
     func testStoreSaveLoad() {
         let store = InMemoryPreferencesStore()
         var state = PersistedState()
@@ -30,7 +51,7 @@ final class PersistenceTests: XCTestCase {
 
     func testDefaultStateIsFirstRun() {
         XCTAssertFalse(PersistedState.default.hasCompletedOnboarding)
-        XCTAssertEqual(PersistedState.default.campusID, Campus.georgiaState.id)
+        XCTAssertEqual(PersistedState.default.discovery, .default)
     }
 
     @MainActor
