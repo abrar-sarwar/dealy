@@ -1,19 +1,36 @@
 # Dealy — iOS Frontend MVP
 
 **Swipe. Save. Repeat.** Dealy is a swipe-first, location-aware savings app — a
-"Tinder/TikTok for deals." This repository is the **frontend MVP**: a polished,
-compile-ready SwiftUI app backed entirely by local mock data. There is no real
-backend, networking, or third-party SDK.
+"Tinder/TikTok for deals." This repository is a polished, compile-ready SwiftUI
+app that runs on local mock data by default and can talk to the Dealy API when
+`DEALY_API_ENV` is set. Location-first discovery uses **Apple Core Location +
+geocoding only** — no paid third-party location API and no background location.
 
-The MVP is themed around Atlanta and four Georgia campuses: Georgia State,
-Georgia Tech, Kennesaw State, and the University of Georgia (plus metro Atlanta).
+The app is themed around Atlanta and Georgia campuses, but discovery is
+location-first: the user's current location or any city/ZIP drives the feed.
 
 ---
+
+## Location-first discovery
+
+- **Permission:** only **When-In-Use** Core Location is requested, and it is
+  never mandatory — a city/ZIP fallback (Apple geocoding) works just as well.
+  No background location, no paid location SDK.
+- **Search owns location.** One shared `DiscoveryPreference` (mode, center,
+  radius) drives both Home and Explore; changing it in Search refreshes Home
+  immediately and never affects saved deals or swipe history.
+- **Radius:** 1–100 miles (default 10).
+- **Nearby vs Anywhere:** Nearby is location-first but blended — local deals
+  lead, online deals are clearly labeled and capped at ~30% of the page. Anywhere
+  returns online-only inventory. API routes: `GET /v1/feeds/nearby` (with
+  `lat`/`lng`/`radiusMiles`) and `GET /v1/feeds/online`.
+- **Map:** the full interactive deal map is a Dealy+ feature; the free entry is a
+  non-interactive preview.
 
 ## What's inside
 
 - **Branded startup** transition (respects Reduce Motion) over a static launch screen.
-- **Onboarding**: 3 intro pages → campus/city + radius → interests → confirmation.
+- **Onboarding**: 3 intro pages → current location or city/ZIP + 1–100 mi radius → interests → confirmation.
 - **Home swipe deck** (the hero): draggable cards with rotation, SAVE/SKIP stamps,
   velocity-aware completion, haptics, button-driven save/skip on the same path,
   **Undo**, category filters, ShareLink, watch, and rich empty states.
@@ -25,8 +42,9 @@ Georgia Tech, Kennesaw State, and the University of Georgia (plus metro Atlanta)
   Ending soon).
 - **Saved**: potential-vs-realized savings summary, category filter, swipe to
   remove / watch, empty state that routes back to Home.
-- **Location selector**: campus cards + 1–25 mi radius slider (applies on Done,
-  never destroys saved deals).
+- **Location selector** (Search-owned): current location / city / ZIP, Nearby vs
+  Anywhere, and a 1–100 mi radius slider (applies on Apply, never destroys saved
+  deals).
 - **Dealy+**: tasteful subscription **preview** (Student $2.99 / Regular $5.99),
   no StoreKit, no dark patterns.
 - **Profile/Settings**: stats, interests, location, notification preferences,
@@ -80,6 +98,21 @@ xcodebuild \
   test
 ```
 
+### Run against a local API
+
+By default the app uses mock data. Set `DEALY_API_ENV` to point at a backend
+(`local` → `http://localhost:3000`, `staging`, or `production`). In Xcode, add it
+under **Product → Scheme → Edit Scheme… → Run → Arguments → Environment
+Variables**, then run the backend (`cd backend && pnpm db:up && pnpm start:dev`).
+When `DEALY_API_ENV` is unset, `MockDealService` powers previews and offline dev.
+
+### Testing location in the simulator
+
+Core Location needs a simulated position: **Simulator → Features → Location →
+Custom Location…** (or pick a city). On a fresh install, **Allow** the
+When-In-Use prompt and the center becomes the simulated location; **Deny** it and
+use the city/ZIP fallback to finish onboarding.
+
 ## Architecture
 
 MVVM with small, focused files and reusable components.
@@ -127,17 +160,22 @@ DealyTests/       Model, filter/ranker, AppState, persistence tests
 
 Small protocols mark where real services plug in (with focused `TODO`s):
 
-- `DealServicing` → replace `MockDealService` with a Supabase-backed service.
-- `PreferenceStoring` → backend-synced preference store.
-- `LocationProviding` → CoreLocation provider (the MVP uses explicit campus
-  choice instead of location permission, by design).
+- `DealServicing` → `RemoteDealService` (live) or `MockDealService` (default),
+  selected by `DEALY_API_ENV`.
+- `LocationProviding` → `CoreLocationProvider` (When-In-Use, implemented).
+- `PlaceResolving` → `ApplePlaceResolver` (Apple geocoding, implemented).
+- `PreferenceStoring` → backend-synced preference store (future).
+- `DealInteractionRecording` → records explicit interaction signals (opened,
+  swiped, redemption-clicked, marked-used). Default is a no-op; a backend sink
+  for personalization / "Ask Dealy" plugs in later.
 - `RedemptionHandling` → affiliate/coupon/map link handling ("Get Deal").
 - `NotificationScheduling` → push/local deal alerts.
 
 ## Intentional scope deviations
 
-- **No CoreLocation permission**: the MVP uses an explicit campus/city + radius
-  to drive "nearby" mock results, as specified.
+- **Location**: uses Apple Core Location (When-In-Use) + geocoding only — no paid
+  location API and no background location. Permission is optional (city/ZIP
+  fallback).
 - **No StoreKit/payments**: Dealy+ is a non-functional preview; core features
   are never paywalled.
 - **App icon**: the supplied artwork had pre-rendered rounded corners with black

@@ -122,7 +122,7 @@ struct HomeView: View {
                     .zIndex(Double(viewModel.visibleCards.count - idx))
                     .allowsHitTesting(isTop && !isSwiping)
                     .gesture(dragGesture(for: deal))   // only the top card hit-tests
-                    .onTapGesture { if isTop { selectedDeal = deal } }
+                    .onTapGesture { if isTop { app.recordOpened(deal.id); selectedDeal = deal } }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(deal.title) at \(deal.merchant). \(saveSkipHint)")
             }
@@ -221,6 +221,7 @@ struct HomeView: View {
 
     private func openGetDeal(_ deal: Deal) {
         Haptics.impact(.medium)
+        app.recordRedemptionClicked(deal.id)
         resetCard()
         getDeal = deal
     }

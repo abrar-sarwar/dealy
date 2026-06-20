@@ -158,7 +158,7 @@ struct ExploreView: View {
             } else {
                 LazyVStack(spacing: Spacing.sm) {
                     ForEach(results) { deal in
-                        DealRowCard(deal: deal) { selectedDeal = deal }
+                        DealRowCard(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
                     }
                 }
                 .padding(.horizontal, Spacing.lg)
@@ -196,7 +196,7 @@ struct ExploreView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Spacing.sm) {
                                 ForEach(section.deals) { deal in
-                                    DealTile(deal: deal) { selectedDeal = deal }
+                                    DealTile(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
                                 }
                             }
                             .padding(.horizontal, Spacing.lg)

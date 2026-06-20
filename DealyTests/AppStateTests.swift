@@ -9,14 +9,16 @@ final class AppStateTests: XCTestCase {
     private func makeApp(
         _ initial: PersistedState = .default,
         locationProvider: LocationProviding = MockLocationProvider(),
-        placeResolver: PlaceResolving = MockPlaceResolver()
+        placeResolver: PlaceResolving = MockPlaceResolver(),
+        interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()
     ) -> AppState {
         AppState(store: InMemoryPreferencesStore(initial),
                  dealService: MockDealService(reference: Date(timeIntervalSince1970: 1_750_000_000),
                                               artificialDelay: .zero),
                  locationProvider: locationProvider,
                  placeResolver: placeResolver,
-                 redemptionHandler: MockRedemptionHandler())
+                 redemptionHandler: MockRedemptionHandler(),
+                 interactionRecorder: interactionRecorder)
     }
 
     func testLoadPopulatesDeals() async {
@@ -337,6 +339,59 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(app.discovery, replacement)
         XCTAssertTrue(app.isSaved("food-bogo-pizza"))
     }
+
+    // MARK: - Interaction signals (Task 7)
+
+    func testSwipeRecordsDirection() async {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        await app.loadDeals()
+        app.recordSwipe(dealID: "food-wings", direction: .left)
+        XCTAssertEqual(recorder.events, [.swiped(dealID: "food-wings", direction: .left)])
+    }
+
+    func testOpeningDetailRecordsOpened() {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        app.recordOpened("tech-monitor")
+        XCTAssertEqual(recorder.events, [.opened(dealID: "tech-monitor")])
+    }
+
+    func testGetDealRecordsRedemptionClicked() {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        app.recordRedemptionClicked("tech-monitor")
+        XCTAssertEqual(recorder.events, [.redemptionClicked(dealID: "tech-monitor")])
+    }
+
+    func testMarkUsedRecordsMarkedUsed() async {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        await app.loadDeals()
+        let deal = try! XCTUnwrap(app.deal(id: "food-bogo-pizza"))
+        XCTAssertTrue(app.markUsed(deal))
+        XCTAssertEqual(recorder.events, [.markedUsed(dealID: "food-bogo-pizza")])
+    }
+
+    func testChangingLocationRecordsNoInteractionAndPreservesHistory() async {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        await app.loadDeals()
+        app.recordSwipe(dealID: "food-wings", direction: .right)
+        let before = recorder.events
+
+        await app.applyDiscovery(.nearby(center: .legacyCampus(.uga), radiusMiles: 25))
+
+        // Changing location is not an interaction signal and must not erase history.
+        XCTAssertEqual(recorder.events, before)
+        XCTAssertTrue(app.swipedDealIDs.contains("food-wings"))
+    }
+}
+
+/// Test recorder that accumulates every interaction event.
+final class RecordingInteractionRecorder: DealInteractionRecording {
+    private(set) var events: [DealInteractionEvent] = []
+    func record(_ event: DealInteractionEvent) { events.append(event) }
 }
 
 // MARK: - Test doubles

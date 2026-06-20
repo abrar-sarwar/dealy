@@ -229,6 +229,7 @@ struct DealDetailView: View {
             }
 
             Button {
+                app.recordRedemptionClicked(deal.id)
                 showGetDeal = true
                 Haptics.impact()
             } label: {

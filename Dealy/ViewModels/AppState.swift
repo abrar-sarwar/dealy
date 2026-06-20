@@ -8,6 +8,29 @@ enum LoadState: Equatable {
     case failed(String)
 }
 
+/// Explicit, named interaction signals captured at real user-action boundaries.
+/// Deliberately NOT an AI/ranking hook — just a durable analytics seam a backend
+/// recommender (or "Ask Dealy") can consume later. No event is emitted for
+/// browsing/location changes.
+enum DealInteractionEvent: Equatable {
+    case impression(dealID: String)
+    case opened(dealID: String)
+    case swiped(dealID: String, direction: SwipeDirection)
+    case redemptionClicked(dealID: String)
+    case markedUsed(dealID: String)
+}
+
+/// Sink for interaction events. The shipping default is a no-op until
+/// authenticated backend event sync is enabled.
+protocol DealInteractionRecording {
+    func record(_ event: DealInteractionEvent)
+}
+
+/// Default no-op recorder. Swap for a backend-syncing implementation later.
+struct NoopInteractionRecorder: DealInteractionRecording {
+    func record(_ event: DealInteractionEvent) {}
+}
+
 /// The app's single composition root. Owns persisted user state, the deal
 /// catalog, and every mutation that must stay consistent across screens.
 /// Saved/watched state is keyed by deal id and never duplicated into deals.
@@ -19,6 +42,7 @@ final class AppState {
     private let dealService: DealServicing
     private let locationProvider: LocationProviding
     private let placeResolver: PlaceResolving
+    private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
 
     // MARK: State
@@ -35,12 +59,14 @@ final class AppState {
          dealService: DealServicing = MockDealService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          placeResolver: PlaceResolving = MockPlaceResolver(),
-         redemptionHandler: RedemptionHandling = MockRedemptionHandler()) {
+         redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
+         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()) {
         self.store = store
         self.dealService = dealService
         self.locationProvider = locationProvider
         self.placeResolver = placeResolver
         self.redemptionHandler = redemptionHandler
+        self.interactionRecorder = interactionRecorder
         self.persisted = store.load()
     }
 
@@ -214,6 +240,7 @@ final class AppState {
     /// Record a swipe. Right-swipes save the deal. Returns the action recorded.
     @discardableResult
     func recordSwipe(dealID: String, direction: SwipeDirection) -> SwipeAction {
+        interactionRecorder.record(.swiped(dealID: dealID, direction: direction))
         let action = SwipeAction(dealID: dealID, direction: direction, wasSavedBefore: isSaved(dealID))
         if direction == .right { save(dealID) }
         persisted.swipeHistory.append(action)
@@ -254,7 +281,25 @@ final class AppState {
         let event = SavingsEvent(dealID: deal.id, dealTitle: deal.title, amount: deal.savingsAmount)
         persisted.savingsEvents.append(event)
         persist()
+        interactionRecorder.record(.markedUsed(dealID: deal.id))
         return true
+    }
+
+    // MARK: - Interaction signals
+
+    /// Record that a deal's detail was opened.
+    func recordOpened(_ dealID: String) {
+        interactionRecorder.record(.opened(dealID: dealID))
+    }
+
+    /// Record that the user tapped "Get Deal" (redemption intent).
+    func recordRedemptionClicked(_ dealID: String) {
+        interactionRecorder.record(.redemptionClicked(dealID: dealID))
+    }
+
+    /// Record that a deal card was shown to the user.
+    func recordImpression(_ dealID: String) {
+        interactionRecorder.record(.impression(dealID: dealID))
     }
 
     func hasBeenUsed(_ id: String) -> Bool {
