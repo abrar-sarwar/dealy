@@ -12,31 +12,6 @@ struct PersistedState: Codable, Equatable {
     var savingsEvents: [SavingsEvent] = []    // realized mock savings, deduped by dealID
     var notificationsEnabled = false
 
-    var campusID: String {
-        get { Self.legacyCampus(from: discovery.center)?.id ?? Campus.atlanta.id }
-        set {
-            let campus = Self.legacyCampus(withID: newValue)
-            discovery = Self.discoveryValue(
-                mode: discovery.mode,
-                center: .legacyCampus(campus),
-                radiusMiles: discovery.radiusMiles,
-                updatedAt: discovery.updatedAt
-            )
-        }
-    }
-
-    var radius: Int {
-        get { discovery.radiusMiles }
-        set {
-            discovery = Self.discoveryValue(
-                mode: discovery.mode,
-                center: discovery.center,
-                radiusMiles: newValue,
-                updatedAt: discovery.updatedAt
-            )
-        }
-    }
-
     init() {}
 
     private enum CodingKeys: String, CodingKey {
@@ -96,30 +71,11 @@ struct PersistedState: Codable, Equatable {
         Campus.all.first { $0.id == id } ?? .atlanta
     }
 
-    private static func legacyCampus(from center: DiscoveryCenter) -> Campus? {
-        Campus.all.first {
-            $0.name == center.displayName &&
-            $0.latitude == center.latitude &&
-            $0.longitude == center.longitude
-        }
-    }
-
     private static func legacyRadius(from persistedRadius: Int?) -> Int {
         guard let persistedRadius,
               (DiscoveryPreference.minRadius...DiscoveryPreference.maxRadius).contains(persistedRadius)
         else { return DiscoveryPreference.defaultRadius }
         return persistedRadius
-    }
-
-    private static func discoveryValue(
-        mode: DiscoveryMode,
-        center: DiscoveryCenter,
-        radiusMiles: Int,
-        updatedAt: Date
-    ) -> DiscoveryPreference {
-        DiscoveryPreference
-            .nearby(center: center, radiusMiles: radiusMiles, updatedAt: updatedAt)
-            .switching(to: mode, updatedAt: updatedAt)
     }
 }
 

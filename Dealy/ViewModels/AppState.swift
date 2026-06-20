@@ -59,8 +59,7 @@ final class AppState {
 
     func completeOnboarding(campus: Campus, radius: Int, interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
-        persisted.campusID = campus.id
-        persisted.radius = radius
+        persisted.discovery = .nearby(center: .legacyCampus(campus), radiusMiles: radius)
         persisted.interests = interests
         persist()
     }
@@ -72,18 +71,23 @@ final class AppState {
 
     // MARK: - Location & interests
 
-    var currentCampus: Campus { Campus.campus(withID: persisted.campusID) }
-    var radius: Int { persisted.radius }
+    var discovery: DiscoveryPreference { persisted.discovery }
+    var currentCampus: Campus { Self.compatibilityCampus(for: persisted.discovery.center) }
+    var radius: Int { persisted.discovery.radiusMiles }
     var interests: Set<DealCategory> { persisted.interests }
 
-    func selectCampus(_ campus: Campus, radius: Int? = nil) {
-        persisted.campusID = campus.id
-        if let radius { persisted.radius = radius }
+    func setDiscovery(_ preference: DiscoveryPreference) {
+        persisted.discovery = preference
         persist()
     }
 
+    func selectCampus(_ campus: Campus, radius: Int? = nil) {
+        let nextRadius = radius ?? persisted.discovery.radiusMiles
+        setDiscovery(.nearby(center: .legacyCampus(campus), radiusMiles: nextRadius))
+    }
+
     func setRadius(_ value: Int) {
-        persisted.radius = min(max(value, Campus.minRadius), Campus.maxRadius)
+        persisted.discovery = updatedDiscovery(radiusMiles: min(max(value, Campus.minRadius), Campus.maxRadius))
         persist()
     }
 
@@ -241,4 +245,40 @@ final class AppState {
     // MARK: - Persistence
 
     private func persist() { store.save(persisted) }
+
+    private func updatedDiscovery(
+        mode: DiscoveryMode? = nil,
+        center: DiscoveryCenter? = nil,
+        radiusMiles: Int? = nil,
+        updatedAt: Date = Date()
+    ) -> DiscoveryPreference {
+        let current = persisted.discovery
+        return DiscoveryPreference
+            .nearby(
+                center: center ?? current.center,
+                radiusMiles: radiusMiles ?? current.radiusMiles,
+                updatedAt: updatedAt
+            )
+            .switching(to: mode ?? current.mode, updatedAt: updatedAt)
+    }
+
+    private static func compatibilityCampus(for center: DiscoveryCenter) -> Campus {
+        if let exact = Campus.all.first(where: {
+            $0.name == center.displayName &&
+            $0.latitude == center.latitude &&
+            $0.longitude == center.longitude
+        }) {
+            return exact
+        }
+
+        return Campus.all.min(by: { lhs, rhs in
+            squaredDistance(from: center, to: lhs) < squaredDistance(from: center, to: rhs)
+        }) ?? .atlanta
+    }
+
+    private static func squaredDistance(from center: DiscoveryCenter, to campus: Campus) -> Double {
+        let lat = center.latitude - campus.latitude
+        let lon = center.longitude - campus.longitude
+        return (lat * lat) + (lon * lon)
+    }
 }

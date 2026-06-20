@@ -132,6 +132,27 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(reloaded.interests, [.tech, .food])
     }
 
+    func testSetDiscoveryPersistsManualCenterWithoutFallback() {
+        let store = InMemoryPreferencesStore()
+        let app = AppState(store: store,
+                           dealService: MockDealService(artificialDelay: .zero))
+        let expected = DiscoveryPreference.nearby(
+            center: DiscoveryCenter(
+                latitude: 34.0722,
+                longitude: -84.2941,
+                displayName: "Alpharetta, GA",
+                source: .manual
+            ),
+            radiusMiles: 18,
+            updatedAt: ref
+        )
+
+        app.setDiscovery(expected)
+
+        XCTAssertEqual(app.discovery, expected)
+        XCTAssertEqual(store.load().discovery, expected)
+    }
+
     func testResetDealHistoryKeepsSaved() async {
         let app = makeApp()
         await app.loadDeals()
@@ -149,9 +170,9 @@ final class AppStateTests: XCTestCase {
     func testRadiusClamping() {
         let app = makeApp()
         app.setRadius(100)
-        XCTAssertEqual(app.radius, Campus.maxRadius)
+        XCTAssertEqual(app.discovery.radiusMiles, Campus.maxRadius)
         app.setRadius(0)
-        XCTAssertEqual(app.radius, Campus.minRadius)
+        XCTAssertEqual(app.discovery.radiusMiles, Campus.minRadius)
     }
 
     func testSelectingCampusWithRadiusUpdatesBothLocationFilters() {
@@ -160,6 +181,7 @@ final class AppStateTests: XCTestCase {
         app.selectCampus(.georgiaTech, radius: 12)
 
         XCTAssertEqual(app.currentCampus, .georgiaTech)
-        XCTAssertEqual(app.radius, 12)
+        XCTAssertEqual(app.discovery.center, .legacyCampus(.georgiaTech))
+        XCTAssertEqual(app.discovery.radiusMiles, 12)
     }
 }
