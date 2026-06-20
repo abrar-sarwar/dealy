@@ -170,9 +170,9 @@ final class AppStateTests: XCTestCase {
     func testRadiusClamping() {
         let app = makeApp()
         app.setRadius(100)
-        XCTAssertEqual(app.discovery.radiusMiles, Campus.maxRadius)
+        XCTAssertEqual(app.discovery.radiusMiles, DiscoveryPreference.maxRadius)
         app.setRadius(0)
-        XCTAssertEqual(app.discovery.radiusMiles, Campus.minRadius)
+        XCTAssertEqual(app.discovery.radiusMiles, DiscoveryPreference.minRadius)
     }
 
     func testSelectingCampusWithRadiusUpdatesBothLocationFilters() {

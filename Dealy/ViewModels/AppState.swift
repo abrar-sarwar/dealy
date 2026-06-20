@@ -87,7 +87,9 @@ final class AppState {
     }
 
     func setRadius(_ value: Int) {
-        persisted.discovery = updatedDiscovery(radiusMiles: min(max(value, Campus.minRadius), Campus.maxRadius))
+        persisted.discovery = updatedDiscovery(
+            radiusMiles: min(max(value, DiscoveryPreference.minRadius), DiscoveryPreference.maxRadius)
+        )
         persist()
     }
 
