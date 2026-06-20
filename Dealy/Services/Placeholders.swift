@@ -4,17 +4,8 @@ import Foundation
 // These protocols mark where real backends plug in. They are intentionally
 // small and live here rather than being scattered through the UI.
 
-/// Resolves the user's location. The MVP uses an explicit campus/city choice
-/// instead of CoreLocation, so this is a no-op placeholder.
-///
-/// TODO: Replace with a CoreLocation-backed provider once permissions ship.
-protocol LocationProviding {
-    var usesDeviceLocation: Bool { get }
-}
-
-struct MockLocationProvider: LocationProviding {
-    let usesDeviceLocation = false
-}
+// Location resolution now lives in `LocationProviding.swift` (Core Location)
+// and manual place search in `PlaceResolving.swift` (Apple geocoder).
 
 /// Handles "Get Deal" — opening a merchant link, coupon, map, or affiliate page.
 ///

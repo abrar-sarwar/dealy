@@ -20,8 +20,7 @@ struct HomeView: View {
         .padding(.top, 4)
         .background(Theme.background.ignoresSafeArea())
         .onChange(of: app.loadState) { _, _ in rebuild() }
-        .onChange(of: app.currentCampus.id) { _, _ in rebuild() }
-        .onChange(of: app.radius) { _, _ in rebuild() }
+        .onChange(of: app.discovery) { _, _ in rebuild() }
         .onAppear { if viewModel.deck.isEmpty { rebuild() } }
         .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
         .sheet(item: $getDeal) { GetDealSheet(deal: $0) }
@@ -79,7 +78,7 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.primaryText)
-                .accessibilityLabel("Open location, range, and category filters")
+                .accessibilityLabel("Open location, category, and deal filters")
             }
         }
         .padding(.horizontal, 14)
@@ -113,17 +112,17 @@ struct HomeView: View {
         ZStack {
             ForEach(Array(viewModel.visibleCards.enumerated()), id: \.element.id) { idx, deal in
                 let isTop = idx == 0
+                // Show one card; the next sits directly behind it (no peeking
+                // stack) and is revealed only as the top card is swiped away.
                 SwipeCardView(deal: deal,
                               campus: app.currentCampus,
                               dragTranslation: isTop ? dragOffset : .zero)
-                    .scaleEffect(1 - CGFloat(idx) * 0.05)
-                    .offset(y: CGFloat(idx) * 26)
                     .offset(isTop ? dragOffset : .zero)
                     .rotationEffect(.degrees(isTop ? Double(dragOffset.width) / 18 : 0))
                     .zIndex(Double(viewModel.visibleCards.count - idx))
                     .allowsHitTesting(isTop && !isSwiping)
                     .gesture(dragGesture(for: deal))   // only the top card hit-tests
-                    .onTapGesture { if isTop { selectedDeal = deal } }
+                    .onTapGesture { if isTop { app.recordOpened(deal.id); selectedDeal = deal } }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(deal.title) at \(deal.merchant). \(saveSkipHint)")
             }
@@ -145,25 +144,53 @@ struct HomeView: View {
         "Swipe left to say bye, right to save, or up to get the deal."
     }
 
+    @ViewBuilder
     private var emptyState: some View {
         let reason = viewModel.emptyReason(using: app)
-        let message: String
         switch reason {
-        case .allSwiped: message = "You’ve been through every deal here. Refresh to start a new pass."
-        case .filteredOut: message = "No deals in this category right now. Try clearing the filter."
-        case .noneInArea: message = "No deals match your area and radius yet. Try a wider radius or a new location."
+        case .noneInArea where app.discovery.mode == .nearby:
+            // Offer explicit choices instead of silently widening the search.
+            EmptyStateView(
+                symbol: "location.magnifyingglass",
+                title: "No deals in range",
+                message: "Nothing nearby at \(app.discovery.radiusMiles) mi. Widen your range or browse online deals from anywhere.",
+                primaryTitle: "Browse online",
+                primaryAction: { browseOnline() },
+                secondaryTitle: app.discovery.radiusMiles < DiscoveryPreference.maxRadius ? "Widen range" : nil,
+                secondaryAction: app.discovery.radiusMiles < DiscoveryPreference.maxRadius ? { widenRange() } : nil
+            )
+        default:
+            EmptyStateView(
+                symbol: "sparkles",
+                title: "Fresh deals coming soon",
+                message: defaultEmptyMessage(for: reason),
+                primaryTitle: "Refresh deals",
+                primaryAction: { refresh() },
+                secondaryTitle: viewModel.selectedCategory != nil ? "Clear filter" : nil,
+                secondaryAction: viewModel.selectedCategory != nil ? {
+                    viewModel.selectedCategory = nil; rebuild()
+                } : nil
+            )
         }
-        return EmptyStateView(
-            symbol: "sparkles",
-            title: "Fresh deals coming soon",
-            message: message,
-            primaryTitle: "Refresh deals",
-            primaryAction: { refresh() },
-            secondaryTitle: viewModel.selectedCategory != nil ? "Clear filter" : nil,
-            secondaryAction: viewModel.selectedCategory != nil ? {
-                viewModel.selectedCategory = nil; rebuild()
-            } : nil
-        )
+    }
+
+    private func defaultEmptyMessage(for reason: HomeFeedViewModel.EmptyReason) -> String {
+        switch reason {
+        case .allSwiped: return "You’ve been through every deal here. Refresh to start a new pass."
+        case .filteredOut: return "No deals in this category right now. Try clearing the filter."
+        case .noneInArea: return "No online deals to show right now. Refresh to try again."
+        }
+    }
+
+    private func browseOnline() {
+        Task { await app.applyDiscovery(app.discovery.switching(to: .anywhere)) }
+    }
+
+    private func widenRange() {
+        let widened = min(app.discovery.radiusMiles * 2, DiscoveryPreference.maxRadius)
+        Task {
+            await app.applyDiscovery(.nearby(center: app.discovery.center, radiusMiles: widened))
+        }
     }
 
     // MARK: Gesture & actions
@@ -194,6 +221,7 @@ struct HomeView: View {
 
     private func openGetDeal(_ deal: Deal) {
         Haptics.impact(.medium)
+        app.recordRedemptionClicked(deal.id)
         resetCard()
         getDeal = deal
     }

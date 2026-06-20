@@ -28,13 +28,3 @@ enum APIConfig {
 
     static var baseURL: URL { environment.baseURL }
 }
-
-/// Geospatial query for the nearby deals feed.
-struct DealQuery: Sendable, Equatable {
-    let latitude: Double
-    let longitude: Double
-    let radiusMiles: Int
-
-    /// Broad metro-Atlanta default used until the app passes the user's campus/location.
-    static let metroAtlanta = DealQuery(latitude: 33.749, longitude: -84.388, radiusMiles: 50)
-}

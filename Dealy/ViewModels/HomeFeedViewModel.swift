@@ -11,10 +11,12 @@ final class HomeFeedViewModel {
     private(set) var deck: [Deal] = []
 
     /// Recompute the deck from current app state, excluding already-swiped deals.
+    /// The deal service already returns discovery-eligible inventory, so we do
+    /// NOT re-apply location filtering here — only active/category/advanced/unseen.
     func rebuild(using app: AppState) {
         let active = DealFilter.active(app.allDeals)
-        let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
-        let categorized = DealFilter.byCategory(located, category: selectedCategory)
+        let scoped = filters.includeOnline ? active : active.filter { !$0.isOnline }
+        let categorized = DealFilter.byCategory(scoped, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)
         let unseen = refined.filter { !app.swipedDealIDs.contains($0.id) }
         let recommended = DealRanker.rank(unseen,
@@ -26,8 +28,9 @@ final class HomeFeedViewModel {
 
     var topDeal: Deal? { deck.first }
 
-    /// Cards visible in the stack (top first).
-    var visibleCards: [Deal] { Array(deck.prefix(3)) }
+    /// Cards in play: the visible top card plus the next one staged directly
+    /// behind it (revealed only as the top card leaves).
+    var visibleCards: [Deal] { Array(deck.prefix(2)) }
 
     /// Remove the top card after it has been committed to AppState.
     func popTop() {
@@ -43,8 +46,8 @@ final class HomeFeedViewModel {
     /// Whether the deck is empty because filters hid everything vs. fully swiped.
     func emptyReason(using app: AppState) -> EmptyReason {
         let active = DealFilter.active(app.allDeals)
-        let located = DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
-        let categorized = DealFilter.byCategory(located, category: selectedCategory)
+        let scoped = filters.includeOnline ? active : active.filter { !$0.isOnline }
+        let categorized = DealFilter.byCategory(scoped, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)
         if refined.isEmpty {
             return selectedCategory == nil && !filters.isActive ? .noneInArea : .filteredOut

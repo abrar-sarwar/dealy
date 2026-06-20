@@ -1,12 +1,18 @@
 import SwiftUI
 
 struct OnboardingConfirmView: View {
-    let campus: Campus
-    let radius: Int
+    let discovery: DiscoveryPreference
     let interests: Set<DealCategory>
     var onFinish: () -> Void
 
     @State private var appear = false
+
+    private var locationDetail: String {
+        switch discovery.mode {
+        case .nearby: return "Within \(discovery.radiusMiles) miles"
+        case .anywhere: return "Online deals anywhere"
+        }
+    }
 
     private var interestList: [DealCategory] {
         DealCategory.allCases.filter { interests.contains($0) }
@@ -37,8 +43,8 @@ struct OnboardingConfirmView: View {
             DealyCard {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     summaryRow(symbol: "mappin.circle.fill",
-                               title: campus.name,
-                               detail: "\(campus.cityContext) · \(radius) mi radius")
+                               title: discovery.center.displayName,
+                               detail: locationDetail)
                     Divider()
                     HStack(alignment: .top, spacing: Spacing.sm) {
                         Image(systemName: "heart.fill")

@@ -7,6 +7,11 @@ import CoreLocation
 /// TODO: Replace synthetic scatter with real merchant coordinates from the backend.
 enum DealGeo {
     static func coordinate(for deal: Deal, around campus: Campus) -> CLLocationCoordinate2D {
+        coordinate(for: deal, around: CLLocationCoordinate2D(latitude: campus.latitude,
+                                                             longitude: campus.longitude))
+    }
+
+    static func coordinate(for deal: Deal, around center: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
         if let lat = deal.latitude, let lon = deal.longitude {
             return CLLocationCoordinate2D(latitude: lat, longitude: lon)
         }
@@ -14,10 +19,10 @@ enum DealGeo {
         let angle = Double(deal.visualSeed) * 2.399963229728653
         let miles = max(deal.distanceMiles, 0.15)
         let latDelta = miles / 69.0
-        let lonDelta = miles / (69.0 * max(cos(campus.latitude * .pi / 180), 0.01))
+        let lonDelta = miles / (69.0 * max(cos(center.latitude * .pi / 180), 0.01))
         return CLLocationCoordinate2D(
-            latitude: campus.latitude + latDelta * sin(angle),
-            longitude: campus.longitude + lonDelta * cos(angle)
+            latitude: center.latitude + latDelta * sin(angle),
+            longitude: center.longitude + lonDelta * cos(angle)
         )
     }
 }

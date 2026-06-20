@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// Search-radius slider (1–25 mi) with a clear current-value readout.
+/// Search-radius slider (1–100 mi) with a clear current-value readout.
 struct RadiusControl: View {
     @Binding var radius: Int
+
+    private static let minRadius = DiscoveryPreference.minRadius
+    private static let maxRadius = DiscoveryPreference.maxRadius
 
     private var radiusBinding: Binding<Double> {
         Binding(get: { Double(radius) },
@@ -23,13 +26,13 @@ struct RadiusControl: View {
                     .animation(.snappy, value: radius)
             }
             Slider(value: radiusBinding,
-                   in: Double(Campus.minRadius)...Double(Campus.maxRadius),
+                   in: Double(Self.minRadius)...Double(Self.maxRadius),
                    step: 1)
                 .tint(Theme.primary)
             HStack {
-                Text("\(Campus.minRadius) mi").font(.caption2).foregroundStyle(Theme.faintText)
+                Text("\(Self.minRadius) mi").font(.caption2).foregroundStyle(Theme.faintText)
                 Spacer()
-                Text("\(Campus.maxRadius) mi").font(.caption2).foregroundStyle(Theme.faintText)
+                Text("\(Self.maxRadius) mi").font(.caption2).foregroundStyle(Theme.faintText)
             }
         }
         .accessibilityElement(children: .combine)
@@ -37,8 +40,8 @@ struct RadiusControl: View {
         .accessibilityValue("\(radius) miles")
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment: radius = min(radius + 1, Campus.maxRadius)
-            case .decrement: radius = max(radius - 1, Campus.minRadius)
+            case .increment: radius = min(radius + 1, Self.maxRadius)
+            case .decrement: radius = max(radius - 1, Self.minRadius)
             default: break
             }
         }

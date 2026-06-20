@@ -57,6 +57,7 @@ struct DealFeedFilters: Equatable {
 
     var minPrice: Double = allowedPriceRange.lowerBound
     var maxPrice: Double = allowedPriceRange.upperBound
+    var includeOnline = true
     var onlineOnly = false
     var endingSoonOnly = false
     var strongDiscountOnly = false
@@ -67,7 +68,8 @@ struct DealFeedFilters: Equatable {
     }
 
     var isActive: Bool {
-        hasCustomPrice || onlineOnly || endingSoonOnly || strongDiscountOnly || sort != .recommended
+        let toggles = onlineOnly || endingSoonOnly || strongDiscountOnly
+        return hasCustomPrice || !includeOnline || toggles || sort != .recommended
     }
 
     mutating func applyMaximum(_ maximum: Double) {

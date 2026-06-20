@@ -6,12 +6,12 @@ struct ExploreView: View {
     @State private var searchText = ""
     @State private var activeCategory: DealCategory?
     @State private var selectedDeal: Deal?
-    @State private var showMap = false
+    @State private var showLocation = false
 
-    /// Deals available in the current area (used for browsing & search).
+    /// Deals available for browsing & search. The service already returns
+    /// discovery-eligible inventory, so we only drop expired ones here.
     private var areaDeals: [Deal] {
-        let active = DealFilter.active(app.allDeals)
-        return DealFilter.byLocation(active, campus: app.currentCampus, radius: app.radius)
+        DealFilter.active(app.allDeals)
     }
 
     private var isSearching: Bool {
@@ -42,17 +42,9 @@ struct ExploreView: View {
             .navigationTitle("Explore")
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Search deals, stores, categories")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showMap = true } label: {
-                        Image(systemName: "map")
-                    }
-                    .accessibilityLabel("View deals on map")
-                }
-            }
             .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
-            .sheet(isPresented: $showMap) {
-                DealsMapView(deals: areaDeals, campus: app.currentCampus)
+            .sheet(isPresented: $showLocation) {
+                LocationSelectorView()
             }
         }
     }
@@ -120,7 +112,7 @@ struct ExploreView: View {
             } else {
                 LazyVStack(spacing: Spacing.sm) {
                     ForEach(results) { deal in
-                        DealRowCard(deal: deal) { selectedDeal = deal }
+                        DealRowCard(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
                     }
                 }
                 .padding(.horizontal, Spacing.lg)
@@ -144,7 +136,11 @@ struct ExploreView: View {
             if sections.isEmpty {
                 EmptyStateView(symbol: "map",
                                title: "Nothing here yet",
-                               message: "No deals match \(app.currentCampus.shortName) at this radius. Widen your radius from the Home location picker.")
+                               message: app.discovery.mode == .anywhere
+                                ? "No online deals to show right now. Check back soon."
+                                : "No deals match \(app.discovery.center.displayName) at \(app.discovery.radiusMiles) mi. Tap the location chip to widen your radius or browse Anywhere.",
+                               primaryTitle: "Change location",
+                               primaryAction: { showLocation = true })
                     .padding(.top, Spacing.xl)
             } else {
                 ForEach(sections) { section in
@@ -154,7 +150,7 @@ struct ExploreView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Spacing.sm) {
                                 ForEach(section.deals) { deal in
-                                    DealTile(deal: deal) { selectedDeal = deal }
+                                    DealTile(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
                                 }
                             }
                             .padding(.horizontal, Spacing.lg)

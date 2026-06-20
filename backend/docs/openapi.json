@@ -257,7 +257,7 @@
             "in": "query",
             "schema": {
               "minimum": 1,
-              "maximum": 50,
+              "maximum": 100,
               "default": 5,
               "type": "number"
             }
@@ -298,6 +298,42 @@
           }
         },
         "summary": "Published deals near a point, sorted by distance (cursor paginated)",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/online": {
+      "get": {
+        "operationId": "FeedsController_online_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Active online-only deals, newest first (cursor paginated)",
         "tags": [
           "feeds"
         ]

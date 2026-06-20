@@ -2,7 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public, CurrentUser } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
-import { NearbyFeedQuery } from '../deals/deal.dto';
+import { NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
 import { FeedsService } from './feeds.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { FeedPageQuery } from '../recommendations/recommendations.dto';
@@ -21,6 +21,13 @@ export class FeedsController {
   @ApiOperation({ summary: 'Published deals near a point, sorted by distance (cursor paginated)' })
   nearby(@Query() query: NearbyFeedQuery) {
     return this.feeds.nearby(query);
+  }
+
+  @Public()
+  @Get('online')
+  @ApiOperation({ summary: 'Active online-only deals, newest first (cursor paginated)' })
+  online(@Query() query: OnlineFeedQuery) {
+    return this.feeds.online(query);
   }
 
   @ApiBearerAuth('supabase')

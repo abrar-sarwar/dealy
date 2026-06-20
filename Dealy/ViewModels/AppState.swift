@@ -8,6 +8,29 @@ enum LoadState: Equatable {
     case failed(String)
 }
 
+/// Explicit, named interaction signals captured at real user-action boundaries.
+/// Deliberately NOT an AI/ranking hook — just a durable analytics seam a backend
+/// recommender (or "Ask Dealy") can consume later. No event is emitted for
+/// browsing/location changes.
+enum DealInteractionEvent: Equatable {
+    case impression(dealID: String)
+    case opened(dealID: String)
+    case swiped(dealID: String, direction: SwipeDirection)
+    case redemptionClicked(dealID: String)
+    case markedUsed(dealID: String)
+}
+
+/// Sink for interaction events. The shipping default is a no-op until
+/// authenticated backend event sync is enabled.
+protocol DealInteractionRecording {
+    func record(_ event: DealInteractionEvent)
+}
+
+/// Default no-op recorder. Swap for a backend-syncing implementation later.
+struct NoopInteractionRecorder: DealInteractionRecording {
+    func record(_ event: DealInteractionEvent) {}
+}
+
 /// The app's single composition root. Owns persisted user state, the deal
 /// catalog, and every mutation that must stay consistent across screens.
 /// Saved/watched state is keyed by deal id and never duplicated into deals.
@@ -17,6 +40,9 @@ final class AppState {
     // MARK: Dependencies (injected, replaceable)
     private let store: PreferenceStoring
     private let dealService: DealServicing
+    private let locationProvider: LocationProviding
+    private let placeResolver: PlaceResolving
+    private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
 
     // MARK: State
@@ -26,32 +52,83 @@ final class AppState {
     private(set) var loadState: LoadState = .idle
 
     private let maxSwipeHistory = 60
+    /// Monotonic load token: only the newest in-flight load may publish results.
+    private var loadGeneration = 0
 
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
-         redemptionHandler: RedemptionHandling = MockRedemptionHandler()) {
+         locationProvider: LocationProviding = MockLocationProvider(),
+         placeResolver: PlaceResolving = MockPlaceResolver(),
+         redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
+         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()) {
         self.store = store
         self.dealService = dealService
+        self.locationProvider = locationProvider
+        self.placeResolver = placeResolver
         self.redemptionHandler = redemptionHandler
+        self.interactionRecorder = interactionRecorder
         self.persisted = store.load()
     }
 
     // MARK: - Loading
 
+    /// Load the deck for `request` (defaults to the current discovery preference).
+    /// A stale response from an earlier request can never replace a newer one.
     @MainActor
-    func loadDeals() async {
+    func loadDeals(for request: DealFeedRequest? = nil) async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let activeRequest = request ?? discovery.feedRequest
         loadState = .loading
         do {
-            let deals = try await dealService.fetchDeals()
-            allDeals = deals
-            dealsByID = Dictionary(uniqueKeysWithValues: deals.map { ($0.id, $0) })
+            let page = try await dealService.fetchDeals(for: activeRequest)
+            guard generation == loadGeneration else { return }
+            allDeals = page.items
+            dealsByID = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
             loadState = .loaded
+        } catch is CancellationError {
+            return
         } catch {
+            guard generation == loadGeneration else { return }
             loadState = .failed(error.localizedDescription)
         }
     }
 
     func deal(id: String) -> Deal? { dealsByID[id] }
+
+    // MARK: - Discovery (atomic updates)
+
+    /// Persist a new discovery preference and reload the deck for it atomically.
+    @MainActor
+    func applyDiscovery(_ preference: DiscoveryPreference) async {
+        persisted.discovery = preference
+        persist()
+        await loadDeals(for: preference.feedRequest)
+    }
+
+    /// Resolve the device's current location (When-In-Use) and switch Nearby to
+    /// it, preserving the current radius. Throws a typed `LocationProviderError`.
+    @MainActor
+    func refreshFromDeviceLocation() async throws {
+        let center = try await locationProvider.currentCenter()
+        await applyDiscovery(.nearby(center: center, radiusMiles: discovery.radiusMiles))
+    }
+
+    /// City/ZIP search candidates from the place resolver (no global mutation).
+    func resolvePlaces(_ query: String) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolve(query)
+    }
+
+    /// Resolve the device's current center WITHOUT applying it, for editors that
+    /// stage a draft before committing. Throws a typed `LocationProviderError`.
+    @MainActor
+    func resolveDeviceCenter() async throws -> DiscoveryCenter {
+        try await locationProvider.currentCenter()
+    }
+
+    /// Current location-permission state (for showing share/Settings prompts).
+    @MainActor
+    var locationAuthorization: LocationAuthorization { locationProvider.authorization }
 
     // MARK: - Onboarding
 
@@ -59,8 +136,16 @@ final class AppState {
 
     func completeOnboarding(campus: Campus, radius: Int, interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
-        persisted.campusID = campus.id
-        persisted.radius = radius
+        persisted.discovery = .nearby(center: .legacyCampus(campus), radiusMiles: radius)
+        persisted.interests = interests
+        persist()
+    }
+
+    /// Finish onboarding, persisting interests. The discovery preference has
+    /// already been selected/applied during the location step, so it is left
+    /// untouched here.
+    func completeOnboarding(interests: Set<DealCategory>) {
+        persisted.hasCompletedOnboarding = true
         persisted.interests = interests
         persist()
     }
@@ -72,18 +157,25 @@ final class AppState {
 
     // MARK: - Location & interests
 
-    var currentCampus: Campus { Campus.campus(withID: persisted.campusID) }
-    var radius: Int { persisted.radius }
+    var discovery: DiscoveryPreference { persisted.discovery }
+    var currentCampus: Campus { Self.compatibilityCampus(for: persisted.discovery.center) }
+    var radius: Int { persisted.discovery.radiusMiles }
     var interests: Set<DealCategory> { persisted.interests }
 
-    func selectCampus(_ campus: Campus, radius: Int? = nil) {
-        persisted.campusID = campus.id
-        if let radius { persisted.radius = radius }
+    func setDiscovery(_ preference: DiscoveryPreference) {
+        persisted.discovery = preference
         persist()
     }
 
+    func selectCampus(_ campus: Campus, radius: Int? = nil) {
+        let nextRadius = radius ?? persisted.discovery.radiusMiles
+        setDiscovery(.nearby(center: .legacyCampus(campus), radiusMiles: nextRadius))
+    }
+
     func setRadius(_ value: Int) {
-        persisted.radius = min(max(value, Campus.minRadius), Campus.maxRadius)
+        persisted.discovery = updatedDiscovery(
+            radiusMiles: min(max(value, DiscoveryPreference.minRadius), DiscoveryPreference.maxRadius)
+        )
         persist()
     }
 
@@ -152,6 +244,7 @@ final class AppState {
     /// Record a swipe. Right-swipes save the deal. Returns the action recorded.
     @discardableResult
     func recordSwipe(dealID: String, direction: SwipeDirection) -> SwipeAction {
+        interactionRecorder.record(.swiped(dealID: dealID, direction: direction))
         let action = SwipeAction(dealID: dealID, direction: direction, wasSavedBefore: isSaved(dealID))
         if direction == .right { save(dealID) }
         persisted.swipeHistory.append(action)
@@ -192,7 +285,25 @@ final class AppState {
         let event = SavingsEvent(dealID: deal.id, dealTitle: deal.title, amount: deal.savingsAmount)
         persisted.savingsEvents.append(event)
         persist()
+        interactionRecorder.record(.markedUsed(dealID: deal.id))
         return true
+    }
+
+    // MARK: - Interaction signals
+
+    /// Record that a deal's detail was opened.
+    func recordOpened(_ dealID: String) {
+        interactionRecorder.record(.opened(dealID: dealID))
+    }
+
+    /// Record that the user tapped "Get Deal" (redemption intent).
+    func recordRedemptionClicked(_ dealID: String) {
+        interactionRecorder.record(.redemptionClicked(dealID: dealID))
+    }
+
+    /// Record that a deal card was shown to the user.
+    func recordImpression(_ dealID: String) {
+        interactionRecorder.record(.impression(dealID: dealID))
     }
 
     func hasBeenUsed(_ id: String) -> Bool {
@@ -241,4 +352,40 @@ final class AppState {
     // MARK: - Persistence
 
     private func persist() { store.save(persisted) }
+
+    private func updatedDiscovery(
+        mode: DiscoveryMode? = nil,
+        center: DiscoveryCenter? = nil,
+        radiusMiles: Int? = nil,
+        updatedAt: Date = Date()
+    ) -> DiscoveryPreference {
+        let current = persisted.discovery
+        return DiscoveryPreference
+            .nearby(
+                center: center ?? current.center,
+                radiusMiles: radiusMiles ?? current.radiusMiles,
+                updatedAt: updatedAt
+            )
+            .switching(to: mode ?? current.mode, updatedAt: updatedAt)
+    }
+
+    private static func compatibilityCampus(for center: DiscoveryCenter) -> Campus {
+        if let exact = Campus.all.first(where: {
+            $0.name == center.displayName &&
+            $0.latitude == center.latitude &&
+            $0.longitude == center.longitude
+        }) {
+            return exact
+        }
+
+        return Campus.all.min(by: { lhs, rhs in
+            squaredDistance(from: center, to: lhs) < squaredDistance(from: center, to: rhs)
+        }) ?? .atlanta
+    }
+
+    private static func squaredDistance(from center: DiscoveryCenter, to campus: Campus) -> Double {
+        let lat = center.latitude - campus.latitude
+        let lon = center.longitude - campus.longitude
+        return (lat * lat) + (lon * lon)
+    }
 }

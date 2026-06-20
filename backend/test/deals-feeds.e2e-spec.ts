@@ -102,4 +102,34 @@ describe('Deals + Feeds (e2e, public)', () => {
     const body = res.json() as { items: Array<{ category: string }> };
     expect(body.items.every((d) => d.category === 'food')).toBe(true);
   });
+
+  it('accepts the full 100-mile nearby radius and rejects 101', async () => {
+    const accepted = await nearby(`lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=100`);
+    expect(accepted.statusCode).toBe(200);
+
+    const rejected = await nearby(`lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=101`);
+    expect(rejected.statusCode).toBe(400);
+  });
+
+  it('returns active online deals only from the online feed', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=50' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: DealItem[]; nextCursor: string | null };
+    expect(body.items.length).toBeGreaterThan(0);
+    expect(body.items.every((deal) => deal.isOnline)).toBe(true);
+    expect(body.items.every((deal) => deal.distanceMiles === null)).toBe(true);
+  });
+
+  it('paginates online deals without overlap', async () => {
+    const first = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=2' });
+    const p1 = first.json() as { items: DealItem[]; nextCursor: string | null };
+    expect(p1.nextCursor).toBeTruthy();
+    const second = await app.inject({
+      method: 'GET',
+      url: `/v1/feeds/online?limit=2&cursor=${encodeURIComponent(p1.nextCursor!)}`,
+    });
+    const p2 = second.json() as { items: DealItem[] };
+    const firstIds = new Set(p1.items.map((item) => item.id));
+    expect(p2.items.some((item) => firstIds.has(item.id))).toBe(false);
+  });
 });

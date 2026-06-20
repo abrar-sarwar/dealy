@@ -2,9 +2,9 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(AppState.self) private var app
-    @Environment(TabRouter.self) private var router
 
     @State private var showLocation = false
+    @State private var showDealyPlus = false
     @State private var showInterests = false
     @State private var showNotifications = false
     @State private var showHelp = false
@@ -17,6 +17,13 @@ struct ProfileView: View {
 
     private var interestList: [DealCategory] {
         DealCategory.allCases.filter { app.interests.contains($0) }
+    }
+
+    private var locationDetail: String {
+        switch app.discovery.mode {
+        case .anywhere: return "Online deals anywhere"
+        case .nearby: return "Within \(app.discovery.radiusMiles) mi radius"
+        }
     }
 
     var body: some View {
@@ -41,6 +48,7 @@ struct ProfileView: View {
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Profile")
             .sheet(isPresented: $showLocation) { LocationSelectorView() }
+            .sheet(isPresented: $showDealyPlus) { DealyPlusView() }
             .sheet(isPresented: $showInterests) { InterestsEditorSheet() }
             .sheet(isPresented: $showNotifications) { NotificationPreferencesSheet() }
             .sheet(isPresented: $showHelp) { HelpSheet() }
@@ -78,9 +86,10 @@ struct ProfileView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Student Saver").font(.title3.weight(.bold)).foregroundStyle(Theme.primaryText)
-                Label("\(app.currentCampus.name)", systemImage: "mappin.circle.fill")
+                Label(app.discovery.center.displayName,
+                      systemImage: app.discovery.mode == .anywhere ? "globe" : "mappin.circle.fill")
                     .font(.subheadline).foregroundStyle(Theme.mutedText)
-                Text("\(app.currentCampus.cityContext) · \(app.radius) mi radius")
+                Text(locationDetail)
                     .font(.caption).foregroundStyle(Theme.faintText)
             }
             Spacer()
@@ -141,7 +150,7 @@ struct ProfileView: View {
             .pickerStyle(.menu)
 
             Button { showLocation = true } label: {
-                settingRow("mappin.circle.fill", "Campus & radius", detail: app.currentCampus.shortName)
+                settingRow("mappin.circle.fill", "Location & radius", detail: app.discovery.center.displayName)
             }
             Button { showNotifications = true } label: {
                 settingRow("bell.fill", "Notifications", detail: app.notificationsEnabled ? "On" : "Off")
@@ -151,7 +160,7 @@ struct ProfileView: View {
 
     private var membershipSection: some View {
         Section("Membership") {
-            Button { router.selection = .plus } label: {
+            Button { showDealyPlus = true } label: {
                 settingRow("crown.fill", "Dealy+", detail: "Preview")
             }
         }

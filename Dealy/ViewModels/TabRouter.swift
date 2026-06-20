@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 enum AppTab: Int, Hashable {
-    case home, explore, saved, plus, profile
+    case home, explore, map, saved, profile
 }
 
 /// Lightweight router so screens can request a tab switch (e.g. Saved → Home)

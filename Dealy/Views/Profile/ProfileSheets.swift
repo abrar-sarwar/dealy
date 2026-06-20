@@ -80,7 +80,7 @@ struct HelpSheet: View {
     private let faqs: [(String, String)] = [
         ("How do I save a deal?", "Swipe right on a card, or tap the heart. Saved deals live in the Saved tab."),
         ("What is Deal Score?", "A transparent local estimate from discount strength, distance, urgency, and your interests."),
-        ("How is “nearby” decided?", "By the campus or city you pick and your search radius — no device location is used in this preview."),
+        ("How is “nearby” decided?", "By your current location or a city/ZIP you choose in Search, plus your 1–100 mile radius. Switch to Anywhere for online-only deals."),
         ("Are these real offers?", "No. Dealy’s MVP uses realistic mock deals to demonstrate the experience."),
         ("How is savings tracked?", "“Mark as used” on a deal adds its savings once. Potential savings reflect your saved deals.")
     ]
