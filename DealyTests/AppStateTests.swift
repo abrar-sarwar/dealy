@@ -184,4 +184,180 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(app.discovery.center, .legacyCampus(.georgiaTech))
         XCTAssertEqual(app.discovery.radiusMiles, 12)
     }
+
+    // MARK: - Discovery-aware loading (Task 3)
+
+    func testApplyingDiscoveryReloadsUsingNewPreference() async {
+        let service = RecordingDealService()
+        let app = AppState(
+            store: InMemoryPreferencesStore(),
+            dealService: service,
+            locationProvider: MockLocationProvider(),
+            placeResolver: MockPlaceResolver()
+        )
+        let preference = DiscoveryPreference.nearby(
+            center: DiscoveryCenter(
+                latitude: 34.0522,
+                longitude: -118.2437,
+                displayName: "Los Angeles, CA",
+                source: .manual
+            ),
+            radiusMiles: 25
+        )
+
+        await app.applyDiscovery(preference)
+
+        XCTAssertEqual(app.discovery, preference)
+        XCTAssertEqual(service.requests, [.nearby(preference)])
+    }
+
+    func testLateFeedResponseCannotReplaceNewerLocation() async {
+        let service = ControllableDealService()
+        let app = AppState(store: InMemoryPreferencesStore(), dealService: service)
+
+        // Start the older load and wait until it reaches the service (generation 1).
+        let first = Task { await app.applyDiscovery(.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)) }
+        await service.waitForRequest(centerName: Campus.atlanta.name)
+        // Start the newer load and wait until it reaches the service (generation 2).
+        let second = Task { await app.applyDiscovery(.nearby(center: .legacyCampus(.uga), radiusMiles: 10)) }
+        await service.waitForRequest(centerName: Campus.uga.name)
+
+        // The newer (generation 2) response arrives first and wins; the older
+        // (generation 1) response arrives late and must be discarded.
+        service.finishSecond(with: [Fixtures.athensDeal])
+        service.finishFirst(with: [Fixtures.atlantaDeal])
+
+        _ = await (first.value, second.value)
+        XCTAssertEqual(app.allDeals.map(\.id), [Fixtures.athensDeal.id])
+    }
+
+    func testRefreshFromDeviceLocationAppliesDeviceCenter() async throws {
+        let center = DiscoveryCenter(
+            latitude: 47.6062,
+            longitude: -122.3321,
+            displayName: "Current location",
+            source: .device
+        )
+        let app = AppState(
+            store: InMemoryPreferencesStore(),
+            dealService: RecordingDealService(),
+            locationProvider: MockLocationProvider(authorization: .authorizedWhenInUse, result: .success(center)),
+            placeResolver: MockPlaceResolver()
+        )
+
+        try await app.refreshFromDeviceLocation()
+
+        XCTAssertEqual(app.discovery.center, center)
+        XCTAssertEqual(app.discovery.mode, .nearby)
+    }
+
+    func testResolvePlacesForwardsToResolver() async throws {
+        let candidate = PlaceCandidate(displayName: "Chicago, IL", latitude: 41.8781, longitude: -87.6298)
+        let app = AppState(
+            store: InMemoryPreferencesStore(),
+            dealService: RecordingDealService(),
+            locationProvider: MockLocationProvider(),
+            placeResolver: MockPlaceResolver(result: .success([candidate]))
+        )
+
+        let results = try await app.resolvePlaces("60601")
+        XCTAssertEqual(results, [candidate])
+    }
+}
+
+// MARK: - Test doubles
+
+/// Records every feed request it receives; returns a fixed (empty) page.
+final class RecordingDealService: DealServicing {
+    private(set) var requests: [DealFeedRequest] = []
+    var page = DealPage(items: [], nextCursor: nil)
+
+    func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
+        requests.append(request)
+        return page
+    }
+}
+
+/// Completion is controlled by the test and keyed by the request's center, so it
+/// is independent of the order in which the (off-actor) fetches actually run.
+/// Results are buffered so finishing before or after the fetch both work.
+/// `finishFirst` targets the first applied discovery (Atlanta), `finishSecond`
+/// the second (UGA).
+final class ControllableDealService: DealServicing {
+    private let lock = NSLock()
+    private var continuations: [String: CheckedContinuation<DealPage, Error>] = [:]
+    private var ready: [String: DealPage] = [:]
+    private var registered: Set<String> = []
+    private var requestWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+
+    func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
+        let key = Self.key(for: request)
+        return try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            registered.insert(key)
+            let waiter = requestWaiters.removeValue(forKey: key)
+            if let page = ready.removeValue(forKey: key) {
+                lock.unlock()
+                waiter?.resume()
+                continuation.resume(returning: page)
+            } else {
+                continuations[key] = continuation
+                lock.unlock()
+                waiter?.resume()
+            }
+        }
+    }
+
+    /// Suspends until a fetch for `centerName` has been received by the service.
+    func waitForRequest(centerName: String) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if registered.contains(centerName) {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                requestWaiters[centerName] = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func finishFirst(with deals: [Deal]) { complete(Campus.atlanta.name, deals) }
+    func finishSecond(with deals: [Deal]) { complete(Campus.uga.name, deals) }
+
+    private func complete(_ key: String, _ deals: [Deal]) {
+        let page = DealPage(items: deals, nextCursor: nil)
+        lock.lock()
+        if let continuation = continuations.removeValue(forKey: key) {
+            lock.unlock()
+            continuation.resume(returning: page)
+        } else {
+            ready[key] = page
+            lock.unlock()
+        }
+    }
+
+    private static func key(for request: DealFeedRequest) -> String {
+        switch request {
+        case .nearby(let preference): return preference.center.displayName
+        case .anywhere: return "anywhere"
+        }
+    }
+}
+
+enum Fixtures {
+    static func deal(id: String, online: Bool) -> Deal {
+        Deal(
+            id: id, title: id, merchant: "Merchant", category: .food,
+            currentPrice: 5, originalPrice: 10, distanceMiles: online ? 0 : 1,
+            expirationDate: .distantFuture, dealScore: 80, isOnline: online,
+            shortDescription: "s", detailedDescription: "d", terms: "t",
+            locationTags: online ? ["Online"] : ["Atlanta"],
+            couponCode: nil, destinationURL: nil, latitude: nil, longitude: nil,
+            visualSeed: 0, publishedAt: .distantPast
+        )
+    }
+
+    static let atlantaDeal = deal(id: "atl-deal", online: false)
+    static let athensDeal = deal(id: "ath-deal", online: false)
 }

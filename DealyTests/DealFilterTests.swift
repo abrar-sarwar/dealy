@@ -41,6 +41,39 @@ final class DealFilterTests: XCTestCase {
         XCTAssertTrue(DealFilter.isInRange(onlineDeal, campus: .uga, radius: 1))
     }
 
+    func testByDiscoveryNearbyLeadsLocalAndCapsOnline() {
+        let local = (0..<7).map { deal("l\($0)", category: .food, distance: 2, tags: ["Atlanta"]) }
+        let online = (0..<5).map { deal("o\($0)", category: .tech, distance: 0, online: true, tags: ["Online"]) }
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+
+        let result = DealFilter.byDiscovery(local + online, preference: preference, reference: ref)
+
+        XCTAssertFalse(result.first?.isOnline ?? true)        // local leads
+        let onlineCount = result.filter(\.isOnline).count
+        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(result.count), 0.30)
+        XCTAssertEqual(onlineCount, 3)                         // floor(7 * 3/7) = 3
+    }
+
+    func testByDiscoveryNearbyExcludesOutOfRangeLocalDeals() {
+        let near = deal("near", category: .food, distance: 4, tags: ["Atlanta"])
+        let far = deal("far", category: .food, distance: 40, tags: ["Atlanta"])
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+
+        let result = DealFilter.byDiscovery([near, far], preference: preference, reference: ref)
+
+        XCTAssertEqual(result.map(\.id), ["near"])
+    }
+
+    func testByDiscoveryAnywhereReturnsOnlineOnly() {
+        let local = deal("local", category: .food, distance: 1, tags: ["Atlanta"])
+        let online = deal("online", category: .tech, distance: 0, online: true, tags: ["Online"])
+        let preference = DiscoveryPreference.default.switching(to: .anywhere)
+
+        let result = DealFilter.byDiscovery([local, online], preference: preference, reference: ref)
+
+        XCTAssertEqual(result.map(\.id), ["online"])
+    }
+
     func testRadiusWidensResults() {
         let d = deal("d", category: .food, distance: 5, tags: ["Athens"])
         let campus = Campus.uga

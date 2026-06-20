@@ -17,7 +17,7 @@ final class MockDealService: DealServicing {
         self.artificialDelay = artificialDelay
     }
 
-    func fetchDeals() async throws -> [Deal] {
+    func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
         if artificialDelay > .zero {
             try? await Task.sleep(for: artificialDelay)
         }
@@ -25,6 +25,16 @@ final class MockDealService: DealServicing {
             simulateFailureOnce = false
             throw DealServiceError.unavailable
         }
-        return MockDeals.dataset(reference: reference)
+
+        let all = MockDeals.dataset(reference: reference)
+        // Mirror the production contract: return already-eligible inventory so
+        // view models never re-apply location filtering.
+        let preference: DiscoveryPreference
+        switch request {
+        case .nearby(let p): preference = p
+        case .anywhere: preference = .default.switching(to: .anywhere)
+        }
+        let items = DealFilter.byDiscovery(all, preference: preference, reference: reference)
+        return DealPage(items: items, nextCursor: nil)
     }
 }

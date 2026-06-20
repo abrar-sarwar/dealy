@@ -36,6 +36,37 @@ enum DealFilter {
         deals.filter { $0.expirationDate > reference }
     }
 
+    /// Discovery-aware eligibility over already-loaded inventory.
+    ///
+    /// - Anywhere: active online-only deals.
+    /// - Nearby: active local deals within the radius lead, followed by online
+    ///   deals capped at 30% of the resulting page (see `blendNearby`).
+    static func byDiscovery(
+        _ deals: [Deal],
+        preference: DiscoveryPreference,
+        reference: Date = Date()
+    ) -> [Deal] {
+        let live = active(deals, reference: reference)
+        switch preference.mode {
+        case .anywhere:
+            return live.filter(\.isOnline)
+        case .nearby:
+            let local = live.filter { !$0.isOnline && $0.distanceMiles <= Double(preference.radiusMiles) }
+            let online = live.filter(\.isOnline)
+            return blendNearby(local: local, online: online)
+        }
+    }
+
+    /// Local deals first, then online deals capped so online is at most ~30% of
+    /// the blended page. With L local and O online used, O/(L+O) ≤ 0.30 means
+    /// O ≤ floor(3/7 · L). When there are no local deals, returns nothing online
+    /// so a Nearby feed never silently becomes online-only.
+    static func blendNearby(local: [Deal], online: [Deal]) -> [Deal] {
+        guard !online.isEmpty, !local.isEmpty else { return local }
+        let maxOnline = Int((Double(local.count) * 3.0 / 7.0).rounded(.down))
+        return local + online.prefix(maxOnline)
+    }
+
     static func advanced(
         _ deals: [Deal],
         filters: DealFeedFilters,

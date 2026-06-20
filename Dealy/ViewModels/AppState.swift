@@ -17,6 +17,8 @@ final class AppState {
     // MARK: Dependencies (injected, replaceable)
     private let store: PreferenceStoring
     private let dealService: DealServicing
+    private let locationProvider: LocationProviding
+    private let placeResolver: PlaceResolving
     let redemptionHandler: RedemptionHandling
 
     // MARK: State
@@ -26,32 +28,70 @@ final class AppState {
     private(set) var loadState: LoadState = .idle
 
     private let maxSwipeHistory = 60
+    /// Monotonic load token: only the newest in-flight load may publish results.
+    private var loadGeneration = 0
 
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
+         locationProvider: LocationProviding = MockLocationProvider(),
+         placeResolver: PlaceResolving = MockPlaceResolver(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler()) {
         self.store = store
         self.dealService = dealService
+        self.locationProvider = locationProvider
+        self.placeResolver = placeResolver
         self.redemptionHandler = redemptionHandler
         self.persisted = store.load()
     }
 
     // MARK: - Loading
 
+    /// Load the deck for `request` (defaults to the current discovery preference).
+    /// A stale response from an earlier request can never replace a newer one.
     @MainActor
-    func loadDeals() async {
+    func loadDeals(for request: DealFeedRequest? = nil) async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let activeRequest = request ?? discovery.feedRequest
         loadState = .loading
         do {
-            let deals = try await dealService.fetchDeals()
-            allDeals = deals
-            dealsByID = Dictionary(uniqueKeysWithValues: deals.map { ($0.id, $0) })
+            let page = try await dealService.fetchDeals(for: activeRequest)
+            guard generation == loadGeneration else { return }
+            allDeals = page.items
+            dealsByID = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
             loadState = .loaded
+        } catch is CancellationError {
+            return
         } catch {
+            guard generation == loadGeneration else { return }
             loadState = .failed(error.localizedDescription)
         }
     }
 
     func deal(id: String) -> Deal? { dealsByID[id] }
+
+    // MARK: - Discovery (atomic updates)
+
+    /// Persist a new discovery preference and reload the deck for it atomically.
+    @MainActor
+    func applyDiscovery(_ preference: DiscoveryPreference) async {
+        persisted.discovery = preference
+        persist()
+        await loadDeals(for: preference.feedRequest)
+    }
+
+    /// Resolve the device's current location (When-In-Use) and switch Nearby to
+    /// it, preserving the current radius. Throws a typed `LocationProviderError`.
+    @MainActor
+    func refreshFromDeviceLocation() async throws {
+        let center = try await locationProvider.currentCenter()
+        await applyDiscovery(.nearby(center: center, radiusMiles: discovery.radiusMiles))
+    }
+
+    /// City/ZIP search candidates from the place resolver (no global mutation).
+    func resolvePlaces(_ query: String) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolve(query)
+    }
 
     // MARK: - Onboarding
 

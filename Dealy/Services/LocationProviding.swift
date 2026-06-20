@@ -166,7 +166,8 @@ final class MockLocationProvider: LocationProviding {
     var authorization: LocationAuthorization
     private let result: Result<DiscoveryCenter, LocationProviderError>
 
-    init(
+    // nonisolated so it can be used as a default dependency value from any context.
+    nonisolated init(
         authorization: LocationAuthorization = .authorizedWhenInUse,
         result: Result<DiscoveryCenter, LocationProviderError> = .success(
             DiscoveryCenter(
