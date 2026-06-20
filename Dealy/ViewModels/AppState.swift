@@ -104,6 +104,15 @@ final class AppState {
         persist()
     }
 
+    /// Finish onboarding, persisting interests. The discovery preference has
+    /// already been selected/applied during the location step, so it is left
+    /// untouched here.
+    func completeOnboarding(interests: Set<DealCategory>) {
+        persisted.hasCompletedOnboarding = true
+        persisted.interests = interests
+        persist()
+    }
+
     func resetOnboarding() {
         persisted.hasCompletedOnboarding = false
         persist()

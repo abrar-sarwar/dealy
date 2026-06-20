@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// First-run experience: 3 intro pages → campus pick → interests → confirm.
+/// First-run experience: 3 intro pages → location setup → interests → confirm.
 struct OnboardingFlow: View {
     var onFinished: () -> Void
     @Environment(AppState.self) private var app
@@ -10,8 +10,7 @@ struct OnboardingFlow: View {
     }
 
     @State private var step: Step = .intro1
-    @State private var selectedCampus: Campus = .georgiaState
-    @State private var radius: Int = Campus.georgiaState.defaultRadius
+    @State private var discovery = DiscoveryPreference.default
     @State private var interests: Set<DealCategory> = [.food, .tech, .studentSupplies]
 
     var body: some View {
@@ -35,7 +34,7 @@ struct OnboardingFlow: View {
             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
                                     removal: .move(edge: .leading).combined(with: .opacity)))
         case .location:
-            OnboardingLocationView(selectedCampus: $selectedCampus, radius: $radius) {
+            OnboardingLocationView(discovery: $discovery) {
                 goTo(.interests)
             }
         case .interests:
@@ -43,7 +42,7 @@ struct OnboardingFlow: View {
                 goTo(.confirm)
             }
         case .confirm:
-            OnboardingConfirmView(campus: selectedCampus, radius: radius, interests: interests) {
+            OnboardingConfirmView(discovery: discovery, interests: interests) {
                 finish()
             }
         }
@@ -70,8 +69,8 @@ struct OnboardingFlow: View {
     }
 
     private func finish() {
-        // Default radius for the chosen campus if the user never touched the slider.
-        app.completeOnboarding(campus: selectedCampus, radius: radius, interests: interests)
+        // Discovery was already selected and applied during the location step.
+        app.completeOnboarding(interests: interests)
         onFinished()
     }
 }
