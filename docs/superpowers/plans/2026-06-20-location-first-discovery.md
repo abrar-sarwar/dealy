@@ -14,6 +14,8 @@
 - Request only `When In Use` location authorization; never request background location.
 - Persist one active discovery center, not location history.
 - Default radius is 10 miles; valid nearby range is 1–100 miles.
+- Nearby targets a 70% local / 30% online blend when both supplies are
+  available; local deals lead and online deals are clearly labeled.
 - `Anywhere` returns online deals only and does not use a large fake radius.
 - Search/Explore owns location and radius controls; Home remains a swipe-focused deck.
 - Search changes apply atomically and refresh Home immediately.
@@ -469,6 +471,15 @@ func testLateFeedResponseCannotReplaceNewerLocation() async {
     XCTAssertEqual(app.allDeals.map(\.id), [Fixtures.athensDeal.id])
 }
 
+func testNearbyMockFeedLeadsWithLocalAndCapsOnlineShare() async throws {
+    let service = MockDealService(reference: reference, artificialDelay: .zero)
+    let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 25)
+    let page = try await service.fetchDeals(for: .nearby(preference))
+    XCTAssertFalse(page.items.first?.isOnline ?? true)
+    let onlineCount = page.items.filter(\.isOnline).count
+    XCTAssertLessThanOrEqual(Double(onlineCount) / Double(page.items.count), 0.30)
+}
+
 func testAnywhereMockFeedContainsOnlyOnlineDeals() async throws {
     let service = MockDealService(reference: reference, artificialDelay: .zero)
     let page = try await service.fetchDeals(for: .anywhere)
@@ -517,18 +528,26 @@ protocol DealServicing: AnyObject {
 
 - [ ] **Step 4: Implement remote and mock routing**
 
-`RemoteDealService` must route:
+`RemoteDealService` must route Anywhere directly to `/v1/feeds/online`. For
+Nearby it fetches `/v1/feeds/nearby` and `/v1/feeds/online` concurrently, then
+combines them with local deals first and an online cap of 30%:
 
 ```swift
 switch request {
 case .nearby(let preference):
-    path = "/v1/feeds/nearby"
-    query = [
+    let nearbyQuery = [
         .init(name: "lat", value: String(preference.center.latitude)),
         .init(name: "lng", value: String(preference.center.longitude)),
         .init(name: "radiusMiles", value: String(preference.radiusMiles)),
         .init(name: "limit", value: "50"),
     ]
+    async let nearby = client.get("/v1/feeds/nearby", query: nearbyQuery, as: DealPageDTO.self)
+    async let online = client.get(
+        "/v1/feeds/online",
+        query: [.init(name: "limit", value: "20")],
+        as: DealPageDTO.self
+    )
+    return blend(local: try await nearby, online: try await online)
 case .anywhere:
     path = "/v1/feeds/online"
     query = [.init(name: "limit", value: "50")]
@@ -540,8 +559,9 @@ Return `DealPage(items: dto.items.map(\.toDeal), nextCursor: dto.nextCursor)`.
 `MockDealService` must:
 
 - return active online-only deals for Anywhere;
-- return active local deals within radius for Nearby;
-- exclude online deals from Nearby so local mode is genuinely location-first;
+- return active local deals within radius for Nearby, followed by relevant
+  online deals capped at 30% of the returned page;
+- keep local deals ahead of online deals in Nearby;
 - compute mock eligibility using `DiscoveryPreference`, not campus tags in views.
 
 - [ ] **Step 5: Implement atomic AppState discovery changes**
@@ -1236,7 +1256,8 @@ git commit -m "feat: finish location-first discovery"
 - [ ] Default radius is 10; bounds are 1 and 100.
 - [ ] Search owns location controls and applies changes atomically.
 - [ ] Home refreshes immediately from the same global discovery preference.
-- [ ] Nearby excludes online and out-of-radius inventory.
+- [ ] Nearby physical deals stay in radius; local deals lead and online deals
+  are capped at 30% when both supplies are available.
 - [ ] Anywhere returns online-only inventory.
 - [ ] Stale requests cannot replace a newer location's feed.
 - [ ] Saved deals and swipe history survive migration and location changes.

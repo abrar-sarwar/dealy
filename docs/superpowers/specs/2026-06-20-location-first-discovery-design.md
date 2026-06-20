@@ -14,7 +14,8 @@ The first implementation must:
 
 1. Resolve a usable search location from device location or a city/ZIP fallback.
 2. Let the user choose a radius from 1–100 miles.
-3. Support an `Anywhere` mode that returns online deals only.
+3. Blend relevant online deals below nearby deals, while supporting an
+   `Anywhere` mode that returns online deals only.
 4. Apply location changes immediately to Search and the Home swipe deck.
 5. Fetch real nearby inventory from Dealy's backend using coordinates and radius.
 6. Record the interaction signals needed for later personalization and Ask Dealy.
@@ -55,6 +56,8 @@ The app does not request background location.
 Home remains focused on swiping:
 
 - The deck uses the active discovery center and radius.
+- Nearby deals lead the deck. Relevant online deals may fill lower positions,
+  targeting roughly 70% local and 30% online when both supplies are available.
 - Cards show approximate distance, such as `0.8 mi away`.
 - Home does not contain the full radius slider or interactive map.
 - If the deck has no matching local deals, show an explicit action to widen the
@@ -196,9 +199,10 @@ discovery-aware request:
 fetchDeals(for preference, cursor) -> DealPage
 ```
 
-`RemoteDealService` maps Nearby to `/feeds/nearby` and Anywhere to
-`/feeds/online`. `MockDealService` implements the same behavior for previews and
-offline tests.
+`RemoteDealService` fetches both `/feeds/nearby` and `/feeds/online` for Nearby,
+then blends results with local deals first and a maximum online share of 30%.
+Anywhere maps only to `/feeds/online`. `MockDealService` implements the same
+behavior for previews and offline tests.
 
 Feed refreshes caused by rapid location/radius changes must cancel or supersede
 older requests. A late response for an old location must never replace the
@@ -313,7 +317,8 @@ and suggests changing constraints; it never fabricates inventory.
 - A user who denies location can obtain the same experience by choosing a city
   or ZIP.
 - Search location changes immediately affect the Home swipe deck.
-- Nearby never returns deals beyond the selected radius.
+- Nearby physical deals never exceed the selected radius, and online deals are
+  clearly labeled and limited to the lower portion of the blended deck.
 - Anywhere returns online deals only.
 - The feature requires no paid third-party location API.
 - Existing saves and swipe history remain intact through migration.
