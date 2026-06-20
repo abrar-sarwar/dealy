@@ -44,11 +44,11 @@ export class NearbyFeedQuery {
   @IsLongitude()
   lng!: number;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 5 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 5 })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(100)
   radiusMiles?: number;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 20 })
@@ -67,4 +67,19 @@ export class NearbyFeedQuery {
   @IsOptional()
   @IsString()
   category?: string;
+}
+
+/** Query for the online-only deals feed (no geography; recency-paginated). */
+export class OnlineFeedQuery {
+  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Opaque pagination cursor' })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
 }

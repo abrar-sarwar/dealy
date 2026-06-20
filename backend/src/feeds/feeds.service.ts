@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { mapNearbyRow, type NearbyRow } from '../deals/deal.mapper';
-import type { DealPage, NearbyFeedQuery } from '../deals/deal.dto';
+import { mapNearbyRow, mapPrismaDeal, type NearbyRow } from '../deals/deal.mapper';
+import type { DealPage, NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
 
 const METERS_PER_MILE = 1609.344;
 
@@ -16,6 +16,26 @@ function decodeCursor(cursor: string): { distanceMeters: number; id: string } | 
     const distanceMeters = Number(d);
     if (!id || Number.isNaN(distanceMeters)) return null;
     return { distanceMeters, id };
+  } catch {
+    return null;
+  }
+}
+
+/** Online-feed cursor: `${createdAt ISO}:${uuid}`. The UUID has no colons, so
+ * the final colon is the separator (the ISO timestamp contains colons). */
+function encodeOnlineCursor(createdAt: Date, id: string): string {
+  return Buffer.from(`${createdAt.toISOString()}:${id}`).toString('base64url');
+}
+
+function decodeOnlineCursor(cursor: string): { createdAt: Date; id: string } | null {
+  try {
+    const raw = Buffer.from(cursor, 'base64url').toString('utf8');
+    const sep = raw.lastIndexOf(':');
+    if (sep < 0) return null;
+    const createdAt = new Date(raw.slice(0, sep));
+    const id = raw.slice(sep + 1);
+    if (!id || Number.isNaN(createdAt.getTime())) return null;
+    return { createdAt, id };
   } catch {
     return null;
   }
@@ -74,5 +94,43 @@ export class FeedsService {
     const nextCursor = hasMore && last ? encodeCursor(Number(last.distance_meters), last.id) : null;
 
     return { items: page.map(mapNearbyRow), nextCursor };
+  }
+
+  /**
+   * Active online-only published deals, newest first, cursor-paginated.
+   * Keyset pagination on (createdAt DESC, id DESC) for stable, overlap-free
+   * pages. Online deals have no geography, so distance is always null.
+   */
+  async online(q: OnlineFeedQuery): Promise<DealPage> {
+    const limit = q.limit ?? 20;
+    const cursor = q.cursor ? decodeOnlineCursor(q.cursor) : null;
+
+    const cursorFilter: Prisma.DealWhereInput = cursor
+      ? {
+          OR: [
+            { createdAt: { lt: cursor.createdAt } },
+            { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+          ],
+        }
+      : {};
+
+    const rows = await this.prisma.deal.findMany({
+      where: {
+        status: 'published',
+        isOnline: true,
+        expiresAt: { gt: new Date() },
+        ...cursorFilter,
+      },
+      include: { category: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page.at(-1);
+    const nextCursor = hasMore && last ? encodeOnlineCursor(last.createdAt, last.id) : null;
+
+    return { items: page.map((d) => mapPrismaDeal(d, null)), nextCursor };
   }
 }
