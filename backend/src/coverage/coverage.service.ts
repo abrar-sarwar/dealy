@@ -160,16 +160,24 @@ export class CoverageService {
     const [statusGroups, expiringSoon, totalActiveVerified, ingestRuns, verifyRuns, dedupeAgg] =
       await Promise.all([
         this.prisma.deal.groupBy({ by: ['verificationStatus'], _count: true }),
+        // Expiring soon: authoritative + published + verified + physical, within 48h.
         this.prisma.deal.count({
           where: {
             status: 'published',
+            sourceTrust: 'authoritative',
             verificationStatus: 'verified',
             isOnline: false,
             expiresAt: { gt: now, lt: in48h },
           },
         }),
+        // Total active verified: authoritative + published + verified + unexpired only.
         this.prisma.deal.count({
-          where: { status: 'published', verificationStatus: 'verified' },
+          where: {
+            status: 'published',
+            sourceTrust: 'authoritative',
+            verificationStatus: 'verified',
+            expiresAt: { gt: now },
+          },
         }),
         this.prisma.ingestionRun.findMany({
           orderBy: { startedAt: 'desc' },
@@ -209,7 +217,10 @@ export class CoverageService {
     return {
       thresholds: { minDeals: COVERAGE_MIN_DEALS, radiusMiles: COVERAGE_RADIUS_MILES },
       zones,
-      qualifiedZoneCount: zones.filter((z) => z.qualifies).length,
+      // A zone is launch-ready only when it is ENABLED and meets the threshold —
+      // identical semantics to the Nearby gate (coverageForPoint only ever
+      // considers enabled zones). A disabled zone with inventory is not "qualified".
+      qualifiedZoneCount: zones.filter((z) => z.enabled && z.qualifies).length,
       totalActiveVerified,
       expiringSoon,
       verificationStatusCounts,
