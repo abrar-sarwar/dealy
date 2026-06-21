@@ -138,15 +138,23 @@ final class StubURLProtocol: URLProtocol {
     /// When set, all responses use this HTTP status (for failure-path tests).
     static var failWithStatus: Int?
     private static var recordedPaths: [String] = []
+    private static var recordedAuth: [String: String?] = [:]
 
     static var paths: [String] {
         lock.lock(); defer { lock.unlock() }
         return recordedPaths
     }
 
+    /// The Authorization header seen for the most recent request to `path`.
+    static func authHeader(for path: String) -> String?? {
+        lock.lock(); defer { lock.unlock() }
+        return recordedAuth[path]
+    }
+
     static func reset() {
         lock.lock(); defer { lock.unlock() }
         recordedPaths = []
+        recordedAuth = [:]
         responder = nil
         failWithStatus = nil
     }
@@ -158,6 +166,7 @@ final class StubURLProtocol: URLProtocol {
         let path = request.url?.path ?? ""
         StubURLProtocol.lock.lock()
         StubURLProtocol.recordedPaths.append(path)
+        StubURLProtocol.recordedAuth[path] = request.value(forHTTPHeaderField: "Authorization")
         let responder = StubURLProtocol.responder
         StubURLProtocol.lock.unlock()
 

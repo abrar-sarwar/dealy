@@ -79,12 +79,78 @@ final class InteractionRecorderTests: XCTestCase {
         // No assertion needed beyond "we got here without throwing/hanging".
     }
 
-    private static func stubbedClient() -> APIClient {
+    // MARK: Authenticated delivery
+
+    func testRemoteCompositionAttachesBearerFromTokenProvider() async {
+        StubURLProtocol.reset()
+        let hit = expectation(description: "hit")
+        StubURLProtocol.responder = { _ in hit.fulfill(); return Data("{}".utf8) }
+        let provider = MutableTokenProvider("tok-1")
+        let (_, recorder) = RemoteComposition.make(
+            baseURL: URL(string: "https://stub.dealy.test")!,
+            auth: provider,
+            session: Self.stubSession()
+        )
+
+        recorder.record(.opened(dealID: "d"))
+
+        await fulfillment(of: [hit], timeout: 2)
+        XCTAssertEqual(StubURLProtocol.authHeader(for: "/v1/deals/d/opens"), "Bearer tok-1")
+    }
+
+    func testRefreshedTokenIsUsedOnLaterRequests() async {
+        let provider = MutableTokenProvider("tok-1")
+        let recorder = RemoteInteractionRecorder(client: Self.stubbedClient(auth: provider))
+
+        StubURLProtocol.reset()
+        var hit = expectation(description: "first")
+        StubURLProtocol.responder = { _ in hit.fulfill(); return Data("{}".utf8) }
+        recorder.record(.opened(dealID: "a"))
+        await fulfillment(of: [hit], timeout: 2)
+        XCTAssertEqual(StubURLProtocol.authHeader(for: "/v1/deals/a/opens"), "Bearer tok-1")
+
+        await provider.set("tok-2") // session refreshed
+        StubURLProtocol.reset()
+        hit = expectation(description: "second")
+        StubURLProtocol.responder = { _ in hit.fulfill(); return Data("{}".utf8) }
+        recorder.record(.opened(dealID: "b"))
+        await fulfillment(of: [hit], timeout: 2)
+        XCTAssertEqual(StubURLProtocol.authHeader(for: "/v1/deals/b/opens"), "Bearer tok-2")
+    }
+
+    func testSignedOutSendsNoAuthHeaderAndDoesNotBlock() async {
+        StubURLProtocol.reset()
+        let hit = expectation(description: "hit")
+        StubURLProtocol.responder = { _ in hit.fulfill(); return Data("{}".utf8) }
+        // No session → nil token.
+        let recorder = RemoteInteractionRecorder(client: Self.stubbedClient(auth: MutableTokenProvider(nil)))
+
+        recorder.record(.impression(dealID: "x"))
+
+        await fulfillment(of: [hit], timeout: 2)
+        // No Authorization header attached when signed out.
+        XCTAssertEqual(StubURLProtocol.authHeader(for: "/v1/deals/x/impressions"), .some(nil))
+    }
+
+    private static func stubSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
-        return APIClient(
+        return URLSession(configuration: config)
+    }
+
+    private static func stubbedClient(auth: AuthTokenProviding? = nil) -> APIClient {
+        APIClient(
             baseURL: URL(string: "https://stub.dealy.test")!,
-            session: URLSession(configuration: config)
+            session: stubSession(),
+            tokenProvider: { await auth?.currentAccessToken() }
         )
     }
+}
+
+/// Mutable, thread-safe token source for tests (models Supabase session refresh).
+actor MutableTokenProvider: AuthTokenProviding {
+    private var token: String?
+    init(_ token: String?) { self.token = token }
+    func set(_ token: String?) { self.token = token }
+    func currentAccessToken() async -> String? { token }
 }

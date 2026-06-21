@@ -13,11 +13,16 @@ struct DealyApp: App {
         let service: DealServicing
         let recorder: DealInteractionRecording
         if useRemote {
-            // Share one API client so the feed and interaction events use the same
-            // base URL + auth token provider.
-            let client = APIClient(baseURL: APIConfig.baseURL)
-            service = RemoteDealService(client: client)
-            recorder = RemoteInteractionRecorder(client: client)
+            // Feeds + interaction events share one authenticated client. The token
+            // provider is the single Supabase-session integration point; until that
+            // session layer exists it yields nil (public feeds work; authenticated
+            // events are best-effort). See NoSessionTokenProvider.
+            let composed = RemoteComposition.make(
+                baseURL: APIConfig.baseURL,
+                auth: NoSessionTokenProvider()
+            )
+            service = composed.service
+            recorder = composed.recorder
         } else {
             service = MockDealService()
             recorder = NoopInteractionRecorder()
