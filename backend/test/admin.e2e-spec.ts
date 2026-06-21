@@ -126,4 +126,30 @@ describe('Admin (e2e)', () => {
     });
     expect(audit).not.toBeNull();
   });
+
+  it('exposes the density-first coverage report (admin only)', async () => {
+    const forbidden = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/coverage',
+      headers: bare(await token(SUB_USER)),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/coverage',
+      headers: bare(await token(SUB_ADMIN)),
+    });
+    expect(res.statusCode).toBe(200);
+    const report = res.json();
+    // Same source of truth as feed gating: zones with qualified + enabled flags.
+    expect(report.thresholds).toEqual({ minDeals: 20, radiusMiles: 10 });
+    expect(Array.isArray(report.zones)).toBe(true);
+    expect(
+      report.zones.every(
+        (z: { qualifies: unknown; enabled: unknown }) =>
+          typeof z.qualifies === 'boolean' && typeof z.enabled === 'boolean',
+      ),
+    ).toBe(true);
+  });
 });

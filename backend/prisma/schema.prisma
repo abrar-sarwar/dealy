@@ -634,6 +634,26 @@ model School {
   @@map("schools")
 }
 
+/// Density-first rollout zones for the Atlanta pilot. A user qualifies for the
+/// Nearby pilot only when their location falls within an ENABLED zone that
+/// currently meets the coverage threshold (>=20 authoritative verified
+/// pilot-category physical deals within 10mi of the zone center). `enabled`
+/// defaults false — zones are turned on deliberately as they reach density.
+model CoverageZone {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  latitude    Float
+  longitude   Float
+  /// Geographic extent of the zone (miles from center) for point-in-zone checks.
+  radiusMiles Int      @default(10) @map("radius_miles")
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([enabled])
+  @@map("coverage_zones")
+}
+
 /// A campus/city anchor. lat/lng are the source for the PostGIS `geog` column
 /// added in Phase 3 (with a GiST index) for nearby queries.
 model Campus {

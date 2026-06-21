@@ -14,10 +14,33 @@ export const COVERAGE_RADIUS_MILES = 10;
 export interface ZoneCoverage {
   slug: string;
   name: string;
+  enabled: boolean;
   /** Active, verified, pilot-category, physical deals within the radius. */
   dealsWithin10mi: number;
   qualifies: boolean;
   categoryDistribution: Record<string, number>;
+}
+
+export type CoverageReason = 'qualified' | 'outside_coverage' | 'low_coverage';
+
+/** Machine-readable Nearby coverage decision for a user's coordinates. */
+export interface CoverageStatus {
+  qualified: boolean;
+  reason: CoverageReason;
+  zoneSlug: string | null;
+}
+
+const EARTH_RADIUS_MILES = 3958.7613;
+
+/** Great-circle distance in miles between two lat/lng points. */
+function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_MILES * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 export interface CoverageReport {
@@ -53,7 +76,7 @@ export class CoverageService {
    * never inflated (spec §5).
    */
   async zoneCoverage(
-    zone: { slug: string; name: string; latitude: number; longitude: number },
+    zone: { slug: string; name: string; latitude: number; longitude: number; enabled?: boolean },
     radiusMiles = COVERAGE_RADIUS_MILES,
   ): Promise<ZoneCoverage> {
     const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${zone.longitude}, ${zone.latitude}), 4326)::geography`;
@@ -83,27 +106,49 @@ export class CoverageService {
     return {
       slug: zone.slug,
       name: zone.name,
+      enabled: zone.enabled ?? false,
       dealsWithin10mi: total,
       qualifies: total >= COVERAGE_MIN_DEALS,
       categoryDistribution,
     };
   }
 
-  /** Full operational coverage report across candidate Atlanta zones. */
+  /**
+   * Machine-readable Nearby coverage decision for a user's coordinates — the
+   * SINGLE source of truth shared by feed gating and the operational report.
+   * - `outside_coverage`: not inside any enabled zone.
+   * - `low_coverage`: inside an enabled zone, but no containing zone meets the
+   *   >=20 authoritative-verified threshold yet.
+   * - `qualified`: inside an enabled zone that currently meets the threshold.
+   */
+  async coverageForPoint(lat: number, lng: number): Promise<CoverageStatus> {
+    const zones = await this.prisma.coverageZone.findMany({ where: { enabled: true } });
+    const containing = zones.filter(
+      (z) => haversineMiles(lat, lng, z.latitude, z.longitude) <= z.radiusMiles,
+    );
+    if (containing.length === 0) {
+      return { qualified: false, reason: 'outside_coverage', zoneSlug: null };
+    }
+    for (const z of containing) {
+      const cov = await this.zoneCoverage(z);
+      if (cov.qualifies) return { qualified: true, reason: 'qualified', zoneSlug: z.slug };
+    }
+    return { qualified: false, reason: 'low_coverage', zoneSlug: containing[0].slug };
+  }
+
+  /** Full operational coverage report across enabled rollout zones. */
   async report(): Promise<CoverageReport> {
-    // Candidate zones = Atlanta-tagged campus/city anchors, densest core first.
-    const campuses = await this.prisma.campus.findMany({
-      where: { locationTags: { has: 'atlanta' } },
-      orderBy: { name: 'asc' },
-    });
+    // Source of truth = the same CoverageZone rows used by feed gating.
+    const zoneRows = await this.prisma.coverageZone.findMany({ orderBy: { name: 'asc' } });
 
     const zones = await Promise.all(
-      campuses.map((c) =>
+      zoneRows.map((c) =>
         this.zoneCoverage({
           slug: c.slug,
           name: c.name,
           latitude: c.latitude,
           longitude: c.longitude,
+          enabled: c.enabled,
         }),
       ),
     );

@@ -55,9 +55,10 @@ describe('Actions (e2e)', () => {
 
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B] } } });
     await prisma.idempotencyKey.deleteMany({ where: { key: IDEM_KEY } });
-    // Feeds return only authoritative inventory now; seed our own to act on.
+    // Feeds return only authoritative inventory inside a qualified zone now; seed
+    // >=20 near GSU (inside the enabled 'atl-downtown' zone) so Nearby is served.
     await prisma.deal.deleteMany({ where: { source: 'e2e-actions' } });
-    await seedAuthoritativeNearby(prisma, { source: 'e2e-actions', count: 8 });
+    await seedAuthoritativeNearby(prisma, { source: 'e2e-actions', count: 24 });
 
     const feed = await app.inject({
       method: 'GET',

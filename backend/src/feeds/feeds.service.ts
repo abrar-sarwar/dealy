@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { mapNearbyRow, mapPrismaDeal, type NearbyRow } from '../deals/deal.mapper';
-import type { DealPage, NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
+import type { DealPage, NearbyDealPage, NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
+import { CoverageService } from '../coverage/coverage.service';
 
 const METERS_PER_MILE = 1609.344;
 
@@ -56,7 +57,10 @@ function decodeOnlineCursor(cursor: string): { createdAt: Date; id: string } | n
 
 @Injectable()
 export class FeedsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coverage: CoverageService,
+  ) {}
 
   /**
    * Nearby deals within radius, ranked by distance + freshness, cursor-paginated.
@@ -65,7 +69,15 @@ export class FeedsService {
    * the radius (GiST-indexed ST_DWithin + ST_Distance). Online-only deals are
    * never blended in (spec §6).
    */
-  async nearby(q: NearbyFeedQuery): Promise<DealPage> {
+  async nearby(q: NearbyFeedQuery): Promise<NearbyDealPage> {
+    // Density-first gate: serve Nearby inventory ONLY inside an enabled, qualified
+    // zone. Outside it, return an honest machine-readable low-coverage state (not
+    // a silent empty feed) so the client can offer Anywhere.
+    const coverage = await this.coverage.coverageForPoint(q.lat, q.lng);
+    if (!coverage.qualified) {
+      return { items: [], nextCursor: null, coverage };
+    }
+
     const limit = q.limit ?? 20;
     const radiusMeters = (q.radiusMiles ?? 10) * METERS_PER_MILE;
     const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
@@ -124,7 +136,7 @@ export class FeedsService {
     const last = page.at(-1);
     const nextCursor = hasMore && last ? encodeCursor(Number(last.sort_key), last.id) : null;
 
-    return { items: page.map(mapNearbyRow), nextCursor };
+    return { items: page.map(mapNearbyRow), nextCursor, coverage };
   }
 
   /**

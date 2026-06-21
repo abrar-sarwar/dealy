@@ -31,18 +31,38 @@ describe('Deals + Feeds (e2e, public)', () => {
     await app.getHttpAdapter().getInstance().ready();
     prisma = app.get(PrismaService);
     await prisma.deal.deleteMany({ where: { source: 'e2e-feeds' } });
-    // Authoritative, verified inventory the public feeds can return.
+    await prisma.coverageZone.deleteMany({ where: { slug: { startsWith: 'e2e-feeds-' } } });
+    // Density-first gate: Nearby is served only inside an enabled, qualified zone.
+    // GSU sits in the migration-seeded 'atl-downtown' zone; REMOTE gets its own.
+    // Seed >=20 authoritative deals at each so both zones qualify.
+    await prisma.coverageZone.create({
+      data: {
+        slug: 'e2e-feeds-remote',
+        name: 'Remote',
+        latitude: REMOTE.lat,
+        longitude: REMOTE.lng,
+        radiusMiles: 10,
+        enabled: true,
+      },
+    });
     await seedAuthoritativeNearby(prisma, {
       source: 'e2e-feeds',
-      count: 8,
+      count: 24,
       lat: GSU.lat,
       lng: GSU.lng,
+    });
+    await seedAuthoritativeNearby(prisma, {
+      source: 'e2e-feeds',
+      count: 24,
+      lat: REMOTE.lat,
+      lng: REMOTE.lng,
     });
     await seedAuthoritativeOnline(prisma, { source: 'e2e-feeds', count: 4 });
   });
 
   afterAll(async () => {
     await prisma.deal.deleteMany({ where: { source: 'e2e-feeds' } });
+    await prisma.coverageZone.deleteMany({ where: { slug: { startsWith: 'e2e-feeds-' } } });
     await app.close();
   });
 
@@ -214,9 +234,9 @@ describe('Deals + Feeds (e2e, public)', () => {
       longitude: REMOTE.lng,
     });
 
-    const body = (await nearby(`lat=${REMOTE.lat}&lng=${REMOTE.lng}&radiusMiles=10`)).json() as {
-      items: DealItem[];
-    };
+    const body = (
+      await nearby(`lat=${REMOTE.lat}&lng=${REMOTE.lng}&radiusMiles=10&limit=50`)
+    ).json() as { items: DealItem[] };
     const ids = new Set(body.items.map((d) => d.id));
     expect(ids.has(verifiedId)).toBe(true);
     expect(ids.has(pendingId)).toBe(false);
@@ -242,9 +262,9 @@ describe('Deals + Feeds (e2e, public)', () => {
       longitude: REMOTE.lng,
     });
 
-    const body = (await nearby(`lat=${REMOTE.lat}&lng=${REMOTE.lng}&radiusMiles=5`)).json() as {
-      items: DealItem[];
-    };
+    const body = (
+      await nearby(`lat=${REMOTE.lat}&lng=${REMOTE.lng}&radiusMiles=5&limit=50`)
+    ).json() as { items: DealItem[] };
     const order = body.items.map((d) => d.id);
     expect(order).toContain(freshFarther);
     expect(order).toContain(staleCloser);
@@ -255,5 +275,56 @@ describe('Deals + Feeds (e2e, public)', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=50' });
     const body = res.json() as { items: DealItem[] };
     expect(body.items.every((d) => d.verified === true)).toBe(true);
+  });
+
+  // ---- Density-first rollout gate (coverage contract) ----
+
+  it('a qualified zone reports coverage.qualified and serves deals', async () => {
+    const body = (await nearby(`lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=10`)).json() as {
+      items: DealItem[];
+      coverage: { qualified: boolean; reason: string };
+    };
+    expect(body.coverage.qualified).toBe(true);
+    expect(body.coverage.reason).toBe('qualified');
+    expect(body.items.length).toBeGreaterThan(0);
+  });
+
+  it('a point outside any enabled zone returns an honest outside_coverage state (no deals)', async () => {
+    const body = (await nearby(`lat=10&lng=10&radiusMiles=10`)).json() as {
+      items: DealItem[];
+      coverage: { qualified: boolean; reason: string };
+    };
+    expect(body.coverage.qualified).toBe(false);
+    expect(body.coverage.reason).toBe('outside_coverage');
+    expect(body.items).toEqual([]);
+  });
+
+  it('an enabled but under-dense zone returns low_coverage (no deals), not a silent empty feed', async () => {
+    // A fresh enabled zone with only a handful of authoritative deals (<20).
+    const ZL = { lat: 36.5, lng: -84.5 };
+    await prisma.coverageZone.create({
+      data: {
+        slug: 'e2e-feeds-lowcov',
+        name: 'Low Coverage',
+        latitude: ZL.lat,
+        longitude: ZL.lng,
+        radiusMiles: 10,
+        enabled: true,
+      },
+    });
+    await seedAuthoritativeNearby(prisma, {
+      source: 'e2e-feeds',
+      count: 5,
+      lat: ZL.lat,
+      lng: ZL.lng,
+    });
+
+    const body = (await nearby(`lat=${ZL.lat}&lng=${ZL.lng}&radiusMiles=10`)).json() as {
+      items: DealItem[];
+      coverage: { qualified: boolean; reason: string };
+    };
+    expect(body.coverage.qualified).toBe(false);
+    expect(body.coverage.reason).toBe('low_coverage');
+    expect(body.items).toEqual([]);
   });
 });

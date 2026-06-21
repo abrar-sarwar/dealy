@@ -39,6 +39,20 @@ export interface DealPage {
   nextCursor: string | null;
 }
 
+/** Machine-readable Nearby coverage status (density-first rollout). */
+export interface NearbyCoverage {
+  qualified: boolean;
+  reason: 'qualified' | 'outside_coverage' | 'low_coverage';
+  zoneSlug: string | null;
+}
+
+/** Nearby feed response: deals are returned ONLY inside an enabled qualified
+ * zone; otherwise `items` is empty and `coverage` explains why (never a silent
+ * empty feed). */
+export interface NearbyDealPage extends DealPage {
+  coverage: NearbyCoverage;
+}
+
 export class NearbyFeedQuery {
   @ApiProperty({ example: 33.7531 })
   @IsLatitude()
