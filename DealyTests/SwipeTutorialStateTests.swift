@@ -13,14 +13,4 @@ final class SwipeTutorialStateTests: XCTestCase {
 
         XCTAssertTrue(SwipeTutorialState.hasSeen(in: defaults))
     }
-
-    func testCompletingInteractiveOnboardingMarksHomeTutorialSeen() throws {
-        let suiteName = "SwipeTutorialStateTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        SwipeTutorialState.markSeenAfterInteractiveOnboarding(in: defaults)
-
-        XCTAssertTrue(SwipeTutorialState.hasSeen(in: defaults))
-    }
 }

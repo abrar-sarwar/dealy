@@ -2,16 +2,15 @@ import CoreGraphics
 import XCTest
 @testable import Dealy
 
-final class PracticeTutorialStateTests: XCTestCase {
-    func testOnboardingSequenceIsWelcomeInterestsPractice() {
-        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .interests, .practice])
+final class SwipeDemoStateTests: XCTestCase {
+    func testOnboardingSequenceIsWelcomeThenInterests() {
+        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .interests])
         XCTAssertEqual(OnboardingStep.welcome.next, .interests)
-        XCTAssertEqual(OnboardingStep.interests.next, .practice)
-        XCTAssertNil(OnboardingStep.practice.next)
+        XCTAssertNil(OnboardingStep.interests.next)
     }
 
     func testDemoPhasesAdvanceInTeachingOrderAndWrap() {
-        var state = PracticeDemoState()
+        var state = SwipeDemoState()
 
         XCTAssertEqual(state.phase, .details)
         state.advance()
@@ -19,13 +18,13 @@ final class PracticeTutorialStateTests: XCTestCase {
         state.advance()
         XCTAssertEqual(state.phase, .save)
         state.advance()
-        XCTAssertEqual(state.phase, .useNow)
+        XCTAssertEqual(state.phase, .use)
         state.advance()
         XCTAssertEqual(state.phase, .details)
     }
 
     func testInterruptionPausesAdvanceUntilResume() {
-        var state = PracticeDemoState()
+        var state = SwipeDemoState()
 
         state.interrupt()
         state.advance()
@@ -40,7 +39,7 @@ final class PracticeTutorialStateTests: XCTestCase {
     }
 
     func testResumeRewindsToFirstPhaseEvenAfterAdvancing() {
-        var state = PracticeDemoState(phase: .save)
+        var state = SwipeDemoState(phase: .save)
 
         state.interrupt()
         state.resumeFromBeginning()
@@ -51,36 +50,31 @@ final class PracticeTutorialStateTests: XCTestCase {
 
     func testDemoOffsetsMatchPhaseAndReduceMotionIsStationary() {
         XCTAssertEqual(
-            PracticeDemoState(phase: .pass).offset(reduceMotion: false),
+            SwipeDemoState(phase: .pass).offset(reduceMotion: false),
             CGSize(width: -42, height: 0)
         )
         XCTAssertEqual(
-            PracticeDemoState(phase: .save).offset(reduceMotion: false),
+            SwipeDemoState(phase: .save).offset(reduceMotion: false),
             CGSize(width: 42, height: 0)
         )
         XCTAssertEqual(
-            PracticeDemoState(phase: .useNow).offset(reduceMotion: false),
+            SwipeDemoState(phase: .use).offset(reduceMotion: false),
             CGSize(width: 0, height: -42)
         )
         XCTAssertEqual(
-            PracticeDemoState(phase: .details).offset(reduceMotion: false),
+            SwipeDemoState(phase: .details).offset(reduceMotion: false),
             .zero
         )
         XCTAssertEqual(
-            PracticeDemoState(phase: .pass).offset(reduceMotion: true),
+            SwipeDemoState(phase: .pass).offset(reduceMotion: true),
             .zero
         )
     }
 
-    func testPracticePreviewIsAlwaysSkippable() {
-        XCTAssertTrue(PracticeDemoPolicy.canContinue)
-    }
-
-    func testDemoPhaseProvidesPlainTextTeachingCopy() {
-        XCTAssertEqual(PracticeDemoPhase.details.label, "DETAILS")
-        XCTAssertEqual(PracticeDemoPhase.pass.label, "← PASS")
-        XCTAssertEqual(PracticeDemoPhase.save.label, "SAVE →")
-        XCTAssertEqual(PracticeDemoPhase.useNow.label, "↑ USE DEAL")
-        XCTAssertEqual(PracticeDemoPhase.details.instruction, "Tap for the full offer")
+    func testDemoLabelsAreSingleWords() {
+        XCTAssertEqual(SwipeDemoPhase.details.label, "DETAILS")
+        XCTAssertEqual(SwipeDemoPhase.pass.label, "PASS")
+        XCTAssertEqual(SwipeDemoPhase.save.label, "SAVE")
+        XCTAssertEqual(SwipeDemoPhase.use.label, "USE")
     }
 }

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// First-run experience: welcome → interests → hands-on practice.
-/// Device location prepares itself in the background; there is no location form.
+/// First-run experience: welcome → interests, then straight into Home where the
+/// live deck demonstrates the swipe itself. Device location prepares itself in
+/// the background; there is no location form and no separate practice step.
 struct OnboardingFlow: View {
     var onFinished: () -> Void
     @Environment(AppState.self) private var app
@@ -21,10 +22,7 @@ struct OnboardingFlow: View {
             OnboardingIntroView { advance() }
                 .transition(stepTransition)
         case .interests:
-            OnboardingInterestsView(interests: $interests) { advance() }
-                .transition(stepTransition)
-        case .practice:
-            OnboardingPracticeView { finish() }
+            OnboardingInterestsView(interests: $interests) { finish() }
                 .transition(stepTransition)
         }
     }
@@ -47,7 +45,8 @@ struct OnboardingFlow: View {
     }
 
     private func finish() {
-        SwipeTutorialState.markSeenAfterInteractiveOnboarding()
+        // Leave the Home swipe tutorial unseen on purpose: the live deck now
+        // teaches the swipe in place, interrupting the moment the user acts.
         app.completeOnboarding(interests: interests)
         onFinished()
     }

@@ -10,8 +10,4 @@ enum SwipeTutorialState {
     static func markSeen(in defaults: UserDefaults = .standard) {
         defaults.set(true, forKey: key)
     }
-
-    static func markSeenAfterInteractiveOnboarding(in defaults: UserDefaults = .standard) {
-        markSeen(in: defaults)
-    }
 }
