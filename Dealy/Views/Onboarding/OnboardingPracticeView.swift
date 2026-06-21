@@ -4,11 +4,13 @@ struct OnboardingPracticeView: View {
     var onFinish: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var tutorial = PracticeTutorialState()
+    @State private var demo = PracticeDemoState()
     @State private var dragOffset: CGSize = .zero
-    @State private var isAnimating = false
+    @State private var isAnimatingManualSwipe = false
     @State private var showDetails = false
     @State private var showUseNow = false
+    @State private var demoTask: Task<Void, Never>?
+    @State private var demoNudge: CGSize = .zero
 
     private static let practiceDeal = Deal(
         id: "practice-deal",
@@ -34,23 +36,22 @@ struct OnboardingPracticeView: View {
         verified: true
     )
 
+    private var cardOffset: CGSize {
+        demo.isInterrupted ? dragOffset : demoNudge
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             practiceStage
 
             VStack(spacing: Spacing.sm) {
-                Text(tutorial.isComplete
-                     ? "You’ve got it."
-                     : "\(tutorial.completedActions.count) of \(PracticeTutorialAction.allCases.count) moves learned")
+                Text("Watch the preview or try it yourself.")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(tutorial.isComplete ? Theme.save : Theme.mutedText)
-                    .contentTransition(.numericText())
+                    .foregroundStyle(Theme.mutedText)
 
                 Button("Start exploring", action: onFinish)
                     .buttonStyle(.primaryDealy)
-                    .disabled(!tutorial.isComplete)
-                    .opacity(tutorial.isComplete ? 1 : 0.42)
             }
             .padding(.horizontal, Spacing.lg)
             .padding(.bottom, Spacing.xl)
@@ -62,15 +63,20 @@ struct OnboardingPracticeView: View {
         .sheet(isPresented: $showUseNow) {
             PracticeUseNowView()
         }
+        .onAppear {
+            scheduleDemo()
+        }
+        .onDisappear {
+            demoTask?.cancel()
+        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text("TRY THE CARD")
-                .font(.dealyCondensedBlack(size: 40))
-                .tracking(-0.9)
+            Text("See how it works")
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .foregroundStyle(Theme.primaryText)
-            Text("Move it exactly like you’ll use Dealy. Each instruction disappears once you do it.")
+            Text("It’ll show you automatically. Touch the card anytime to take over.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.mutedText)
         }
@@ -82,28 +88,22 @@ struct OnboardingPracticeView: View {
 
     private var practiceStage: some View {
         GeometryReader { proxy in
-            let cardHeight = min(proxy.size.height - 62, 500)
+            let cardHeight = min(proxy.size.height - 76, 500)
 
             ZStack {
                 SwipeCardView(
                     deal: Self.practiceDeal,
                     campus: .atlanta,
-                    dragTranslation: dragOffset
+                    dragTranslation: cardOffset
                 )
                 .frame(height: max(cardHeight, 330))
                 .padding(.horizontal, 24)
-                .offset(dragOffset)
-                .rotationEffect(.degrees(Double(dragOffset.width) / 20))
-                .allowsHitTesting(!isAnimating)
-                .gesture(practiceDragGesture)
-                .onTapGesture {
-                    guard !isAnimating else { return }
-                    tutorial.complete(.viewDetails)
-                    Haptics.selection()
-                    showDetails = true
-                }
+                .offset(cardOffset)
+                .rotationEffect(.degrees(Double(cardOffset.width) / 22))
+                .allowsHitTesting(!isAnimatingManualSwipe)
+                .gesture(practiceGesture)
 
-                guideText
+                teachingLabel
                     .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,124 +111,153 @@ struct OnboardingPracticeView: View {
         .padding(.horizontal, Spacing.xs)
     }
 
-    private var guideText: some View {
-        ZStack {
-            if tutorial.remainingActions.contains(.pass) {
-                gestureLabel(
-                    eyebrow: "NOT FOR ME",
-                    title: "← PASS",
-                    color: Theme.skip,
-                    alignment: .leading
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .padding(.leading, 2)
-                .offset(y: -40)
-                .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
-
-            if tutorial.remainingActions.contains(.save) {
-                gestureLabel(
-                    eyebrow: "KEEP IT",
-                    title: "SAVE →",
-                    color: Theme.saveSoft,
-                    alignment: .trailing
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 2)
-                .offset(y: -40)
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
-            }
-
-            VStack(spacing: 5) {
-                if tutorial.remainingActions.contains(.useNow) {
-                    gestureLabel(
-                        eyebrow: "READY NOW",
-                        title: "↑ USE DEAL",
-                        color: Theme.bright,
-                        alignment: .center
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-
-                if tutorial.remainingActions.contains(.viewDetails) {
-                    Text("TAP THE CARD FOR DETAILS")
-                        .font(.caption.weight(.bold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.mutedText)
-                        .transition(.opacity)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .padding(.bottom, 2)
+    private var teachingLabel: some View {
+        VStack(spacing: 2) {
+            Text(demo.phase.label)
+                .font(.dealyCondensedBlack(size: 28))
+                .tracking(-0.4)
+                .minimumScaleFactor(0.8)
+            Text(demo.phase.instruction)
+                .font(.caption.weight(.semibold))
         }
-        .animation(.easeOut(duration: 0.22), value: tutorial)
+        .foregroundStyle(labelColor)
+        .shadow(color: .black.opacity(0.62), radius: 10, y: 3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: labelAlignment)
+        .padding(labelInsets)
+        .animation(.easeInOut(duration: 0.3), value: demo.phase)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(demo.phase.label). \(demo.phase.instruction)")
     }
 
-    private func gestureLabel(
-        eyebrow: String,
-        title: String,
-        color: Color,
-        alignment: HorizontalAlignment
-    ) -> some View {
-        VStack(alignment: alignment, spacing: 0) {
-            Text(eyebrow)
-                .font(.system(size: 8, weight: .bold))
-                .tracking(0.8)
-            Text(title)
-                .font(.dealyCondensedBlack(size: 22))
-                .tracking(-0.3)
+    private var labelColor: Color {
+        switch demo.phase {
+        case .details: .white
+        case .pass: Theme.skip
+        case .save: Theme.saveSoft
+        case .useNow: Theme.bright
         }
-        .foregroundStyle(color)
-        .shadow(color: .black.opacity(0.46), radius: 8, y: 2)
-        .accessibilityHidden(true)
     }
 
-    private var practiceDragGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
+    private var labelAlignment: Alignment {
+        switch demo.phase {
+        case .details, .useNow: .bottom
+        case .pass: .leading
+        case .save: .trailing
+        }
+    }
+
+    private var labelInsets: EdgeInsets {
+        switch demo.phase {
+        case .details, .useNow:
+            EdgeInsets(top: 0, leading: 24, bottom: 8, trailing: 24)
+        case .pass:
+            EdgeInsets(top: 0, leading: 2, bottom: 46, trailing: 0)
+        case .save:
+            EdgeInsets(top: 0, leading: 0, bottom: 46, trailing: 2)
+        }
+    }
+
+    private var practiceGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                guard !isAnimating else { return }
+                guard !isAnimatingManualSwipe else { return }
+                if !demo.isInterrupted {
+                    interruptDemo()
+                }
                 dragOffset = value.translation
             }
             .onEnded { value in
-                guard !isAnimating else { return }
+                guard !isAnimatingManualSwipe else { return }
+
+                if isTap(value.translation) {
+                    dragOffset = .zero
+                    Haptics.selection()
+                    showDetails = true
+                    scheduleDemo(after: .milliseconds(2500))
+                    return
+                }
+
                 let intent = DealSwipeGesture.intent(
                     translation: value.translation,
                     predictedEndTranslation: value.predictedEndTranslation
                 )
-                guard let action = PracticeTutorialAction(intent: intent) else {
-                    resetCard()
-                    return
-                }
-                completeSwipe(action)
+                handle(intent)
             }
     }
 
-    private func completeSwipe(_ action: PracticeTutorialAction) {
-        tutorial.complete(action)
-        Haptics.impact(action == .pass ? .light : .medium)
+    private func isTap(_ translation: CGSize) -> Bool {
+        abs(translation.width) < 8 && abs(translation.height) < 8
+    }
 
-        switch action {
-        case .pass:
+    private func handle(_ intent: DealSwipeIntent) {
+        switch intent {
+        case .bye:
+            Haptics.impact(.light)
             animateCardAway(x: -650)
         case .save:
+            Haptics.impact(.medium)
             animateCardAway(x: 650)
-        case .useNow:
+        case .getDeal:
+            Haptics.impact(.medium)
             resetCard()
             showUseNow = true
-        case .viewDetails:
-            break
+            scheduleDemo(after: .milliseconds(2500))
+        case .rest:
+            resetCard()
+            scheduleDemo(after: .milliseconds(2500))
+        }
+    }
+
+    private func interruptDemo() {
+        demoTask?.cancel()
+        demo.interrupt()
+    }
+
+    private func scheduleDemo(after delay: Duration = .zero) {
+        demoTask?.cancel()
+        demoTask = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+
+            dragOffset = .zero
+            demoNudge = .zero
+            demo.resumeFromBeginning()
+
+            // Each phase: show its instruction, nudge the card slightly toward the
+            // gesture, hold, then settle back to rest before advancing. Four phases
+            // at ~1.3s each loop in roughly five seconds. The card is never dismissed
+            // and no sheet opens automatically.
+            while !Task.isCancelled && !demo.isInterrupted {
+                let target = reduceMotion ? .zero : demo.offset(reduceMotion: reduceMotion)
+
+                withAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.4)) {
+                    demoNudge = target
+                }
+                try? await Task.sleep(for: .milliseconds(650))
+                guard !Task.isCancelled && !demo.isInterrupted else { return }
+
+                withAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.4)) {
+                    demoNudge = .zero
+                }
+                try? await Task.sleep(for: .milliseconds(650))
+                guard !Task.isCancelled && !demo.isInterrupted else { return }
+
+                demo.advance()
+            }
         }
     }
 
     private func animateCardAway(x: CGFloat) {
-        guard !isAnimating else { return }
-        isAnimating = true
+        guard !isAnimatingManualSwipe else { return }
+        isAnimatingManualSwipe = true
+
         let finish = {
             dragOffset = .zero
-            isAnimating = false
+            isAnimatingManualSwipe = false
+            scheduleDemo(after: .milliseconds(2500))
         }
 
-        if reduceMotion {
+        guard !reduceMotion else {
             finish()
             return
         }
@@ -259,7 +288,7 @@ private struct PracticeUseNowView: View {
                 .foregroundStyle(Theme.primary)
 
             Text("USE IT NOW")
-                .font(.dealyCondensedBlack(size: 42))
+                .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.primaryText)
 
             Text("On a real deal, swiping up takes you straight to the redemption step—merchant link, coupon, directions, or checkout.")
