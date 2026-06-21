@@ -9,8 +9,8 @@ struct OnboardingInterestsView: View {
     var body: some View {
         VStack(spacing: 0) {
             OnboardingHeader(
-                title: "What do you love?",
-                subtitle: "Pick at least three so we can tune your feed. You can always change these later."
+                title: "WHAT ARE YOU INTO?",
+                subtitle: "Choose a few starting points. Your swipes will keep shaping the feed."
             )
 
             ScrollView {
@@ -28,7 +28,7 @@ struct OnboardingInterestsView: View {
                     .contentTransition(.numericText())
                     .animation(.snappy, value: interests.count)
 
-                Button("Continue", action: onContinue)
+                Button("Practice the swipe", action: onContinue)
                     .buttonStyle(.primaryDealy)
             }
             .padding(.horizontal, Spacing.lg)

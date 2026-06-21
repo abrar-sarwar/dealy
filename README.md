@@ -39,7 +39,7 @@ inventory never qualifies a zone.
 ## What's inside
 
 - **Branded startup** transition (respects Reduce Motion) over a static launch screen.
-- **Onboarding**: 3 intro pages → enable current location (or choose Anywhere) + 1–100 mi radius → interests → confirmation.
+- **Onboarding**: modern welcome → interests → interactive practice card. Location is requested automatically after the welcome; denial continues in Anywhere. The practice card teaches pass, save, use-now, and tap-for-details before Home.
 - **Home swipe deck** (the hero): draggable cards with rotation, SAVE/SKIP stamps,
   velocity-aware completion, haptics, button-driven save/skip on the same path,
   **Undo**, category filters, ShareLink, watch, and rich empty states.

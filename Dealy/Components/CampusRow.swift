@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Selectable campus/city card used in onboarding and the location selector.
+/// Selectable campus/city card retained for legacy/reference location surfaces.
 struct CampusRow: View {
     let campus: Campus
     let isSelected: Bool

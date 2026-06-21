@@ -184,6 +184,14 @@ final class AppState {
 
     var hasCompletedOnboarding: Bool { persisted.hasCompletedOnboarding }
 
+    /// Prepare first-run discovery without presenting a dedicated location step.
+    /// Nearby is selected when a device fix succeeds; all failures continue
+    /// honestly in Anywhere so onboarding is never blocked.
+    @MainActor
+    func prepareDiscoveryForOnboarding() async {
+        _ = await enableNearbyOrFallbackToAnywhere()
+    }
+
     func completeOnboarding(campus: Campus, radius: Int, interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
         persisted.discovery = .nearby(center: .legacyCampus(campus), radiusMiles: radius)
@@ -191,9 +199,8 @@ final class AppState {
         persist()
     }
 
-    /// Finish onboarding, persisting interests. The discovery preference has
-    /// already been selected/applied during the location step, so it is left
-    /// untouched here.
+    /// Finish onboarding, persisting interests. Discovery was prepared
+    /// automatically during the first-run flow, so it is left untouched here.
     func completeOnboarding(interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
         persisted.interests = interests

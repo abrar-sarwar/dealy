@@ -349,6 +349,40 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Onboarding with device location
 
+    func testPrepareDiscoveryForOnboardingAutomaticallyUsesDeviceLocation() async {
+        let center = DiscoveryCenter(
+            latitude: 33.7756,
+            longitude: -84.3963,
+            displayName: "Current location",
+            source: .device
+        )
+        let app = makeApp(
+            locationProvider: MockLocationProvider(
+                authorization: .authorizedWhenInUse,
+                result: .success(center)
+            )
+        )
+
+        await app.prepareDiscoveryForOnboarding()
+
+        XCTAssertEqual(app.discovery.mode, .nearby)
+        XCTAssertEqual(app.discovery.center, center)
+        XCTAssertEqual(app.discovery.radiusMiles, 10)
+    }
+
+    func testPrepareDiscoveryForOnboardingFallsBackToAnywhere() async {
+        let app = makeApp(
+            locationProvider: MockLocationProvider(
+                authorization: .denied,
+                result: .failure(.denied)
+            )
+        )
+
+        await app.prepareDiscoveryForOnboarding()
+
+        XCTAssertEqual(app.discovery.mode, .anywhere)
+    }
+
     func testDeviceLocationCanCompleteOnboarding() async throws {
         let center = DiscoveryCenter(
             latitude: 47.6062,
