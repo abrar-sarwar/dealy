@@ -45,8 +45,9 @@ struct OnboardingFlow: View {
     }
 
     private func finish() {
-        // Leave the Home swipe tutorial unseen on purpose: the live deck now
-        // teaches the swipe in place, interrupting the moment the user acts.
+        // Re-arm the in-deck demo so the live Home deck always teaches the swipe
+        // right after onboarding; it interrupts the moment the user acts.
+        SwipeTutorialState.reset()
         app.completeOnboarding(interests: interests)
         onFinished()
     }
