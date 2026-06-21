@@ -7,8 +7,8 @@ struct OnboardingHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(title)
-                .font(.dealyCondensedBlack(size: 38))
-                .tracking(-0.8)
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .tracking(-1)
                 .foregroundStyle(Theme.primaryText)
             Text(subtitle)
                 .font(.subheadline)

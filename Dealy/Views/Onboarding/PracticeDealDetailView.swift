@@ -14,7 +14,7 @@ struct PracticeDealDetailView: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(deal.title)
-                            .font(.dealyCondensedBlack(size: 34))
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
                             .foregroundStyle(Theme.primaryText)
                         Text(deal.merchant)
                             .font(.headline)
@@ -56,7 +56,7 @@ struct PracticeDealDetailView: View {
     private func detailSection(_ title: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(title)
-                .font(.dealyCondensedBlack(size: 20))
+                .font(.headline.weight(.bold))
                 .foregroundStyle(Theme.primaryText)
             Text(body)
                 .font(.subheadline)

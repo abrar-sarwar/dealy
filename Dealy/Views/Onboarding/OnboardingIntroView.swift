@@ -5,6 +5,7 @@ struct OnboardingIntroView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appear = false
+    @State private var logoDrift: CGFloat = -8
 
     var body: some View {
         ZStack {
@@ -12,9 +13,11 @@ struct OnboardingIntroView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 brand
-                Spacer()
+                Spacer(minLength: Spacing.md)
+                dealyMark
+                Spacer(minLength: Spacing.lg)
                 hero
-                Spacer()
+                Spacer(minLength: Spacing.lg)
                 footer
             }
             .padding(.horizontal, Spacing.xl)
@@ -24,12 +27,18 @@ struct OnboardingIntroView: View {
         .background(Theme.background.ignoresSafeArea())
         .onAppear {
             guard !appear else { return }
+
             if reduceMotion {
                 appear = true
-            } else {
-                withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
-                    appear = true
-                }
+                logoDrift = 0
+                return
+            }
+
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.78)) {
+                appear = true
+            }
+            withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true)) {
+                logoDrift = 8
             }
         }
     }
@@ -37,77 +46,90 @@ struct OnboardingIntroView: View {
     private var ambientBackground: some View {
         ZStack {
             Circle()
-                .fill(Theme.primary.opacity(0.18))
-                .frame(width: 330, height: 330)
-                .blur(radius: 70)
-                .offset(x: 150, y: -260)
+                .fill(Theme.primary.opacity(0.14))
+                .frame(width: 360, height: 360)
+                .blur(radius: 86)
+                .offset(x: 170, y: -240)
 
             Circle()
-                .fill(Theme.bright.opacity(0.10))
-                .frame(width: 280, height: 280)
-                .blur(radius: 80)
-                .offset(x: -170, y: 320)
+                .fill(Theme.save.opacity(0.07))
+                .frame(width: 260, height: 260)
+                .blur(radius: 90)
+                .offset(x: -180, y: 340)
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 
     private var brand: some View {
-        HStack(spacing: Spacing.xs) {
-            Image("DealyMonochrome")
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 38, height: 32)
-            Text("DEALY")
-                .font(.dealyCondensedBlack(size: 22))
-                .tracking(0.8)
+        Text("dealy")
+            .font(.system(size: 22, weight: .black, design: .rounded))
+            .tracking(-0.5)
+            .foregroundStyle(Theme.primaryText)
+            .accessibilityLabel("Dealy")
+    }
+
+    private var dealyMark: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(Theme.separator.opacity(0.65), lineWidth: 1.5)
+                .frame(width: 202, height: 176)
+                .rotationEffect(.degrees(-8))
+                .offset(x: -24, y: 8)
+
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(Theme.surface.opacity(0.72))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .stroke(Theme.primary.opacity(0.18), lineWidth: 1)
+                }
+                .frame(width: 202, height: 176)
+                .rotationEffect(.degrees(7))
+                .offset(x: 25, y: 7)
+
+            RoundedRectangle(cornerRadius: 38, style: .continuous)
+                .fill(Theme.brandGradient)
+                .frame(width: 218, height: 188)
+                .overlay {
+                    Image("DealyMonochrome")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(.white)
+                        .frame(width: 126, height: 108)
+                }
+                .dealyShadow(.floating)
+                .offset(x: logoDrift)
         }
-        .foregroundStyle(Theme.primaryText)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Dealy")
+        .frame(maxWidth: .infinity)
+        .scaleEffect(appear ? 1 : 0.72)
+        .rotationEffect(.degrees(appear ? 0 : -7))
+        .opacity(appear ? 1 : 0)
+        .accessibilityHidden(true)
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            Text("GOOD DEALS.\nNO DIGGING.")
-                .font(.dealyCondensedBlack(size: 58))
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Deals worth\nswiping for.")
+                .font(.system(size: 52, weight: .black, design: .rounded))
                 .tracking(-1.8)
                 .minimumScaleFactor(0.72)
                 .foregroundStyle(Theme.primaryText)
                 .opacity(appear ? 1 : 0)
-                .offset(y: appear ? 0 : 22)
+                .offset(y: appear ? 0 : 18)
 
-            Text("Swipe through verified offers near you. Keep what fits, pass what doesn’t, and use the good ones right away.")
+            Text("See what’s nearby, keep what fits, and use the good ones right away.")
                 .font(.title3.weight(.medium))
                 .foregroundStyle(Theme.mutedText)
                 .lineSpacing(4)
                 .opacity(appear ? 1 : 0)
-                .offset(y: appear ? 0 : 14)
-
-            HStack(spacing: Spacing.lg) {
-                feature("hand.draw", "Swipe")
-                feature("bookmark", "Save")
-                feature("arrow.up", "Use now")
-            }
-            .opacity(appear ? 1 : 0)
-        }
-    }
-
-    private func feature(_ symbol: String, _ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(Theme.primary)
-            Text(text)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.primaryText)
+                .offset(y: appear ? 0 : 12)
         }
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Next, Dealy will ask for your location to find nearby deals. You can change it anytime from Home filters.")
+            Text("Next, Dealy will ask for your location. You can change the distance anytime from Home filters.")
                 .font(.footnote)
                 .foregroundStyle(Theme.faintText)
 
