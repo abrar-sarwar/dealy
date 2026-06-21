@@ -67,6 +67,7 @@ export class RecommendationsService {
       FROM deals d
       JOIN categories cat ON cat.id = d.category_id
       WHERE d.status = 'published'::deal_status
+        AND d.source_trust = 'authoritative'::source_trust
         AND d.verification_status = 'verified'::verification_status
         AND d.expires_at > now() AND d.geog IS NOT NULL
         AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
@@ -127,7 +128,12 @@ export class RecommendationsService {
   /** Trending by recent popularity (saves weighted over views). Public. */
   async trending(limit = 20): Promise<{ items: DealDto[]; total: number }> {
     const deals = await this.prisma.deal.findMany({
-      where: { status: 'published', verificationStatus: 'verified', expiresAt: { gt: new Date() } },
+      where: {
+        status: 'published',
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        expiresAt: { gt: new Date() },
+      },
       include: { category: true, _count: { select: { savedBy: true, interactions: true } } },
     });
     deals.sort(

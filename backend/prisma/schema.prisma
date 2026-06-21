@@ -179,6 +179,18 @@ enum VerificationStatus {
   @@map("verification_status")
 }
 
+/// Provenance trust tier of a deal's source. ONLY `authoritative` deals may be
+/// verified, shown with a Verified badge, returned in production feeds, or
+/// counted toward Atlanta coverage. `editorial` (hand-curated) and `fixture`
+/// (dev/test) inventory are never source-confirmed and never enter trust paths.
+enum SourceTrust {
+  authoritative
+  editorial
+  fixture
+
+  @@map("source_trust")
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -218,6 +230,9 @@ model Deal {
   status              DealStatus       @default(published)
   moderationStatus    ModerationStatus @default(approved) @map("moderation_status")
   source              String           @default("seed")
+  /// Provenance trust tier. Defaults to `fixture` (the safe non-authoritative
+  /// default): an unknown source is never treated as source-confirmed.
+  sourceTrust         SourceTrust      @default(fixture) @map("source_trust")
   /// Source provenance: canonical URL / external identifier the deal was confirmed
   /// against, and the human-facing attribution string required by some providers.
   sourceUrl           String?          @map("source_url")

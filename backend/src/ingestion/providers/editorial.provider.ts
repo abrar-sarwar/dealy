@@ -10,15 +10,21 @@ import { EDITORIAL_DEALS, type EditorialDeal } from './editorial-deals';
 /**
  * Curated editorial provider for the Atlanta pilot's no-API categories
  * (Food, Groceries). Food/grocery deals have no public deal API, so inventory is
- * hand-curated (docs/data-sources.md) — never scraped. Always available (no
- * credentials). Re-verification checks each deal against the checked-in source
- * list: present + not flagged removed + within its window → confirmed; flagged
- * removed → invalid; window lapsed → expired. This proves the food/grocery path
- * end-to-end; swap individual records for real curated deals over time.
+ * hand-curated (docs/data-sources.md) — never scraped.
+ *
+ * TRUST: `editorial` — NON-authoritative. Its deals ingest as `pending`, are
+ * NEVER assigned a verified status, never show a Verified badge, never count
+ * toward coverage, and never appear in production feeds. It exists for local
+ * development/demos and tests, and is only registered when fixtures are enabled
+ * (off in production). `verify()` checks the checked-in list only to model
+ * removal/expiry in dev — it is NOT authoritative source confirmation. The `.test`
+ * URLs are intentional fixture placeholders. Replace with a real authoritative
+ * grocery/affiliate provider to put these categories into the live pilot.
  */
 @Injectable()
 export class EditorialProvider implements DealProvider {
   readonly name = 'editorial';
+  readonly trust = 'editorial' as const;
 
   isAvailable(): boolean {
     return true;

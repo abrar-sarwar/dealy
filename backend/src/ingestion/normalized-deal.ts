@@ -64,13 +64,22 @@ export interface VerificationResult {
 }
 
 /**
+ * Provenance trust tier of a provider (mirrors the Prisma `SourceTrust` enum).
+ * ONLY `authoritative` providers produce verifiable, badge-able, coverage-counting
+ * inventory. `editorial`/`fixture` are dev/demo sources that never enter trust paths.
+ */
+export type SourceTrust = 'authoritative' | 'editorial' | 'fixture';
+
+/**
  * A content provider. `isAvailable()` gates real providers behind credentials so
- * unrelated ingestion keeps working without them. `verify()` re-checks a single
- * deal against the source for the daily re-verification job; providers that
- * cannot re-check individually may omit it (treated as `unreachable`).
+ * unrelated ingestion keeps working without them. `trust` classifies provenance:
+ * only `authoritative` providers yield source-confirmed (verifiable) deals.
+ * `verify()` re-checks a single deal against the source for the daily
+ * re-verification job; providers that cannot re-check individually may omit it.
  */
 export interface DealProvider {
   readonly name: string;
+  readonly trust: SourceTrust;
   isAvailable(): boolean;
   fetch(): Promise<NormalizedDeal[]>;
   verify?(deal: VerifiableDeal): Promise<VerificationResult>;

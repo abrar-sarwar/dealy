@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { JWKS_RESOLVER } from '../src/auth/auth.constants';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby } from './helpers';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { PriceTrackingService } from '../src/notifications/price-tracking.service';
 import { LocalPushSender } from '../src/notifications/providers/local-push-sender';
@@ -68,16 +69,14 @@ describe('Notifications (e2e)', () => {
     localSender = app.get(LocalPushSender);
 
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B, SUB_C] } } });
-
-    const feed = await app.inject({
-      method: 'GET',
-      url: '/v1/feeds/nearby?lat=33.7531&lng=-84.3857&radiusMiles=50&limit=5',
-    });
-    dealId = (feed.json() as { items: WithId[] }).items[0].id;
+    await prisma.deal.deleteMany({ where: { source: 'e2e-notif' } });
+    const [seededId] = await seedAuthoritativeNearby(prisma, { source: 'e2e-notif', count: 1 });
+    dealId = seededId;
   });
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B, SUB_C] } } });
+    await prisma.deal.deleteMany({ where: { source: 'e2e-notif' } });
     await app.close();
   });
 

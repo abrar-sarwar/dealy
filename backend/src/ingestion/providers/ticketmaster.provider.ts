@@ -43,6 +43,7 @@ interface TmResponse {
 @Injectable()
 export class TicketmasterProvider implements DealProvider {
   readonly name = 'ticketmaster';
+  readonly trust = 'authoritative' as const;
   private readonly apiKey?: string;
 
   constructor(config: ConfigService<Env, true>) {

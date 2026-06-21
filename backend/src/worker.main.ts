@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type { Env } from './config/env.schema';
+import { fixturesEnabled } from './config/env.schema';
 import { IngestionService } from './ingestion/ingestion.service';
 import { VerificationService } from './ingestion/verification.service';
 import { SearchIndexer } from './search/search-indexer.service';
@@ -42,16 +43,26 @@ async function bootstrapWorker(): Promise<void> {
   // Repeatable jobs — BullMQ dedupes by repeat options, so this is idempotent.
   const queueConn = redisConnection(url);
   const queue = createDealsQueue(queueConn);
-  await queue.add('ingest-fixture', { type: 'ingest', provider: 'fixture' } satisfies DealsJob, {
-    repeat: { pattern: '0 */6 * * *' },
-  });
-  await queue.add(
-    'ingest-editorial',
-    { type: 'ingest', provider: 'editorial' } satisfies DealsJob,
-    {
-      repeat: { pattern: '15 */6 * * *' },
-    },
-  );
+  // Fixture/editorial ingestion is dev/demo only — scheduled ONLY when fixtures
+  // are enabled, so non-authoritative inventory is never auto-ingested in prod.
+  const config = app.get(ConfigService<Env, true>);
+  if (
+    fixturesEnabled({
+      APP_ENV: config.get('APP_ENV', { infer: true }),
+      DEALY_ENABLE_FIXTURES: config.get('DEALY_ENABLE_FIXTURES', { infer: true }),
+    })
+  ) {
+    await queue.add('ingest-fixture', { type: 'ingest', provider: 'fixture' } satisfies DealsJob, {
+      repeat: { pattern: '0 */6 * * *' },
+    });
+    await queue.add(
+      'ingest-editorial',
+      { type: 'ingest', provider: 'editorial' } satisfies DealsJob,
+      {
+        repeat: { pattern: '15 */6 * * *' },
+      },
+    );
+  }
   // Daily re-verification of every active deal against its authoritative source.
   await queue.add('verify', { type: 'verify' } satisfies DealsJob, {
     repeat: { pattern: '30 3 * * *' },

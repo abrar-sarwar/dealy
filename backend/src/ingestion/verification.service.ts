@@ -20,9 +20,19 @@ export interface VerificationDecision {
   dealStatus?: DealStatus;
   /** Set only when the source freshly confirmed the deal. */
   lastVerifiedAt?: Date;
+  /** A validated, source-refreshed future expiry to persist (confirmed only). */
+  expiresAt?: Date;
   /** Whether the deal remains eligible for active feeds after this outcome. */
   shown: boolean;
   reason?: string;
+}
+
+/** A refreshed expiry is applied only when it parses and is still in the future. */
+function validRefreshedExpiry(expiresAt: Date | undefined, now: Date): Date | undefined {
+  if (!expiresAt) return undefined;
+  const t = expiresAt.getTime();
+  if (Number.isNaN(t) || t <= now.getTime()) return undefined;
+  return expiresAt;
 }
 
 /**
@@ -50,6 +60,9 @@ export function resolveVerification(
         verificationStatus: VerificationStatus.verified,
         dealStatus: DealStatus.published,
         lastVerifiedAt: now,
+        // Persist a source-refreshed expiry only when valid + still future.
+        // Invalid/missing/past refreshed expiries are ignored (no change).
+        expiresAt: validRefreshedExpiry(result.expiresAt, now),
         shown: true,
       };
     case 'invalid':
@@ -122,6 +135,9 @@ export class VerificationService {
     });
     const summaries: VerificationRunSummary[] = [];
     for (const { source } of providers) {
+      // Only AUTHORITATIVE providers produce verifiable inventory. Editorial /
+      // fixture / unknown sources are never promoted to verified by the job.
+      if (this.registry.get(source)?.trust !== 'authoritative') continue;
       try {
         summaries.push(await this.verifyProvider(source, now, graceMs));
       } catch (err) {
@@ -149,105 +165,138 @@ export class VerificationService {
     graceMs = VERIFICATION_GRACE_MS,
   ): Promise<VerificationRunSummary> {
     const run = await this.prisma.verificationRun.create({ data: { provider: source } });
-    const provider = this.registry.get(source);
+    try {
+      const provider = this.registry.get(source);
 
-    const deals = await this.prisma.deal.findMany({
-      where: { status: 'published', source },
-      select: {
-        id: true,
-        externalId: true,
-        expiresAt: true,
-        verificationStatus: true,
-        lastVerifiedAt: true,
-      },
-    });
+      const deals = await this.prisma.deal.findMany({
+        where: { status: 'published', source },
+        select: {
+          id: true,
+          externalId: true,
+          expiresAt: true,
+          verificationStatus: true,
+          lastVerifiedAt: true,
+        },
+      });
 
-    let confirmed = 0;
-    let invalidated = 0;
-    let expired = 0;
-    let unreachable = 0;
-    const changedIds: string[] = [];
+      let confirmed = 0;
+      let invalidated = 0;
+      let expired = 0;
+      let unreachable = 0;
+      const droppedIds: string[] = [];
+      const updatedIds: string[] = [];
 
-    for (const deal of deals) {
-      let result: VerificationResult;
-      try {
-        // No registered provider / no verify() -> we cannot confirm; treat as a
-        // transient failure so the grace policy (not an immediate drop) applies.
-        result =
-          provider?.verify && deal.externalId
-            ? await provider.verify({ externalId: deal.externalId, expiresAt: deal.expiresAt })
-            : { status: 'unreachable', reason: 'no verifying provider registered' };
-      } catch (err) {
-        result = { status: 'unreachable', reason: (err as Error).message };
+      for (const deal of deals) {
+        let result: VerificationResult;
+        try {
+          // No registered provider / no verify() -> we cannot confirm; treat as a
+          // transient failure so the grace policy (not an immediate drop) applies.
+          result =
+            provider?.verify && deal.externalId
+              ? await provider.verify({ externalId: deal.externalId, expiresAt: deal.expiresAt })
+              : { status: 'unreachable', reason: 'no verifying provider registered' };
+        } catch (err) {
+          result = { status: 'unreachable', reason: (err as Error).message };
+        }
+
+        const decision = resolveVerification(
+          { verificationStatus: deal.verificationStatus, lastVerifiedAt: deal.lastVerifiedAt },
+          result,
+          now,
+          graceMs,
+        );
+
+        try {
+          // One transaction per deal so its status update and recorded outcome
+          // can never silently diverge.
+          await this.prisma.$transaction([
+            this.prisma.deal.update({
+              where: { id: deal.id },
+              data: {
+                verificationStatus: decision.verificationStatus,
+                ...(decision.dealStatus ? { status: decision.dealStatus } : {}),
+                lastVerificationAttemptAt: now,
+                ...(decision.lastVerifiedAt ? { lastVerifiedAt: decision.lastVerifiedAt } : {}),
+                ...(decision.expiresAt ? { expiresAt: decision.expiresAt } : {}),
+                verificationFailureReason: decision.reason ?? null,
+              },
+            }),
+            this.prisma.verificationOutcome.create({
+              data: {
+                runId: run.id,
+                dealId: deal.id,
+                externalId: deal.externalId,
+                outcome: result.status,
+                reason: decision.reason,
+              },
+            }),
+          ]);
+        } catch (err) {
+          // Per-deal isolation: one deal's DB error must not abort the provider run.
+          this.logger.warn(
+            `Verification update failed for deal ${deal.id}: ${(err as Error).message}`,
+          );
+          continue;
+        }
+
+        if (!decision.shown) droppedIds.push(deal.id);
+        else if (decision.expiresAt) updatedIds.push(deal.id); // still shown, expiry refreshed
+
+        if (result.status === 'confirmed') confirmed++;
+        else if (result.status === 'invalid') invalidated++;
+        else if (result.status === 'expired') expired++;
+        else unreachable++;
       }
 
-      const decision = resolveVerification(
-        { verificationStatus: deal.verificationStatus, lastVerifiedAt: deal.lastVerifiedAt },
-        result,
-        now,
-        graceMs,
+      // Keep the search index consistent (best-effort; DB is the source of truth).
+      for (const id of droppedIds) {
+        try {
+          await this.search.removeDeal(id);
+        } catch (err) {
+          this.logger.warn(`Search removal after verification failed: ${(err as Error).message}`);
+        }
+      }
+      for (const id of updatedIds) {
+        try {
+          await this.search.upsertDeals([id]);
+        } catch (err) {
+          this.logger.warn(`Search refresh after verification failed: ${(err as Error).message}`);
+        }
+      }
+
+      await this.prisma.verificationRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'succeeded',
+          checked: deals.length,
+          confirmed,
+          invalidated,
+          expired,
+          unreachable,
+          finishedAt: now,
+        },
+      });
+      this.logger.log(
+        `Verify ${source}: checked=${deals.length} confirmed=${confirmed} invalid=${invalidated} expired=${expired} unreachable=${unreachable}`,
       );
-
-      await this.prisma.deal.update({
-        where: { id: deal.id },
-        data: {
-          verificationStatus: decision.verificationStatus,
-          ...(decision.dealStatus ? { status: decision.dealStatus } : {}),
-          lastVerificationAttemptAt: now,
-          ...(decision.lastVerifiedAt ? { lastVerifiedAt: decision.lastVerifiedAt } : {}),
-          verificationFailureReason: decision.reason ?? null,
-        },
-      });
-      await this.prisma.verificationOutcome.create({
-        data: {
-          runId: run.id,
-          dealId: deal.id,
-          externalId: deal.externalId,
-          outcome: result.status,
-          reason: decision.reason,
-        },
-      });
-      if (!decision.shown) changedIds.push(deal.id);
-
-      if (result.status === 'confirmed') confirmed++;
-      else if (result.status === 'invalid') invalidated++;
-      else if (result.status === 'expired') expired++;
-      else unreachable++;
-    }
-
-    // Deals that left the active set must leave the search index too (best-effort).
-    for (const id of changedIds) {
-      try {
-        await this.search.removeDeal(id);
-      } catch (err) {
-        this.logger.warn(`Search removal after verification failed: ${(err as Error).message}`);
-      }
-    }
-
-    await this.prisma.verificationRun.update({
-      where: { id: run.id },
-      data: {
+      return {
+        runId: run.id,
+        provider: source,
         status: 'succeeded',
         checked: deals.length,
         confirmed,
         invalidated,
         expired,
         unreachable,
-        finishedAt: now,
-      },
-    });
-    this.logger.log(
-      `Verify ${source}: checked=${deals.length} confirmed=${confirmed} invalid=${invalidated} expired=${expired} unreachable=${unreachable}`,
-    );
-    return {
-      runId: run.id,
-      provider: source,
-      status: 'succeeded',
-      checked: deals.length,
-      confirmed,
-      invalidated,
-      expired,
-      unreachable,
-    };
+      };
+    } catch (err) {
+      // Provider-level failure: finalize the run as failed rather than leaving an
+      // abandoned `running` record, then rethrow for caller-level isolation.
+      await this.prisma.verificationRun.update({
+        where: { id: run.id },
+        data: { status: 'failed', error: (err as Error).message, finishedAt: new Date() },
+      });
+      throw err;
+    }
   }
 }

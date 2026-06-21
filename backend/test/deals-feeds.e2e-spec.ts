@@ -3,8 +3,10 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby, seedAuthoritativeOnline } from './helpers';
 
-// Georgia State campus center (deals are seeded around it).
+// Georgia State campus center. Feeds now require AUTHORITATIVE inventory, so the
+// suite seeds its own authoritative deals here (seed data is non-authoritative).
 const GSU = { lat: 33.7531, lng: -84.3857 };
 // An isolated point (>100mi from any seed cluster) for ranking/gating fixtures.
 const REMOTE = { lat: 35.5, lng: -84.5 };
@@ -29,6 +31,14 @@ describe('Deals + Feeds (e2e, public)', () => {
     await app.getHttpAdapter().getInstance().ready();
     prisma = app.get(PrismaService);
     await prisma.deal.deleteMany({ where: { source: 'e2e-feeds' } });
+    // Authoritative, verified inventory the public feeds can return.
+    await seedAuthoritativeNearby(prisma, {
+      source: 'e2e-feeds',
+      count: 8,
+      lat: GSU.lat,
+      lng: GSU.lng,
+    });
+    await seedAuthoritativeOnline(prisma, { source: 'e2e-feeds', count: 4 });
   });
 
   afterAll(async () => {
@@ -151,6 +161,7 @@ describe('Deals + Feeds (e2e, public)', () => {
         merchant: 'M',
         categoryId: cat.id,
         source: 'e2e-feeds',
+        sourceTrust: 'authoritative',
         status: 'published',
         verificationStatus: 'verified',
         isOnline: false,
@@ -190,6 +201,13 @@ describe('Deals + Feeds (e2e, public)', () => {
       verificationStatus: 'invalid',
       status: 'archived',
     });
+    // Non-authoritative inventory must never appear even if forced to verified.
+    const editorialId = await makeDeal({
+      title: 'Editorial Physical',
+      latitude: REMOTE.lat,
+      longitude: REMOTE.lng,
+      sourceTrust: 'editorial',
+    });
     const verifiedId = await makeDeal({
       title: 'Verified Physical',
       latitude: REMOTE.lat,
@@ -204,6 +222,7 @@ describe('Deals + Feeds (e2e, public)', () => {
     expect(ids.has(pendingId)).toBe(false);
     expect(ids.has(unreachableId)).toBe(false);
     expect(ids.has(invalidId)).toBe(false);
+    expect(ids.has(editorialId)).toBe(false);
   });
 
   it('does not let a marginally-closer very-stale deal outrank a fresh one', async () => {

@@ -4,7 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SearchIndexer } from '../search/search-indexer.service';
 import { PriceTrackingService } from '../notifications/price-tracking.service';
 import { ProviderRegistry } from './provider-registry';
-import { dealFingerprint, validateNormalizedDeal, type NormalizedDeal } from './normalized-deal';
+import {
+  dealFingerprint,
+  validateNormalizedDeal,
+  type NormalizedDeal,
+  type SourceTrust,
+} from './normalized-deal';
 
 export interface IngestionRunSummary {
   runId: string;
@@ -102,11 +107,21 @@ export class IngestionService {
             select: { currentPriceMinor: true },
           });
 
-          const data = this.toDealData(rec, categoryId, fingerprint, providerName);
+          // Resolve expiry ONCE, at first ingest. Re-ingesting the same record must
+          // not slide its expiration forward — that's how relative fixture dates
+          // (and any recurring re-fetch) would otherwise drift. An authoritative
+          // source's genuine expiry change flows through verification, not ingestion.
+          const { expiresAt, startAt, ...mutable } = this.toDealData(
+            rec,
+            categoryId,
+            fingerprint,
+            providerName,
+            provider.trust,
+          );
           const deal = await this.prisma.deal.upsert({
             where: { externalId: rec.externalId },
-            update: data,
-            create: { externalId: rec.externalId, ...data },
+            update: mutable,
+            create: { externalId: rec.externalId, ...mutable, expiresAt, startAt },
             select: { id: true },
           });
           upsertedIds.push(deal.id);
@@ -173,7 +188,14 @@ export class IngestionService {
     categoryId: string,
     fingerprint: string,
     source: string,
+    trust: SourceTrust,
   ): Prisma.DealUncheckedCreateInput {
+    // A successful fetch from an AUTHORITATIVE provider is a real source
+    // confirmation, so the deal lands verified. Editorial/fixture inventory is
+    // never source-confirmed — it ingests as `pending` and never enters trust
+    // paths (feeds, coverage, Verified badge). The daily job keeps this honest.
+    const now = new Date();
+    const authoritative = trust === 'authoritative';
     return {
       title: rec.title,
       merchant: rec.merchant,
@@ -196,13 +218,12 @@ export class IngestionService {
       status: 'published',
       moderationStatus: 'approved',
       source,
+      sourceTrust: trust,
       sourceUrl: rec.sourceUrl,
       providerAttribution: rec.providerAttribution,
-      // A successful provider fetch is a fresh source confirmation, so the deal
-      // lands verified. The daily re-verification job keeps this honest.
-      verificationStatus: 'verified',
-      lastVerifiedAt: new Date(),
-      lastVerificationAttemptAt: new Date(),
+      verificationStatus: authoritative ? 'verified' : 'pending',
+      lastVerifiedAt: authoritative ? now : null,
+      lastVerificationAttemptAt: authoritative ? now : null,
       verificationFailureReason: null,
       fingerprint,
       startAt: rec.startAt,

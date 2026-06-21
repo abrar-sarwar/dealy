@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { JWKS_RESOLVER } from '../src/auth/auth.constants';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby } from './helpers';
 
 const SUB_A = '33333333-3333-3333-3333-3333333333aa';
 const SUB_B = '44444444-4444-4444-4444-4444444444bb';
@@ -54,6 +55,9 @@ describe('Actions (e2e)', () => {
 
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B] } } });
     await prisma.idempotencyKey.deleteMany({ where: { key: IDEM_KEY } });
+    // Feeds return only authoritative inventory now; seed our own to act on.
+    await prisma.deal.deleteMany({ where: { source: 'e2e-actions' } });
+    await seedAuthoritativeNearby(prisma, { source: 'e2e-actions', count: 8 });
 
     const feed = await app.inject({
       method: 'GET',
@@ -66,6 +70,7 @@ describe('Actions (e2e)', () => {
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B] } } });
     await prisma.idempotencyKey.deleteMany({ where: { key: IDEM_KEY } });
+    await prisma.deal.deleteMany({ where: { source: 'e2e-actions' } });
     await app.close();
   });
 

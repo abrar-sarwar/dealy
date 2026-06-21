@@ -14,6 +14,7 @@ import type {
 @Injectable()
 export class FixtureProvider implements DealProvider {
   readonly name = 'fixture';
+  readonly trust = 'fixture' as const;
 
   isAvailable(): boolean {
     return true;

@@ -57,6 +57,8 @@ export const envSchema = z
     POSTHOG_HOST: z.string().default('https://us.i.posthog.com'),
     TICKETMASTER_API_KEY: optionalString,
     EVENTBRITE_TOKEN: optionalString,
+    /** Force fixture/editorial providers on/off. Default: on outside production. */
+    DEALY_ENABLE_FIXTURES: z.enum(['true', 'false']).optional(),
     STRIPE_SECRET_KEY: optionalString,
     STRIPE_WEBHOOK_SECRET: optionalString,
   })
@@ -82,6 +84,17 @@ export const envSchema = z
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+/**
+ * Whether dev/demo fixture + editorial providers are usable. Defaults ON outside
+ * production so local dev and tests work, and OFF in production unless explicitly
+ * forced — fixture inventory is never silently enabled in staging/production.
+ */
+export function fixturesEnabled(env: Pick<Env, 'APP_ENV' | 'DEALY_ENABLE_FIXTURES'>): boolean {
+  if (env.DEALY_ENABLE_FIXTURES === 'true') return true;
+  if (env.DEALY_ENABLE_FIXTURES === 'false') return false;
+  return env.APP_ENV !== 'production';
+}
 
 /** Used by @nestjs/config `validate`. Throws an actionable error on bad config. */
 export function validateEnv(config: Record<string, unknown>): Env {

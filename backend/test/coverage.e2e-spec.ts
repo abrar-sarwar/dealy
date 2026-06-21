@@ -36,6 +36,7 @@ describe('Coverage (density-first, e2e)', () => {
           merchant: 'M',
           categoryId: foodId,
           source: 'e2e-coverage',
+          sourceTrust: 'authoritative',
           status: 'published',
           verificationStatus: 'verified',
           isOnline: false,
@@ -71,6 +72,9 @@ describe('Coverage (density-first, e2e)', () => {
       ...make(1, { verificationStatus: 'unreachable' }), // unreachable
       ...make(1, { categoryId: techId }), // non-pilot category
       ...make(1, { latitude: ZONE.latitude + 0.25 }), // ~17mi away, out of radius
+      // Non-authoritative inventory must NOT count — even if (wrongly) marked verified.
+      ...make(1, { sourceTrust: 'editorial' }),
+      ...make(1, { sourceTrust: 'fixture' }),
     ]);
     const z = await coverage.zoneCoverage(ZONE);
     // Still exactly the 20 valid ones — none of the noise counts.

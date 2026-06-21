@@ -62,6 +62,7 @@ export class CoverageService {
       FROM deals d
       JOIN categories cat ON cat.id = d.category_id
       WHERE d.status = 'published'::deal_status
+        AND d.source_trust = 'authoritative'::source_trust
         AND d.verification_status = 'verified'::verification_status
         AND d.is_online = false
         AND d.expires_at > now()
