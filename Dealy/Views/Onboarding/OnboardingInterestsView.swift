@@ -28,7 +28,7 @@ struct OnboardingInterestsView: View {
                     .contentTransition(.numericText())
                     .animation(.snappy, value: interests.count)
 
-                Button("Practice the swipe", action: onContinue)
+                Button("Get to swiping", action: onContinue)
                     .buttonStyle(.primaryDealy)
             }
             .padding(.horizontal, Spacing.lg)
