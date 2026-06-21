@@ -122,6 +122,8 @@ struct HomeView: View {
                     .zIndex(Double(viewModel.visibleCards.count - idx))
                     .allowsHitTesting(isTop && !isSwiping)
                     .gesture(dragGesture(for: deal))   // only the top card hit-tests
+                    // Card-display boundary: the top card is "shown" to the user.
+                    .onAppear { if isTop { app.recordImpression(deal.id) } }
                     .onTapGesture { if isTop { app.recordOpened(deal.id); selectedDeal = deal } }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(deal.title) at \(deal.merchant). \(saveSkipHint)")
@@ -148,6 +150,18 @@ struct HomeView: View {
     private var emptyState: some View {
         let reason = viewModel.emptyReason(using: app)
         switch reason {
+        case _ where app.discovery.mode == .nearby && app.nearbyCoverage?.qualified == false:
+            // Server says this area isn't part of the live pilot yet — be honest
+            // and offer Anywhere. Never expose internal rollout-zone terminology.
+            EmptyStateView(
+                symbol: "mappin.slash",
+                title: "Dealy isn’t live here yet",
+                message: "We’re verifying enough nearby deals to launch your area. In the meantime, browse great online deals from Anywhere.",
+                primaryTitle: "Browse online",
+                primaryAction: { browseOnline() },
+                secondaryTitle: "Try again",
+                secondaryAction: { refresh() }
+            )
         case .noneInArea where app.discovery.mode == .nearby && app.locationAuthorization != .authorizedWhenInUse:
             // Nearby needs location access — explain calmly and offer to enable it.
             EmptyStateView(

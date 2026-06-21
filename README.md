@@ -7,8 +7,12 @@ app that runs on local mock data by default and can talk to the Dealy API when
 (Apple Core Location, When-In-Use) — no paid third-party location API, no
 background location, and **no manual city/ZIP entry**.
 
-The app is themed around Atlanta and Georgia campuses; the live backend runs a
-density-first Atlanta verified-inventory pilot (food, groceries, local events).
+The app is themed around Atlanta and Georgia campuses. The backend implements a
+density-first Atlanta verified-inventory pilot (food, groceries, local events):
+Nearby serves a zone only once it holds ≥20 deals recently confirmed against a
+real authoritative source. Whether any zone is actually live depends on connected
+authoritative providers (see `backend/docs/providers.md`) — curated/fixture
+inventory never qualifies a zone.
 
 ---
 
@@ -169,19 +173,20 @@ Small protocols mark where real services plug in (with focused `TODO`s):
 - `DealServicing` → `RemoteDealService` (live) or `MockDealService` (default),
   selected by `DEALY_API_ENV`.
 - `LocationProviding` → `CoreLocationProvider` (When-In-Use, implemented).
-- `PlaceResolving` → `ApplePlaceResolver` (Apple geocoding, implemented).
+  Nearby is device-location-only — there is no manual city/ZIP entry.
 - `PreferenceStoring` → backend-synced preference store (future).
-- `DealInteractionRecording` → records explicit interaction signals (opened,
-  swiped, redemption-clicked, marked-used). Default is a no-op; a backend sink
-  for personalization / "Ask Dealy" plugs in later.
+- `DealInteractionRecording` → records explicit interaction signals (impression,
+  opened, swiped, redemption-clicked, marked-used). The live app injects
+  `RemoteInteractionRecorder` (best-effort POSTs to `/v1/deals/:id/...`, no
+  precise coordinates); previews/offline/tests use the no-op recorder.
 - `RedemptionHandling` → affiliate/coupon/map link handling ("Get Deal").
 - `NotificationScheduling` → push/local deal alerts.
 
 ## Intentional scope deviations
 
-- **Location**: uses Apple Core Location (When-In-Use) + geocoding only — no paid
-  location API and no background location. Permission is optional (city/ZIP
-  fallback).
+- **Location**: device location only via Apple Core Location (When-In-Use) — no
+  paid location API, no background location, and no manual city/ZIP entry. When
+  permission is unavailable the app falls back to Anywhere (online-only).
 - **No StoreKit/payments**: Dealy+ is a non-functional preview; core features
   are never paywalled.
 - **App icon**: the supplied artwork had pre-rendered rounded corners with black

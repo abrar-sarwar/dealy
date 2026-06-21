@@ -41,8 +41,12 @@ final class RemoteDealService: DealServicing {
             URLQueryItem(name: "limit", value: "50"),
         ]
         let page = try await client.get("/v1/feeds/nearby", query: nearbyQuery, as: DealPageDTO.self)
-        // Defensive: the server already excludes online deals from nearby.
+        let coverage = page.coverage.map {
+            NearbyCoverageStatus(qualified: $0.qualified, reason: $0.reason)
+        }
+        // Defensive: the server already excludes online deals from nearby and
+        // serves none outside a qualified zone.
         let items = page.items.map { $0.toDeal() }.filter { !$0.isOnline }
-        return DealPage(items: items, nextCursor: page.nextCursor)
+        return DealPage(items: items, nextCursor: page.nextCursor, coverage: coverage)
     }
 }

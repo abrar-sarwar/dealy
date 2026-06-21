@@ -66,6 +66,38 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertTrue(page.items.allSatisfy { !$0.isOnline })
     }
 
+    func testNearbyLowCoverageReturnsEmptyWithCoverageStatus() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { _ in
+            Data(
+                "{\"items\":[],\"nextCursor\":null,\"coverage\":{\"qualified\":false,\"reason\":\"outside_coverage\"}}"
+                    .utf8)
+        }
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+        let service = RemoteDealService(client: Self.stubbedClient())
+
+        let page = try await service.fetchDeals(for: .nearby(preference))
+
+        XCTAssertTrue(page.items.isEmpty)
+        XCTAssertEqual(page.coverage?.qualified, false)
+        XCTAssertEqual(page.coverage?.reason, "outside_coverage")
+    }
+
+    func testNearbyQualifiedCoveragePassesThrough() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { path in
+            XCTAssertEqual(path, "/v1/feeds/nearby")
+            return Data(
+                "{\"items\":[],\"nextCursor\":null,\"coverage\":{\"qualified\":true,\"reason\":\"qualified\"}}"
+                    .utf8)
+        }
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+        let service = RemoteDealService(client: Self.stubbedClient())
+
+        let page = try await service.fetchDeals(for: .nearby(preference))
+        XCTAssertEqual(page.coverage?.qualified, true)
+    }
+
     // MARK: Helpers
 
     private static func stubbedClient() -> APIClient {
@@ -103,6 +135,8 @@ final class RemoteDealServiceTests: XCTestCase {
 final class StubURLProtocol: URLProtocol {
     static let lock = NSLock()
     static var responder: ((String) -> Data)?
+    /// When set, all responses use this HTTP status (for failure-path tests).
+    static var failWithStatus: Int?
     private static var recordedPaths: [String] = []
 
     static var paths: [String] {
@@ -114,6 +148,7 @@ final class StubURLProtocol: URLProtocol {
         lock.lock(); defer { lock.unlock() }
         recordedPaths = []
         responder = nil
+        failWithStatus = nil
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -127,7 +162,8 @@ final class StubURLProtocol: URLProtocol {
         StubURLProtocol.lock.unlock()
 
         let data = responder?(path) ?? Data("{}".utf8)
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+        let status = StubURLProtocol.failWithStatus ?? 200
+        let response = HTTPURLResponse(url: request.url!, statusCode: status,
                                        httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)

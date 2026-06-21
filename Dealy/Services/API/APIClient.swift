@@ -77,4 +77,31 @@ struct APIClient {
             throw APIError.decoding(error)
         }
     }
+
+    /// Fire-and-forget JSON POST (no response body decoding). Used for best-effort
+    /// interaction events; the caller decides how to handle failures.
+    func post(_ path: String, body: [String: Any] = [:]) async throws {
+        guard let url = URLComponents(url: baseURL.appendingPathComponent(path),
+                                      resolvingAgainstBaseURL: false)?.url else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if let token = await tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let response: URLResponse
+        do {
+            (_, response) = try await session.data(for: request)
+        } catch {
+            throw APIError.transport(error)
+        }
+        guard let http = response as? HTTPURLResponse else { throw APIError.http(status: -1) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.http(status: http.statusCode) }
+    }
 }

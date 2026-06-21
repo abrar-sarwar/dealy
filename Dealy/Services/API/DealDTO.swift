@@ -1,9 +1,17 @@
 import Foundation
 
+/// Density-first coverage status returned by the nearby feed.
+struct CoverageDTO: Decodable {
+    let qualified: Bool
+    let reason: String
+}
+
 /// Wire shape of the nearby-feed response.
 struct DealPageDTO: Decodable {
     let items: [DealDTO]
     let nextCursor: String?
+    /// Present on the nearby feed (density-first gate); absent on the online feed.
+    let coverage: CoverageDTO?
 }
 
 /// Codable DTO for a deal from the API. Kept separate from the domain `Deal`

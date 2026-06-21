@@ -49,6 +49,8 @@ final class AppState {
     private(set) var allDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
+    /// Server density-first coverage for the last Nearby load (nil for Anywhere).
+    private(set) var nearbyCoverage: NearbyCoverageStatus?
 
     private let maxSwipeHistory = 60
     /// Monotonic load token: only the newest in-flight load may publish results.
@@ -82,6 +84,7 @@ final class AppState {
             guard generation == loadGeneration else { return }
             allDeals = page.items
             dealsByID = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
+            nearbyCoverage = page.coverage
             loadState = .loaded
         } catch is CancellationError {
             return
@@ -356,8 +359,13 @@ final class AppState {
         interactionRecorder.record(.redemptionClicked(dealID: dealID))
     }
 
-    /// Record that a deal card was shown to the user.
+    /// Deal ids already counted as impressions this session (dedup policy: one
+    /// impression per deal per session; the backend additionally dedups per day).
+    private var impressedDealIDs: Set<String> = []
+
+    /// Record that a deal card was shown to the user (deduped per session).
     func recordImpression(_ dealID: String) {
+        guard impressedDealIDs.insert(dealID).inserted else { return }
         interactionRecorder.record(.impression(dealID: dealID))
     }
 

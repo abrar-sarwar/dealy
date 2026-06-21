@@ -417,6 +417,15 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(recorder.events, [.opened(dealID: "tech-monitor")])
     }
 
+    func testImpressionsAreDedupedPerSession() {
+        let recorder = RecordingInteractionRecorder()
+        let app = makeApp(interactionRecorder: recorder)
+        app.recordImpression("d1")
+        app.recordImpression("d1") // duplicate within session — dropped
+        app.recordImpression("d2")
+        XCTAssertEqual(recorder.events, [.impression(dealID: "d1"), .impression(dealID: "d2")])
+    }
+
     func testGetDealRecordsRedemptionClicked() {
         let recorder = RecordingInteractionRecorder()
         let app = makeApp(interactionRecorder: recorder)

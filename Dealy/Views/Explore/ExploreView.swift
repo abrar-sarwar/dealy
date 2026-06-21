@@ -113,6 +113,7 @@ struct ExploreView: View {
                 LazyVStack(spacing: Spacing.sm) {
                     ForEach(results) { deal in
                         DealRowCard(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
+                            .onAppear { app.recordImpression(deal.id) }
                     }
                 }
                 .padding(.horizontal, Spacing.lg)
@@ -151,6 +152,7 @@ struct ExploreView: View {
                             HStack(spacing: Spacing.sm) {
                                 ForEach(section.deals) { deal in
                                     DealTile(deal: deal) { app.recordOpened(deal.id); selectedDeal = deal }
+                                        .onAppear { app.recordImpression(deal.id) }
                                 }
                             }
                             .padding(.horizontal, Spacing.lg)
