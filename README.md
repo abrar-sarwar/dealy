@@ -39,7 +39,7 @@ inventory never qualifies a zone.
 ## What's inside
 
 - **Branded startup** transition (respects Reduce Motion) over a static launch screen.
-- **Onboarding**: animated welcome → interests → optional one-card preview. Location is requested automatically after the welcome; denial continues in Anywhere. While idle, the preview demonstrates details, pass, save, and use-now in about five seconds; touching it immediately hands control to the user.
+- **Onboarding**: animated welcome → interests, then straight into Home. Location is requested automatically after the welcome; denial continues in Anywhere. There is no separate practice step — while the Home deck is idle on first run, the live top card demonstrates details, pass, save, and use in about five seconds (single-word labels); the moment you touch it, the demo retires and the real swipe takes over.
 - **Home swipe deck** (the hero): draggable cards with rotation, SAVE/SKIP stamps,
   velocity-aware completion, haptics, button-driven save/skip on the same path,
   **Undo**, category filters, ShareLink, watch, and rich empty states.
