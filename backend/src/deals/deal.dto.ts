@@ -51,9 +51,10 @@ export interface NearbyCoverage {
   zoneSlug: string | null;
 }
 
-/** Nearby feed response: deals are returned ONLY inside an enabled qualified
- * zone; otherwise `items` is empty and `coverage` explains why (never a silent
- * empty feed). */
+/** Nearby feed response: a trust-tier-ranked blend (verified > curated > online)
+ * that is never empty when any inventory exists in range. `coverage` reports the
+ * zone's density status (honesty signal); `blend` reports the radius used and
+ * which tiers were included. */
 export interface NearbyDealPage extends DealPage {
   coverage: NearbyCoverage;
   /** How the never-empty ladder assembled this page (honesty signal). */

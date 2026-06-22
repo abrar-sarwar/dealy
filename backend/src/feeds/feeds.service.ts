@@ -9,6 +9,12 @@ import type { FeedTier } from './feed-tier';
 
 const METERS_PER_MILE = 1609.344;
 
+/** Freshness offset: each hour since creation reduces the effective distance by
+ * this many metres, so a much-fresher deal ranks ahead of a marginally-closer
+ * stale one. Only the DIFFERENCE in created_at between deals matters, so the
+ * key stays row-fixed and keyset-stable. */
+const FRESHNESS_METERS_PER_HOUR = 40;
+
 /** Online-feed cursor: `${createdAt ISO}:${uuid}`. The UUID has no colons, so
  * the final colon is the separator (the ISO timestamp contains colons). */
 function encodeOnlineCursor(createdAt: Date, id: string): string {
@@ -160,7 +166,9 @@ export class FeedsService {
                CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
                  WHEN 0 THEN 'verified' WHEN 1 THEN 'curated'
                  WHEN 2 THEN 'online' ELSE 'community' END AS feed_tier,
-               round(ST_Distance(d.geog, ${center}))::double precision AS sort_key
+               round(ST_Distance(d.geog, ${center})
+                 - EXTRACT(EPOCH FROM d.created_at) / 3600.0 * ${FRESHNESS_METERS_PER_HOUR}
+               )::double precision AS sort_key
         FROM deals d
         JOIN categories cat ON cat.id = d.category_id
         WHERE d.status = 'published'::deal_status
