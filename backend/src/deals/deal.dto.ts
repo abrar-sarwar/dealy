@@ -1,5 +1,6 @@
 import { IsInt, IsLatitude, IsLongitude, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { FeedTier } from '../feeds/feed-tier';
 
 /** Public deal shape returned by feeds + detail. Maps 1:1 to the iOS `DealDTO`. */
 export interface DealDto {
@@ -18,6 +19,10 @@ export interface DealDto {
    * its authoritative source. NEVER derived from a client-supplied value. */
   verified: boolean;
   verifiedAt: string | null;
+  /** Derived display/ranking tier (verified|curated|online|community). */
+  trustLevel: FeedTier;
+  /** Crawler confidence (0–100) for curated deals; null otherwise. */
+  confidenceScore: number | null;
   isOnline: boolean;
   isStudentOnly: boolean;
   shortDescription: string;

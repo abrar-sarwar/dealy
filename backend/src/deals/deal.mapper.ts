@@ -1,5 +1,6 @@
 import type { Deal, Category } from '@prisma/client';
 import type { DealDto } from './deal.dto';
+import { deriveFeedTier } from '../feeds/feed-tier';
 
 /** Minor units (cents) → dollars as a JS number. Never floating-point math on storage. */
 function minorToDollars(minor: bigint | null): number {
@@ -33,6 +34,10 @@ interface NormalizedDeal {
   createdAt: Date;
   startAt: Date | null;
   expiresAt: Date;
+  sourceTrust: string;
+  moderationStatus: string;
+  status: string;
+  confidenceScore: number | null;
 }
 
 function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
@@ -70,6 +75,14 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     publishedAt: n.createdAt.toISOString(),
     startAt: n.startAt ? n.startAt.toISOString() : null,
     expiresAt: n.expiresAt.toISOString(),
+    trustLevel: deriveFeedTier({
+      sourceTrust: n.sourceTrust,
+      verificationStatus: n.verificationStatus,
+      moderationStatus: n.moderationStatus,
+      status: n.status,
+      isOnline: n.isOnline,
+    }),
+    confidenceScore: n.confidenceScore,
   };
 }
 
@@ -101,6 +114,10 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       createdAt: deal.createdAt,
       startAt: deal.startAt,
       expiresAt: deal.expiresAt,
+      sourceTrust: deal.sourceTrust,
+      moderationStatus: deal.moderationStatus,
+      status: deal.status,
+      confidenceScore: deal.confidenceScore,
     },
     distanceMiles,
   );
@@ -135,6 +152,10 @@ export interface NearbyRow {
   distance_meters: number;
   /** Distance + freshness ranking key (lower = higher rank). Ordering only. */
   sort_key: number;
+  source_trust: string;
+  moderation_status: string;
+  status: string;
+  confidence_score: number | null;
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -167,6 +188,10 @@ export function mapNearbyRow(row: NearbyRow) {
       createdAt: row.created_at,
       startAt: row.start_at,
       expiresAt: row.expires_at,
+      sourceTrust: row.source_trust,
+      moderationStatus: row.moderation_status,
+      status: row.status,
+      confidenceScore: row.confidence_score,
     },
     Number(row.distance_meters) / METERS_PER_MILE,
   );
