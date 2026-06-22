@@ -33,6 +33,7 @@
     "db:down": "docker compose down",
     "seed": "ts-node prisma/seed.ts",
     "search:reindex": "ts-node src/search/reindex.ts",
+    "crawl": "ts-node src/crawler/crawl-cli.ts",
     "ingest": "ts-node src/ingestion/ingest-cli.ts",
     "verify": "ts-node src/ingestion/verify-cli.ts",
     "coverage": "ts-node src/coverage/coverage-cli.ts",

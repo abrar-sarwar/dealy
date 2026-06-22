@@ -12,6 +12,7 @@ import { DealsModule } from './deals/deals.module';
 import { ActionsModule } from './actions/actions.module';
 import { SearchModule } from './search/search.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { CrawlerModule } from './crawler/crawler.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
@@ -52,6 +53,7 @@ import { AdminModule } from './admin/admin.module';
     SubscriptionsModule,
     AdminModule,
     IngestionModule,
+    CrawlerModule,
   ],
 })
 export class AppModule {}

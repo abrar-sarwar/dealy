@@ -57,6 +57,7 @@ export const envSchema = z
     POSTHOG_HOST: z.string().default('https://us.i.posthog.com'),
     TICKETMASTER_API_KEY: optionalString,
     EVENTBRITE_TOKEN: optionalString,
+    ANTHROPIC_API_KEY: optionalString,
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
     CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),
