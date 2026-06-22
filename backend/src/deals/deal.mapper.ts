@@ -156,6 +156,10 @@ export interface NearbyRow {
   moderation_status: string;
   status: string;
   confidence_score: number | null;
+  /** Tier rank (0=verified, 1=curated, 2=online, 3=community). Ordering only. */
+  tier_rank: number;
+  /** Human-readable tier label derived from tier_rank. */
+  feed_tier: string;
 }
 
 const METERS_PER_MILE = 1609.344;

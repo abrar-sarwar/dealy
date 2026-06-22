@@ -56,6 +56,8 @@ export interface NearbyCoverage {
  * empty feed). */
 export interface NearbyDealPage extends DealPage {
   coverage: NearbyCoverage;
+  /** How the never-empty ladder assembled this page (honesty signal). */
+  blend: { radiusMilesUsed: number; tiersIncluded: FeedTier[] };
 }
 
 export class NearbyFeedQuery {

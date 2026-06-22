@@ -4,36 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { mapNearbyRow, mapPrismaDeal, type NearbyRow } from '../deals/deal.mapper';
 import type { DealPage, NearbyDealPage, NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
 import { CoverageService } from '../coverage/coverage.service';
+import { FEED_TIER_CASE_SQL } from './feed-tier';
+import type { FeedTier } from './feed-tier';
 
 const METERS_PER_MILE = 1609.344;
-
-function encodeCursor(sortKey: number, id: string): string {
-  return Buffer.from(`${sortKey}:${id}`).toString('base64url');
-}
-
-function decodeCursor(cursor: string): { sortKey: number; id: string } | null {
-  try {
-    const [d, id] = Buffer.from(cursor, 'base64url').toString('utf8').split(':');
-    const sortKey = Number(d);
-    if (!id || Number.isNaN(sortKey)) return null;
-    return { sortKey, id };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Distance + freshness ranking weight. A deal's effective sort key is its real
- * distance in metres MINUS a freshness credit proportional to how recently it was
- * created: each hour of extra age costs FRESHNESS_METERS_PER_HOUR equivalent
- * metres. Only the *difference* in created_at between deals matters, so the key
- * depends solely on row-fixed values (distance + created_at) — never on `now()`.
- * That keeps keyset pagination stable across requests while ensuring a much
- * fresher deal is not beaten by a marginally-closer very-stale one. Active deals
- * are short-lived (bounded by expiry), so no explicit age cap is needed. Real
- * distance shown to the user is unaffected.
- */
-const FRESHNESS_METERS_PER_HOUR = 40;
 
 /** Online-feed cursor: `${createdAt ISO}:${uuid}`. The UUID has no colons, so
  * the final colon is the separator (the ISO timestamp contains colons). */
@@ -55,6 +29,28 @@ function decodeOnlineCursor(cursor: string): { createdAt: Date; id: string } | n
   }
 }
 
+/** Blend cursor: `${radius}:${tierRank}:${sortKey}:${uuid}`. */
+interface BlendCursor {
+  radius: number;
+  tierRank: number;
+  sortKey: number;
+  id: string;
+}
+
+function encodeBlendCursor(radius: number, tierRank: number, sortKey: number, id: string): string {
+  return Buffer.from(`${radius}:${tierRank}:${sortKey}:${id}`).toString('base64url');
+}
+
+function decodeBlendCursor(c: string): BlendCursor | null {
+  try {
+    const [radius, tierRank, sortKey, id] = Buffer.from(c, 'base64url').toString('utf8').split(':');
+    if (!id) return null;
+    return { radius: Number(radius), tierRank: Number(tierRank), sortKey: Number(sortKey), id };
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class FeedsService {
   constructor(
@@ -63,80 +59,125 @@ export class FeedsService {
   ) {}
 
   /**
-   * Nearby deals within radius, ranked by distance + freshness, cursor-paginated.
-   * Returns ONLY active, source-verified, physical deals: status published,
-   * verification_status verified, not expired, not online, with geography inside
-   * the radius (GiST-indexed ST_DWithin + ST_Distance). Online-only deals are
-   * never blended in (spec §6).
+   * Nearby deals within radius, tier-ranked (VERIFIED → CURATED → ONLINE),
+   * cursor-paginated. Never returns an empty feed when any tier has inventory
+   * in range. The coverage signal is RETAINED in the response as an honesty
+   * indicator but no longer hard-gates the feed.
+   *
+   * Radius ladder: tries [baseRadius, max(base,25), max(base,50)] and stops
+   * at the first that fills `limit` (or the last). Cursor pages reuse the
+   * radius recorded in the cursor.
    */
   async nearby(q: NearbyFeedQuery): Promise<NearbyDealPage> {
-    // Density-first gate: serve Nearby inventory ONLY inside an enabled, qualified
-    // zone. Outside it, return an honest machine-readable low-coverage state (not
-    // a silent empty feed) so the client can offer Anywhere.
+    // Retained honesty signal — no longer gates the feed.
     const coverage = await this.coverage.coverageForPoint(q.lat, q.lng);
-    if (!coverage.qualified) {
-      return { items: [], nextCursor: null, coverage };
-    }
 
     const limit = q.limit ?? 20;
-    const radiusMeters = (q.radiusMiles ?? 10) * METERS_PER_MILE;
+    const baseRadius = q.radiusMiles ?? 10;
     const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
-    const cursor = q.cursor ? decodeCursor(q.cursor) : null;
+    const cursor = q.cursor ? decodeBlendCursor(q.cursor) : null;
 
     const categoryFilter = q.category
       ? Prisma.sql`AND d.category_id = (SELECT id FROM categories WHERE slug = ${q.category})`
       : Prisma.empty;
 
-    // Cast the cursor key to double precision so the keyset comparison is
-    // float8 = float8. Binding the JS number as `numeric` would promote the
-    // float8 sort_key to its full decimal, which never equals the shortest-decimal
-    // param — the boundary row would then re-appear on the next page.
+    // Ladder: try each radius until limit is filled or we exhaust options.
+    // When a cursor is present, reuse the cursor's radius (don't re-probe).
+    const radii = [baseRadius, Math.max(baseRadius, 25), Math.max(baseRadius, 50)];
+    let rows: NearbyRow[] = [];
+    let radiusUsed = baseRadius;
+
+    for (const radiusMiles of cursor ? [cursor.radius] : radii) {
+      radiusUsed = radiusMiles;
+      rows = await this.queryBlended(
+        center,
+        radiusMiles * METERS_PER_MILE,
+        limit,
+        categoryFilter,
+        cursor,
+      );
+      if (rows.length >= limit || radiusMiles === radii[radii.length - 1]) break;
+    }
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page.at(-1);
+    const nextCursor =
+      hasMore && last
+        ? encodeBlendCursor(radiusUsed, Number(last.tier_rank), Number(last.sort_key), last.id)
+        : null;
+    const tiersIncluded = [...new Set(page.map((r) => r.feed_tier as FeedTier))];
+
+    return {
+      items: page.map(mapNearbyRow),
+      nextCursor,
+      coverage,
+      blend: { radiusMilesUsed: radiusUsed, tiersIncluded },
+    };
+  }
+
+  /**
+   * One blended, tier-ranked, keyset-paginated page. Includes VERIFIED
+   * (physical) and CURATED inventory; ONLINE physical exclusion: only rows
+   * with geog are included here (physical deals). Online deals (no geog) are
+   * handled by Task 4.2, not here.
+   *
+   * SELECT column list is cross-checked against NearbyRow field by field:
+   *   id, title, merchant, category_slug, short_description, detailed_description,
+   *   terms, current_price_minor, original_price_minor, currency, deal_score,
+   *   is_online, is_student_only, coupon_code, destination_url, latitude, longitude,
+   *   location_tags, visual_seed, verification_status, last_verified_at,
+   *   source_trust, moderation_status, status, confidence_score,
+   *   created_at, start_at, expires_at, distance_meters, sort_key,
+   *   tier_rank, feed_tier.
+   */
+  private async queryBlended(
+    center: Prisma.Sql,
+    radiusMeters: number,
+    limit: number,
+    categoryFilter: Prisma.Sql,
+    cursor: BlendCursor | null,
+  ): Promise<NearbyRow[]> {
+    // Keyset comparison on (tier_rank, sort_key, id): tuple ordering consistent
+    // with ORDER BY tier_rank ASC, sort_key ASC, id ASC.
     const cursorFilter = cursor
-      ? Prisma.sql`WHERE (sort_key > ${cursor.sortKey}::double precision)
-                      OR (sort_key = ${cursor.sortKey}::double precision AND id > ${cursor.id}::uuid)`
+      ? Prisma.sql`WHERE (tier_rank > ${cursor.tierRank}::int)
+                      OR (tier_rank = ${cursor.tierRank}::int AND sort_key > ${cursor.sortKey}::double precision)
+                      OR (tier_rank = ${cursor.tierRank}::int AND sort_key = ${cursor.sortKey}::double precision AND id > ${cursor.id}::uuid)`
       : Prisma.empty;
 
-    const rows = await this.prisma.$queryRaw<NearbyRow[]>(Prisma.sql`
+    return this.prisma.$queryRaw<NearbyRow[]>(Prisma.sql`
       WITH candidates AS (
         SELECT d.id, d.title, d.merchant, cat.slug AS category_slug,
                d.short_description, d.detailed_description, d.terms,
                d.current_price_minor, d.original_price_minor, d.currency,
                d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
                d.latitude, d.longitude, d.location_tags, d.visual_seed,
-               d.verification_status, d.last_verified_at,
-               d.created_at, d.start_at, d.expires_at,
+               d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
+               d.status, d.confidence_score, d.created_at, d.start_at, d.expires_at,
                ST_Distance(d.geog, ${center}) AS distance_meters,
-               -- Round to whole metres so the key is an integer-valued double that
-               -- survives the PG -> JS number -> PG keyset round-trip EXACTLY.
-               -- (A fractional float8 is sent back as a rounded decimal string and
-               -- the boundary row would re-appear on the next page.) Whole-metre
-               -- ranking precision is irrelevant.
-               round(ST_Distance(d.geog, ${center})
-                 - EXTRACT(EPOCH FROM d.created_at) / 3600.0 * ${FRESHNESS_METERS_PER_HOUR}
-               )::double precision AS sort_key
+               (${Prisma.raw(FEED_TIER_CASE_SQL)})::int AS tier_rank,
+               CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
+                 WHEN 0 THEN 'verified' WHEN 1 THEN 'curated'
+                 WHEN 2 THEN 'online' ELSE 'community' END AS feed_tier,
+               round(ST_Distance(d.geog, ${center}))::double precision AS sort_key
         FROM deals d
         JOIN categories cat ON cat.id = d.category_id
         WHERE d.status = 'published'::deal_status
-          AND d.source_trust = 'authoritative'::source_trust
-          AND d.verification_status = 'verified'::verification_status
-          AND d.is_online = false
           AND d.expires_at > now()
           AND d.geog IS NOT NULL
           AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
+          AND (
+            (d.source_trust = 'authoritative'::source_trust AND d.verification_status = 'verified'::verification_status)
+            OR (d.source_trust = 'editorial'::source_trust AND d.moderation_status = 'approved'::moderation_status)
+          )
           ${categoryFilter}
       )
       SELECT * FROM candidates
       ${cursorFilter}
-      ORDER BY sort_key ASC, id ASC
+      ORDER BY tier_rank ASC, sort_key ASC, id ASC
       LIMIT ${limit + 1}
     `);
-
-    const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
-    const last = page.at(-1);
-    const nextCursor = hasMore && last ? encodeCursor(Number(last.sort_key), last.id) : null;
-
-    return { items: page.map(mapNearbyRow), nextCursor, coverage };
   }
 
   /**
