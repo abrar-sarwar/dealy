@@ -24,6 +24,12 @@ trust-tiered, never-empty blend: **VERIFIED > CURATED > COMMUNITY**.
 4. **Geocoding:** pluggable `Geocoder` interface; `NominatimGeocoder` default
    (free, key-less), `MapboxGeocoder` when `GEOCODER_KEY` is set. Moderation
    catches bad geocodes before publish.
+5. **ONLINE tier (post-approval adjustment):** added to the ranking model now as
+   a formal tier (rank 2, below curated), even though it is not yet surfaced as a
+   distinct client badge.
+6. **Auto-publish (post-approval adjustment):** configurable confidence threshold
+   can fast-track high-confidence curated candidates past manual review; disabled
+   by default, never bypasses a low-confidence geocode, always audited.
 
 ## 1. Trust model: two axes, kept separate
 
@@ -33,14 +39,22 @@ as two fields so nothing dilutes the meaning of "Verified".
 - **`source_trust`** (existing enum `authoritative | editorial | fixture`) —
   provenance. Controls verification / badging / coverage eligibility. **Unchanged.**
   The crawler is an `editorial`-trust provider.
-- **`feed_tier`** (NEW type `verified | curated | community`) — a **derived**
-  display + ranking tier. **Not stored** — computed deterministically from
-  `(source_trust, verification_status, moderation_status)` by a single shared
-  helper (`deriveFeedTier()` in TS for the DTO, mirrored as a SQL `CASE` for feed
-  ordering), so it can never drift out of sync with verification/moderation state:
-  - `authoritative` + `verified` → **verified**
-  - `editorial` + `approved` + published → **curated**
+- **`feed_tier`** (NEW type `verified | curated | online | community`) — a
+  **derived** display + ranking tier. **Not stored** — computed deterministically
+  from `(source_trust, verification_status, moderation_status, is_online)` by a
+  single shared helper (`deriveFeedTier()` in TS for the DTO, mirrored as a SQL
+  `CASE` for feed ordering), so it can never drift out of sync with
+  verification/moderation state:
+  - `authoritative` + `verified` + physical → **verified**
+  - `editorial` + `approved` + published (physical) → **curated**
+  - `authoritative` + `verified` + online → **online**
   - otherwise → **community** (reserved; no ingest path in v1)
+
+  **Rank order:** `verified (0) < curated (1) < online (2) < community (3)`. ONLINE
+  is added to the ranking model **now** so the blend ladder and ordering are
+  complete, even though it is not surfaced as a distinct client-facing badge yet
+  (online deals already flow through the Anywhere feed; here they simply get a
+  formal rank slot below curated). COMMUNITY stays reserved.
 
 `feed_tier` is the spec's `trust_level`, surfaced on the deal DTO. Only
 `authoritative`+`verified` inventory is ever badged "Verified" or counted toward
@@ -144,12 +158,31 @@ Per-source pipeline, structured to mirror `src/ingestion/`:
    Returns lat/lng + a geocode confidence; low confidence flags the candidate.
 4. **Normalize** (`candidate.mapper.ts`) — `DealCandidate` → existing
    `NormalizedDeal`, with `sourceTrust='editorial'`, plus computed `confidenceScore`.
-5. **Queue** — upsert a `Deal` with `status='draft'`,
-   `moderationStatus='pending'`, `sourceTrust='editorial'`,
-   `crawlSourceId=<source>`. Dedup via the existing `fingerprint`. Because feed
+5. **Queue** — upsert a `Deal` with `sourceTrust='editorial'`,
+   `crawlSourceId=<source>`, and (by default) `status='draft'` +
+   `moderationStatus='pending'`. Dedup via the existing `fingerprint`. Because feed
    queries require `status='published'`, draft candidates are never served. The
    deal's derived tier is `community` while pending and becomes `curated` the
-   moment a moderator approves it (editorial + approved + published).
+   moment it is approved (editorial + approved + published).
+
+### Auto-publish thresholds (configurable, off by default)
+
+A configurable confidence gate can fast-track high-confidence curated candidates
+past manual review:
+- `CRAWLER_AUTOPUBLISH_THRESHOLD` (int 0–100, **default unset = disabled**): when
+  set and a candidate's `confidenceScore >= threshold`, the crawler upserts it as
+  `status='published'` + `moderationStatus='approved'` directly.
+- An additional `CRAWLER_AUTOPUBLISH_KINDS` allowlist (default empty) can restrict
+  auto-publish to specific `CrawlKind`s (e.g. `grocery_circular` but never
+  `local_promo`).
+- A candidate flagged with a low geocode confidence is **never** auto-published,
+  regardless of `confidenceScore` — it always routes to the queue.
+- Every auto-publish writes an audit entry (`deal.moderate.autopublish`, actor =
+  the system principal) so the action is reviewable, and remains reversible via
+  the normal `expire`/`reject` admin endpoints.
+
+With the threshold unset (the default and recommended pilot posture), moderation
+is mandatory for all curated inventory.
 
 `CrawlerModule` registers a `CrawlerService` (orchestrates a run over one/all
 enabled `CrawlSource` rows) and a `crawl-cli.ts` exposing `pnpm crawl <slug|all>`.
@@ -185,7 +218,10 @@ New `ModerationService` + endpoints on the admin controller (all `@Roles(admin)`
   before/after diff. Lets moderators fix bad geocodes/titles before approving.
 - `expire` → reuse existing `POST /v1/admin/deals/:id/expire`.
 
-Curated deals never auto-publish. Approve is the only path to the feed.
+By default, approve is the only path to the feed. The optional auto-publish
+threshold (§3) is the sole exception: it routes high-confidence candidates
+straight to `published`/`approved` with a system-actor audit entry, and is
+disabled by default for the pilot.
 
 ## 5. Feed ranking + blending — the never-empty ladder
 
@@ -199,9 +235,9 @@ response. Assemble a page by walking steps until the page target (`limit`) is me
 3. Still insufficient → **blend CURATED**: `sourceTrust='editorial'` +
    `status='published'` + `moderationStatus='approved'` + physical + in (expanded)
    radius (these conditions are exactly what `deriveFeedTier` maps to `curated`).
-4. Still insufficient → **blend online** verified inventory (the Anywhere pool),
-   labeled as online.
-5. **COMMUNITY** — reserved no-op (no inventory in v1).
+4. Still insufficient → **blend ONLINE** verified inventory (the Anywhere pool),
+   now a formal tier (rank 2) below curated.
+5. **COMMUNITY** (rank 3) — reserved no-op (no inventory in v1).
 
 **Ordering:** a `feed_tier` rank computed in SQL via `CASE` (verified=0 <
 curated=1 < community=2 — mirroring `deriveFeedTier`), then the existing
@@ -226,7 +262,9 @@ blend source.
 
 - **CLI/cron:** `pnpm crawl <slug|all>`; scheduled via the existing queue
   (`deals-queue.ts` / `jobs.ts`) per `crawlIntervalHours`.
-- **Config:** add optional `GEOCODER_KEY` (+ provider select) to `env.schema.ts`.
+- **Config:** add to `env.schema.ts` — optional `GEOCODER_KEY` (+ provider
+  select), `CRAWLER_AUTOPUBLISH_THRESHOLD` (default unset/disabled), and
+  `CRAWLER_AUTOPUBLISH_KINDS` (default empty).
 - **Tests** (reuse the colima/Docker DB harness):
   - `StructuredExtractor` — JSON-LD / microdata / regex fixture pages.
   - `LlmExtractor` — mocked Claude client, schema-conformance.
