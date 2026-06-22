@@ -57,6 +57,10 @@ export const envSchema = z
     POSTHOG_HOST: z.string().default('https://us.i.posthog.com'),
     TICKETMASTER_API_KEY: optionalString,
     EVENTBRITE_TOKEN: optionalString,
+    // Crawler / curated pipeline.
+    GEOCODER_KEY: optionalString,
+    CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),
+    CRAWLER_AUTOPUBLISH_KINDS: z.string().default(''),
     /** Force fixture/editorial providers on/off. Default: on outside production. */
     DEALY_ENABLE_FIXTURES: z.enum(['true', 'false']).optional(),
     STRIPE_SECRET_KEY: optionalString,
@@ -94,6 +98,13 @@ export function fixturesEnabled(env: Pick<Env, 'APP_ENV' | 'DEALY_ENABLE_FIXTURE
   if (env.DEALY_ENABLE_FIXTURES === 'true') return true;
   if (env.DEALY_ENABLE_FIXTURES === 'false') return false;
   return env.APP_ENV !== 'production';
+}
+
+/** Parsed CrawlKind allowlist for auto-publish. Empty = no kind is auto-published. */
+export function autoPublishKinds(env: Pick<Env, 'CRAWLER_AUTOPUBLISH_KINDS'>): string[] {
+  return env.CRAWLER_AUTOPUBLISH_KINDS.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /** Used by @nestjs/config `validate`. Throws an actionable error on bad config. */
