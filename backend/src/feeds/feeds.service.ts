@@ -114,6 +114,25 @@ export class FeedsService {
         : null;
     const tiersIncluded = [...new Set(page.map((r) => r.feed_tier as FeedTier))];
 
+    // Never-empty online fallback: if physical (verified+curated) inventory did not
+    // fill the page, blend in verified ONLINE deals (rank 2). They carry no geog, so
+    // they are queried separately and appended after the distance-ranked physical set.
+    if (!cursor && page.length < limit) {
+      const onlineRows = await this.prisma.deal.findMany({
+        where: {
+          status: 'published', sourceTrust: 'authoritative', verificationStatus: 'verified',
+          isOnline: true, expiresAt: { gt: new Date() },
+        },
+        include: { category: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit - page.length,
+      });
+      const onlineItems = onlineRows.map((d) => mapPrismaDeal(d, null));
+      const items = [...page.map(mapNearbyRow), ...onlineItems];
+      const tiersIncludedWithOnline = [...new Set(items.map((d) => d.trustLevel))];
+      return { items, nextCursor, coverage, blend: { radiusMilesUsed: radiusUsed, tiersIncluded: tiersIncludedWithOnline } };
+    }
+
     return {
       items: page.map(mapNearbyRow),
       nextCursor,
