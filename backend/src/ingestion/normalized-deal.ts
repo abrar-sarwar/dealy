@@ -85,12 +85,15 @@ export interface DealProvider {
   verify?(deal: VerifiableDeal): Promise<VerificationResult>;
 }
 
+export type FingerprintInput = Pick<NormalizedDeal,
+  'merchant' | 'title' | 'isOnline' | 'locationTags' | 'latitude' | 'longitude' | 'currentPriceMinor' | 'categorySlug'>;
+
 /**
  * Stable cross-source dedup fingerprint. Intentionally combines several fields
  * (merchant + title + location + price + category) — never title alone — so
  * lookalike titles don't collapse distinct deals.
  */
-export function dealFingerprint(d: NormalizedDeal): string {
+export function dealFingerprint(d: FingerprintInput): string {
   const location = d.isOnline
     ? 'online'
     : (d.locationTags[0] ?? `${d.latitude ?? ''},${d.longitude ?? ''}`);

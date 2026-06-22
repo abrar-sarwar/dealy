@@ -12,6 +12,7 @@ import { LlmExtractor } from './extractors/llm-extractor';
 import { GEOCODER, type Geocoder } from './geocoding/geocoder';
 import { confidenceScore, LOW_GEOCODE_CONFIDENCE, type DealCandidate } from './deal-candidate';
 import type { RawCandidate } from './extractors/deal-extractor';
+import { dealFingerprint } from '../ingestion/normalized-deal';
 
 export interface CrawlRunSummary {
   runId: string; sourceId: string;
@@ -78,7 +79,16 @@ export class CrawlerService {
 
           const score = confidenceScore(candidate);
           const externalId = `crawl-${source.id}-${this.slug(candidate.title)}`;
-          const fingerprint = this.fingerprint(candidate);
+          const fingerprint = dealFingerprint({
+            merchant: candidate.merchant || 'Unknown',
+            title: candidate.title,
+            isOnline: candidate.latitude === null,
+            locationTags: [],
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            currentPriceMinor: candidate.currentPriceMinor,
+            categorySlug: candidate.categorySlug,
+          });
 
           const dupe = await this.prisma.deal.findFirst({
             where: { fingerprint, externalId: { not: externalId } }, select: { id: true },
@@ -146,11 +156,7 @@ export class CrawlerService {
         where: { id: run.id },
         data: { status: 'succeeded', fetched, queued, deduped, failed, finishedAt: new Date() },
       });
-      // Best-effort: update lastCrawledAt on the source — non-fatal if the prisma
-      // fake or a race condition omits this method.
-      try {
-        await this.prisma.crawlSource.update({ where: { id: source.id }, data: { lastCrawledAt: new Date() } });
-      } catch { /* non-fatal */ }
+      await this.prisma.crawlSource.update({ where: { id: source.id }, data: { lastCrawledAt: new Date() } });
       return { runId: run.id, sourceId, status: 'succeeded', fetched, queued, deduped, failed, autoPublished };
     } catch (err) {
       await this.prisma.crawlRun.update({
@@ -162,12 +168,6 @@ export class CrawlerService {
 
   private slug(s: string): string {
     return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
-  }
-  private fingerprint(c: DealCandidate): string {
-    const loc = c.latitude !== null ? `${c.latitude},${c.longitude}` : 'online';
-    return require('node:crypto').createHash('sha1')
-      .update([c.merchant, c.title, loc, String(c.currentPriceMinor ?? ''), c.categorySlug].join('|').toLowerCase())
-      .digest('hex');
   }
   private hash(s: string): number { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
 }

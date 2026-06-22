@@ -11,7 +11,7 @@ const HTML = `<html><head><script type="application/ld+json">
 function makeService(over: Partial<any> = {}) {
   const created: any[] = [];
   const prisma = {
-    crawlSource: { findUniqueOrThrow: async () => ({ id: 's1', url: 'https://x.test', kind: 'restaurant', defaultCategorySlug: 'food', merchantHint: null, enabled: true }) },
+    crawlSource: { findUniqueOrThrow: async () => ({ id: 's1', url: 'https://x.test', kind: 'restaurant', defaultCategorySlug: 'food', merchantHint: null, enabled: true }), update: async () => ({}) },
     crawlRun: { create: async () => ({ id: 'r1' }), update: async () => ({}) },
     crawlFailure: { create: async () => ({}) },
     category: { findMany: async () => [{ id: 'cat-food', slug: 'food' }] },
