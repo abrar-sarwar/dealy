@@ -46,6 +46,7 @@ struct ExploreView: View {
             .sheet(isPresented: $showLocation) {
                 LocationSelectorView()
             }
+            .task { await app.loadStudentDeals() }
         }
     }
 
@@ -134,6 +135,11 @@ struct ExploreView: View {
         let sections = ExploreSections(base: areaDeals)
             .curated(interests: app.interests, campus: app.currentCampus, radius: app.radius)
         return VStack(alignment: .leading, spacing: Spacing.xl) {
+            // Always-available curated student programs (location-independent).
+            StudentPerksSection(deals: app.studentDeals) { deal in
+                app.recordOpened(deal.id)
+                selectedDeal = deal
+            }
             if sections.isEmpty {
                 EmptyStateView(symbol: "map",
                                title: "Nothing here yet",
