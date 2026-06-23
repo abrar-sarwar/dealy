@@ -31,6 +31,14 @@ final class RemoteDealService: DealServicing {
                     as: DealPageDTO.self
                 )
                 return DealPage(items: page.items.map { $0.toDeal() }, nextCursor: page.nextCursor)
+            case .trending:
+                // Cross-campus high-value deals, location-independent (physical or online).
+                let page = try await client.get(
+                    "/v1/feeds/trending",
+                    query: [URLQueryItem(name: "limit", value: "50")],
+                    as: DealPageDTO.self
+                )
+                return DealPage(items: page.items.map { $0.toDeal() }, nextCursor: page.nextCursor)
             }
         } catch {
             // Surface a user-friendly error consistent with the existing UI state.
