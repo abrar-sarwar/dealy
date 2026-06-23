@@ -65,108 +65,55 @@ export class FeedsService {
   ) {}
 
   /**
-   * Nearby deals within radius, tier-ranked (VERIFIED → CURATED → ONLINE),
-   * cursor-paginated. Never returns an empty feed when any tier has inventory
-   * in range. The coverage signal is RETAINED in the response as an honesty
-   * indicator but no longer hard-gates the feed.
+   * Nearby deals within the requested radius, distance+freshness ranked,
+   * cursor-paginated. DENSITY-FIRST: the feed is GATED by coverage. Outside an
+   * enabled, sufficiently-dense zone it returns an honest EMPTY result (carrying
+   * the coverage reason) rather than fabricating distant or online inventory.
+   * Within a qualified zone it returns ONLY authoritative+verified physical
+   * deals, capped to the requested radius (no expansion ladder).
    *
-   * Radius ladder: tries [baseRadius, max(base,25), max(base,50)] and stops
-   * at the first that fills `limit` (or the last). Cursor pages reuse the
-   * radius recorded in the cursor.
+   * Always-available Online / Student / Trending inventory is served by its own
+   * dedicated, location-independent feeds (/feeds/online, /feeds/student,
+   * /feeds/trending) — deliberately NOT blended into nearby, so "deals near me"
+   * stays honest about what's actually nearby.
    */
   async nearby(q: NearbyFeedQuery): Promise<NearbyDealPage> {
-    // Retained honesty signal — no longer gates the feed.
     const coverage = await this.coverage.coverageForPoint(q.lat, q.lng);
+    const baseRadius = q.radiusMiles ?? 10;
+
+    // Density-first gate: there is no honest local inventory to show outside a
+    // qualified zone, so return an empty feed with the coverage reason — never a
+    // distant/online backfill.
+    if (!coverage.qualified) {
+      return {
+        items: [],
+        nextCursor: null,
+        coverage,
+        blend: { radiusMilesUsed: baseRadius, tiersIncluded: [] },
+      };
+    }
 
     const limit = q.limit ?? 20;
-    const baseRadius = q.radiusMiles ?? 10;
     const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
     const cursor = q.cursor ? decodeBlendCursor(q.cursor) : null;
-
     const categoryFilter = q.category
       ? Prisma.sql`AND d.category_id = (SELECT id FROM categories WHERE slug = ${q.category})`
       : Prisma.empty;
 
-    // Ladder: try each radius until limit is filled or we exhaust options.
-    // When a cursor is present, reuse the cursor's radius (don't re-probe).
-    const radii = [baseRadius, Math.max(baseRadius, 25), Math.max(baseRadius, 50)];
-    let rows: NearbyRow[] = [];
-    let radiusUsed = baseRadius;
-
-    for (const radiusMiles of cursor ? [cursor.radius] : radii) {
-      radiusUsed = radiusMiles;
-      rows = await this.queryBlended(
-        center,
-        radiusMiles * METERS_PER_MILE,
-        limit,
-        categoryFilter,
-        cursor,
-      );
-      if (rows.length >= limit || radiusMiles === radii[radii.length - 1]) break;
-    }
+    // Respect the requested radius exactly — no expansion ladder.
+    const rows = await this.queryBlended(center, baseRadius * METERS_PER_MILE, limit, categoryFilter, cursor);
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const last = page.at(-1);
     const nextCursor =
       hasMore && last
-        ? encodeBlendCursor(radiusUsed, Number(last.tier_rank), Number(last.sort_key), last.id)
+        ? encodeBlendCursor(baseRadius, Number(last.tier_rank), Number(last.sort_key), last.id)
         : null;
-
-    // Never-empty online fallback: if physical (verified+curated) inventory did not
-    // fill the page, blend in verified ONLINE deals (rank 2). They carry no geog, so
-    // they are queried separately and appended after the distance-ranked physical set.
-    if (!cursor && page.length < limit) {
-      const onlineRows = await this.prisma.deal.findMany({
-        where: {
-          status: 'published',
-          sourceTrust: 'authoritative',
-          verificationStatus: 'verified',
-          isOnline: true,
-          expiresAt: { gt: new Date() },
-        },
-        include: { category: true },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit - page.length,
-      });
-      const onlineItems = onlineRows.map((d) => mapPrismaDeal(d, null));
-
-      // Also blend in curated, student-only ONLINE programs (national student
-      // perks) so they surface during normal browsing. Curated, never Verified;
-      // their presence never depends on campus/location (location ≠ access).
-      const remaining = limit - page.length - onlineItems.length;
-      const studentItems =
-        remaining > 0
-          ? (
-              await this.prisma.deal.findMany({
-                where: {
-                  status: 'published',
-                  sourceTrust: 'editorial',
-                  moderationStatus: 'approved',
-                  isOnline: true,
-                  isStudentOnly: true,
-                  expiresAt: { gt: new Date() },
-                },
-                include: { category: true },
-                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-                take: remaining,
-              })
-            ).map((d) => mapPrismaDeal(d, null))
-          : [];
-
-      const items = [...page.map(mapNearbyRow), ...onlineItems, ...studentItems];
-      const tiersIncluded = [...new Set(items.map((d) => d.trustLevel))];
-      return { items, nextCursor, coverage, blend: { radiusMilesUsed: radiusUsed, tiersIncluded } };
-    }
 
     const items = page.map(mapNearbyRow);
     const tiersIncluded = [...new Set(items.map((d) => d.trustLevel as FeedTier))];
-    return {
-      items,
-      nextCursor,
-      coverage,
-      blend: { radiusMilesUsed: radiusUsed, tiersIncluded },
-    };
+    return { items, nextCursor, coverage, blend: { radiusMilesUsed: baseRadius, tiersIncluded } };
   }
 
   /**
@@ -223,10 +170,8 @@ export class FeedsService {
           AND d.expires_at > now()
           AND d.geog IS NOT NULL
           AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
-          AND (
-            (d.source_trust = 'authoritative'::source_trust AND d.verification_status = 'verified'::verification_status)
-            OR (d.source_trust = 'editorial'::source_trust AND d.moderation_status = 'approved'::moderation_status)
-          )
+          AND d.source_trust = 'authoritative'::source_trust
+          AND d.verification_status = 'verified'::verification_status
           ${categoryFilter}
       )
       SELECT * FROM candidates

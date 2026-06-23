@@ -7,8 +7,15 @@ const METERS_PER_MILE = 1609.344;
 
 /** Density-first launch threshold (spec §5): a zone qualifies when a typical
  * user there can receive at least this many active, source-verified,
- * category-eligible, physical deals within COVERAGE_RADIUS_MILES. */
-export const COVERAGE_MIN_DEALS = 20;
+ * category-eligible, physical deals within COVERAGE_RADIUS_MILES.
+ *
+ * Production default is 20. Overridable via `COVERAGE_MIN_DEALS` for local dev
+ * (where real inventory is sparse) — the production contract stays 20 unless the
+ * env var is explicitly set. */
+export const COVERAGE_MIN_DEALS = (() => {
+  const raw = Number(process.env.COVERAGE_MIN_DEALS);
+  return Number.isInteger(raw) && raw > 0 ? raw : 20;
+})();
 export const COVERAGE_RADIUS_MILES = 10;
 
 export interface ZoneCoverage {
