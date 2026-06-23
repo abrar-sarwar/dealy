@@ -27,12 +27,20 @@ inventory never qualifies a zone.
   and never affects saved deals or swipe history. Precise coordinates are never
   shown in the UI or sent to analytics.
 - **Radius:** 1–100 miles (default 10). Changing it immediately refreshes Home.
-- **Nearby vs Anywhere:** Nearby returns only **active, source-verified, physical**
-  deals within the radius, ranked by distance + freshness — online deals are never
-  blended in. Anywhere returns verified online-only inventory and needs no
-  location. API routes: `GET /v1/feeds/nearby` (`lat`/`lng`/`radiusMiles`) and
-  `GET /v1/feeds/online`. The **Verified** badge means Dealy recently confirmed
-  the deal with its authoritative source.
+- **Nearby vs Anywhere:** Nearby returns a **never-empty**, tier-ranked blend —
+  VERIFIED physical deals first, then CURATED (crawled + moderator-approved)
+  inventory, then verified online deals as a final fallback. Each tier carries
+  an honest per-tier badge: **Verified** (authoritative source confirmed) vs
+  **Curated** (operator-crawled, moderator-approved). A radius expansion ladder
+  (base → 25 mi → 50 mi) is tried before falling back to online inventory, so
+  the feed is always populated when any inventory exists in range. The
+  `coverage` signal is retained in API responses as an honesty indicator
+  (reflecting the density of authoritative-verified inventory) but no longer
+  hard-gates the feed — "Verified" as a badge remains strictly authoritative-only
+  and is never diluted by curated or online tiers. Anywhere returns verified
+  online-only inventory and needs no location. API routes:
+  `GET /v1/feeds/nearby` (`lat`/`lng`/`radiusMiles`) and
+  `GET /v1/feeds/online`.
 - **Map:** the full interactive deal map is a Dealy+ feature; the free entry is a
   non-interactive preview.
 
@@ -166,12 +174,17 @@ DealyTests/       Model, filter/ranker, AppState, persistence tests
   ranking (interest match, proximity, discount, urgency). It is **not** AI and
   is designed to be replaced by a backend recommender.
 
-## Future backend integration points
+## Backend integration points
 
 Small protocols mark where real services plug in (with focused `TODO`s):
 
 - `DealServicing` → `RemoteDealService` (live) or `MockDealService` (default),
-  selected by `DEALY_API_ENV`.
+  selected by `DEALY_API_ENV`. The live backend now blends **CURATED** (crawled,
+  moderator-approved) inventory into Nearby alongside VERIFIED deals, with honest
+  per-tier badges. Nearby is never-empty: radius expansion and an online fallback
+  ensure inventory is always returned when any tier has matching deals. The
+  `coverage` signal is retained in API responses as an honesty indicator; the
+  "Verified" badge remains strictly authoritative-only.
 - `LocationProviding` → `CoreLocationProvider` (When-In-Use, implemented).
   Nearby is device-location-only — there is no manual city/ZIP entry.
 - `PreferenceStoring` → backend-synced preference store (future).

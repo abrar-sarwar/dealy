@@ -38,7 +38,55 @@ work continues when credentials are absent.
 | Publix | Grocery | 🔴 | No public API. Manual/admin only. |
 | GSU / Georgia Tech / KSU / UGA | Student | 🟠 Manual | Universities don't publish structured deal APIs. Ingest via admin entry, approved RSS/feeds, or business submissions. Collect no unnecessary student PII; verification provider is replaceable and minimizes retained data. |
 
+| **Curated Crawler** | Food / Groceries / Events | ✅ PRODUCTION-INTENDED (no external key) | Operator-curated seed URLs crawled on a schedule. `editorial` source_trust — inventory lands as `draft`/`pending` moderation, **never auto-promoted to verified/authoritative**. Requires explicit admin approve/reject before appearing in feeds. See §Curated Crawler below. |
+
 **Rule:** never fabricate an endpoint, never scrape a prohibited source, never bypass anti-bot. Anything not ✅/🟡-with-approval is **manual/admin ingestion** + the deterministic **fixture provider** for dev/tests.
+
+## Curated Crawler
+
+The crawler is an **`editorial`-trust, production-intended** source for food, grocery, and event deals sourced from operator-curated seed URLs. Unlike the fixture/editorial DEMO providers (which are fixture-gated and never run in production), the crawler is always active in production — it is gated instead by **mandatory moderation**: every crawled deal enters the pipeline as `draft`/`moderationStatus=pending` and only enters the consumer feed after an admin approves it.
+
+### Extraction pipeline
+
+The crawler uses a **hybrid extraction** strategy per page:
+
+1. **`StructuredExtractor`** (primary): parses JSON-LD (`@type Deal/Event/Product/Offer`) and heuristic regex patterns. Fast, deterministic, preferred.
+2. **`LlmExtractor`** (fallback): used only when structured extraction yields zero candidates. Calls **`@anthropic-ai/sdk`** with model **`claude-opus-4-8`**. Strips HTML tags and truncates page text to 12,000 chars before prompting. **No-ops silently when `ANTHROPIC_API_KEY` is absent** — the service initializes without a client and returns an empty candidate list.
+
+Extraction path (`structured` vs `llm`) is recorded on every candidate and factors into the `confidence_score`.
+
+### Geocoding
+
+Address→coordinate resolution is **pluggable**:
+
+- **`NominatimGeocoder`** — default; no key required; queries Nominatim (OSM). Rate-limited; suitable for low-volume seed URLs.
+- **`MapboxGeocoder`** — used automatically when **`GEOCODER_KEY`** is set in the environment; higher accuracy and throughput.
+
+A geocode returning confidence < 0.5 (`LOW_GEOCODE_CONFIDENCE`) is treated as unreliable: the deal is still queued for moderation but **auto-publish is blocked regardless of other thresholds** (moderators can still approve manually).
+
+### Auto-publish env knobs
+
+By default the crawler queues deals as `draft`/`pending` for human review. Conditional auto-publish is available via two optional env vars:
+
+| Env var | Type | Default | Meaning |
+|---|---|---|---|
+| `CRAWLER_AUTOPUBLISH_THRESHOLD` | `integer 1–100` | unset (off) | Minimum `confidence_score` required for auto-publish. When unset, **no deals are ever auto-published**. |
+| `CRAWLER_AUTOPUBLISH_KINDS` | comma-separated `CrawlKind` values | `''` (off) | Allowlist of deal kinds that may be auto-published (e.g. `restaurant,happy_hour`). Empty string = none. |
+
+A deal is auto-published only when ALL of the following are true: `confidence_score >= CRAWLER_AUTOPUBLISH_THRESHOLD`, the source's `kind` is in `CRAWLER_AUTOPUBLISH_KINDS`, and the geocode confidence is `>= LOW_GEOCODE_CONFIDENCE` (≥ 0.5). Auto-published deals still carry `source_trust='editorial'` and must pass moderation to reach the **CURATED** feed tier.
+
+### Seed URL management & robots.txt
+
+v1 relies on **operator-curated seed URLs** registered in the `crawl_sources` table. Each source has a per-source `enabled` flag (default `true`) that can be toggled without a deploy to pause crawling of a specific site. Robots.txt enforcement is a **deferred fast-follow** — v1 does not fetch or parse `robots.txt` automatically; operators are responsible for only seeding URLs from sites that permit crawling.
+
+### CLI
+
+```bash
+cd backend
+pnpm crawl <sourceId|all>   # Crawl one source (by UUID) or all enabled sources
+```
+
+Outputs a JSON summary per source: `{ runId, sourceId, status, fetched, queued, deduped, failed, autoPublished }`.
 
 ## Apple / Firebase account actions owned by the repo owner
 These require the Apple Developer account holder and cannot be done from this repo:
