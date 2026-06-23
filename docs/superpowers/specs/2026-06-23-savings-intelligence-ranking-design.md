@@ -42,11 +42,17 @@ Score is a sum of one dominant savings term plus bounded modifiers:
    `savingsScore = SAVINGS_WEIGHT * (dollars / (dollars + SAVINGS_HALF))`
    where `SAVINGS_HALF ≈ 50` (a $50 saving earns half the max savings weight; $200
    earns ~80%). `SAVINGS_WEIGHT ≈ 100` so savings dominates the modifiers below.
-   - **Unknown dollars** (`savingsAmount == 0`): if `savingsPercentage > 0`, use a
-     percentage proxy `SAVINGS_WEIGHT * (pct/100) * PCT_PROXY` (`PCT_PROXY ≈ 0.6`,
-     so a strong % reads as a solid-but-not-top saving). If neither exists, a
-     **neutral baseline** `SAVINGS_WEIGHT * BASELINE_FRACTION` (`≈ 0.35`) so
-     price-0 student programs sit mid-pack and compete on other signals.
+   - **Unknown dollars** (`savingsAmount == 0`): a **neutral baseline**
+     `SAVINGS_WEIGHT * BASELINE_FRACTION` (`≈ 0.20`) so price-0 student programs
+     sit mid-pack and compete on other signals.
+     - **Correction (found during planning):** the originally-intended
+       percentage-proxy branch is **unreachable** in the real `Deal` model —
+       `savingsPercentage` is *derived from price*, so when `originalPrice == 0`
+       both `savingsAmount` and `savingsPercentage` are 0 (there is no
+       percentage-only signal independent of a dollar amount). The honest model
+       is therefore **dollars when `savingsAmount > 0`, else neutral baseline**.
+       `reasons` still shows a "Strong N% discount" line for the (price-bearing)
+       40%+ case, but ranking does not use a separate percentage proxy.
 2. **Distance modifier (bounded, ±).** Online → `+ONLINE_REDEEMABLE` (small
    positive; always redeemable). Physical in-range → up to `+PROXIMITY_MAX`
    scaled by closeness. Physical out-of-range → `−OUT_OF_RANGE_PENALTY`
