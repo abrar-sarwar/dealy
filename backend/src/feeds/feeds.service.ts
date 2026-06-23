@@ -112,7 +112,6 @@ export class FeedsService {
       hasMore && last
         ? encodeBlendCursor(radiusUsed, Number(last.tier_rank), Number(last.sort_key), last.id)
         : null;
-    const tiersIncluded = [...new Set(page.map((r) => r.feed_tier as FeedTier))];
 
     // Never-empty online fallback: if physical (verified+curated) inventory did not
     // fill the page, blend in verified ONLINE deals (rank 2). They carry no geog, so
@@ -129,12 +128,14 @@ export class FeedsService {
       });
       const onlineItems = onlineRows.map((d) => mapPrismaDeal(d, null));
       const items = [...page.map(mapNearbyRow), ...onlineItems];
-      const tiersIncludedWithOnline = [...new Set(items.map((d) => d.trustLevel))];
-      return { items, nextCursor, coverage, blend: { radiusMilesUsed: radiusUsed, tiersIncluded: tiersIncludedWithOnline } };
+      const tiersIncluded = [...new Set(items.map((d) => d.trustLevel))];
+      return { items, nextCursor, coverage, blend: { radiusMilesUsed: radiusUsed, tiersIncluded } };
     }
 
+    const items = page.map(mapNearbyRow);
+    const tiersIncluded = [...new Set(items.map((d) => d.trustLevel as FeedTier))];
     return {
-      items: page.map(mapNearbyRow),
+      items,
       nextCursor,
       coverage,
       blend: { radiusMilesUsed: radiusUsed, tiersIncluded },

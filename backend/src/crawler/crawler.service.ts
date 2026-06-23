@@ -79,11 +79,12 @@ export class CrawlerService {
 
           const score = confidenceScore(candidate);
           const externalId = `crawl-${source.id}-${this.slug(candidate.title)}`;
+          const locationTags = candidate.latitude !== null ? [source.zoneSlug ?? 'atlanta'] : [];
           const fingerprint = dealFingerprint({
             merchant: candidate.merchant || 'Unknown',
             title: candidate.title,
             isOnline: candidate.latitude === null,
-            locationTags: [],
+            locationTags,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
             currentPriceMinor: candidate.currentPriceMinor,
@@ -117,7 +118,7 @@ export class CrawlerService {
             destinationUrl: candidate.sourceUrl,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
-            locationTags: [],
+            locationTags,
             visualSeed: Math.abs(this.hash(externalId)) % 1000,
             status: autoOk ? 'published' : 'draft',
             moderationStatus: autoOk ? 'approved' : 'pending',

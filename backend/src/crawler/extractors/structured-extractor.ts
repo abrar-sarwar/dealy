@@ -1,7 +1,7 @@
 import type { DealExtractor, ExtractContext, ExtractionResult, RawCandidate } from './deal-extractor';
 
-function priceToMinor(price?: string | number): bigint | null {
-  if (price === undefined) return null;
+function priceToMinor(price?: string | number | null): bigint | null {
+  if (price == null) return null;
   const n = typeof price === 'number' ? price : Number(String(price).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? BigInt(Math.round(n * 100)) : null;
 }
