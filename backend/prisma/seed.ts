@@ -31,6 +31,56 @@ const campuses = [
   { slug: 'atlanta', schoolSlug: null, name: 'Metro Atlanta', shortName: 'Atlanta', cityContext: 'Metro Atlanta', latitude: 33.749, longitude: -84.388, defaultRadius: 15, locationTags: ['atlanta', 'metro'] },
 ];
 
+// Real Atlanta crawl sources for the curated pipeline. Seeded DISABLED: each URL
+// must be verified live + crawlable + permitted by the operator before enabling
+// (the crawler hits the real page on `pnpm crawl`). `zoneSlug: 'atlanta'` makes
+// crawled physical deals carry locationTags ['atlanta'], matching the ingestion
+// providers so cross-source dedup (dealFingerprint) lines up. Replace/extend this
+// list freely — upsert keys on `url`, so re-seeding is idempotent.
+const crawlSources = [
+  // Restaurants (food)
+  { url: 'https://thevarsity.com/menu/', kind: 'restaurant' as const, merchantHint: 'The Varsity', defaultCategorySlug: 'food', crawlIntervalHours: 168 },
+  { url: 'https://www.marymacs.com/menus/', kind: 'restaurant' as const, merchantHint: "Mary Mac's Tea Room", defaultCategorySlug: 'food', crawlIntervalHours: 168 },
+  { url: 'https://www.foxbrosbarbq.com/menu', kind: 'restaurant' as const, merchantHint: 'Fox Bros Bar-B-Q', defaultCategorySlug: 'food', crawlIntervalHours: 168 },
+  // Happy hour (food)
+  { url: 'https://poncecitymarket.com/restaurants/', kind: 'happy_hour' as const, merchantHint: 'Ponce City Market', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
+  { url: 'https://batteryatl.com/dining/', kind: 'happy_hour' as const, merchantHint: 'The Battery Atlanta', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
+  // Student discounts (food)
+  { url: 'https://dining.gsu.edu/specials/', kind: 'student_discount' as const, merchantHint: 'Georgia State Dining', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
+  { url: 'https://techdining.gatech.edu/specials/', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
+  // Grocery circulars (groceries) — weekly cadence
+  { url: 'https://www.publix.com/savings/weekly-ad', kind: 'grocery_circular' as const, merchantHint: 'Publix', defaultCategorySlug: 'groceries', crawlIntervalHours: 168 },
+  { url: 'https://www.kroger.com/weeklyad', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', crawlIntervalHours: 168 },
+  // Local promos (entertainment)
+  { url: 'https://beltline.org/events/', kind: 'local_promo' as const, merchantHint: 'Atlanta BeltLine', defaultCategorySlug: 'entertainment', crawlIntervalHours: 72 },
+  { url: 'https://discoveratlanta.com/things-to-do/deals/', kind: 'local_promo' as const, merchantHint: 'Discover Atlanta', defaultCategorySlug: 'entertainment', crawlIntervalHours: 72 },
+];
+
+async function seedCrawlSources(): Promise<void> {
+  for (const s of crawlSources) {
+    await prisma.crawlSource.upsert({
+      where: { url: s.url },
+      // Update curatable metadata only — never silently re-enable a source the
+      // operator has turned on/off, and don't reset crawl bookkeeping.
+      update: {
+        kind: s.kind,
+        merchantHint: s.merchantHint,
+        defaultCategorySlug: s.defaultCategorySlug,
+        crawlIntervalHours: s.crawlIntervalHours,
+      },
+      create: {
+        url: s.url,
+        kind: s.kind,
+        merchantHint: s.merchantHint,
+        defaultCategorySlug: s.defaultCategorySlug,
+        zoneSlug: 'atlanta',
+        crawlIntervalHours: s.crawlIntervalHours,
+        enabled: false, // operator verifies the URL, then flips this on
+      },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   for (const c of categories) {
     await prisma.category.upsert({
@@ -61,15 +111,19 @@ async function main(): Promise<void> {
   }
 
   await seedDeals();
+  await seedCrawlSources();
 
-  const [cat, sch, cam, deal] = await Promise.all([
+  const [cat, sch, cam, deal, crawl] = await Promise.all([
     prisma.category.count(),
     prisma.school.count(),
     prisma.campus.count(),
     prisma.deal.count(),
+    prisma.crawlSource.count(),
   ]);
   // eslint-disable-next-line no-console
-  console.log(`Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals`);
+  console.log(
+    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources`,
+  );
 }
 
 // Deterministic mock deals scattered around each campus (idempotent by externalId).
