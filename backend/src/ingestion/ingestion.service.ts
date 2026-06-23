@@ -211,6 +211,7 @@ export class IngestionService {
       isStudentOnly: rec.isStudentOnly,
       couponCode: rec.couponCode,
       destinationUrl: rec.destinationUrl,
+      redemptionBrand: rec.redemptionBrand,
       latitude: rec.latitude,
       longitude: rec.longitude,
       locationTags: rec.locationTags,

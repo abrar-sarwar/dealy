@@ -97,6 +97,7 @@ export class FixtureProvider implements DealProvider {
       isStudentOnly: i % 2 === 0,
       couponCode: null,
       destinationUrl: null,
+      redemptionBrand: null,
       latitude: s.lat,
       longitude: s.lng,
       locationTags: ['atlanta'],
