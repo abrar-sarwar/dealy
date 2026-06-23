@@ -47,10 +47,15 @@ final class AppState {
     private let locationProvider: LocationProviding
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
+    /// Finds physical stores for an online deal's redemption brand (MapKit).
+    let nearbyStores: NearbyStoreSearching
 
     // MARK: State
     private(set) var persisted: PersistedState
     private(set) var allDeals: [Deal] = []
+    /// Curated national student programs for the Student Perks section. Loaded
+    /// independently of the main deck; always available regardless of location.
+    private(set) var studentDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -64,9 +69,11 @@ final class AppState {
          dealService: DealServicing = MockDealService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
-         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()) {
+         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder(),
+         nearbyStores: NearbyStoreSearching = MockNearbyStoresService()) {
         self.store = store
         self.dealService = dealService
+        self.nearbyStores = nearbyStores
         self.locationProvider = locationProvider
         self.redemptionHandler = redemptionHandler
         self.interactionRecorder = interactionRecorder
@@ -99,6 +106,21 @@ final class AppState {
     }
 
     func deal(id: String) -> Deal? { dealsByID[id] }
+
+    /// Load curated national student programs for the Student Perks section.
+    /// Independent of the main deck; failures leave the section empty (the UI
+    /// shows an empty state) and never block the app. Loaded programs are merged
+    /// into `dealsByID` so detail/save/watch lookups resolve them.
+    @MainActor
+    func loadStudentDeals() async {
+        do {
+            let page = try await dealService.fetchDeals(for: .student)
+            studentDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            studentDeals = []
+        }
+    }
 
     // MARK: - Discovery (atomic updates)
 

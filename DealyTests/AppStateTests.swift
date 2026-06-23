@@ -497,6 +497,17 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(app.swipedDealIDs.contains("food-wings"))
     }
 
+    // MARK: - Student Perks
+
+    func testLoadStudentDealsPopulatesAndResolves() async {
+        let app = makeApp()
+        await app.loadStudentDeals()
+        XCTAssertFalse(app.studentDeals.isEmpty)
+        XCTAssertTrue(app.studentDeals.allSatisfy { $0.isStudentOnly })
+        let id = app.studentDeals[0].id
+        XCTAssertNotNil(app.deal(id: id))
+    }
+
     // MARK: - Campus assignment & manual override
 
     func testCampusAssignmentReflectsDeviceCenterOnCampus() {
@@ -637,6 +648,7 @@ final class ControllableDealService: DealServicing {
         switch request {
         case .nearby(let preference): return preference.center.displayName
         case .anywhere: return "anywhere"
+        case .student: return "student"
         }
     }
 }
