@@ -80,4 +80,14 @@ final class DealDTOMappingTests: XCTestCase {
         let verified = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: verifiedJSON)
         XCTAssertTrue(verified.items[0].toDeal().verified)
     }
+
+    func testDecodesRedemptionBrandWhenPresentAndAbsent() throws {
+        let withBrand = #"{"items":[{"id":"s1","title":"Apple Education","merchant":"Apple","category":"tech","currentPrice":0,"originalPrice":0,"currency":"USD","dealScore":80,"isOnline":true,"isStudentOnly":true,"redemptionBrand":"Apple Store","shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":"https://www.apple.com/us-edu/store","latitude":null,"longitude":null,"locationTags":["online","nationwide"],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: withBrand)
+        XCTAssertEqual(page.items[0].toDeal().redemptionBrand, "Apple Store")
+
+        let withoutBrand = #"{"items":[{"id":"s2","title":"Spotify","merchant":"Spotify","category":"entertainment","currentPrice":0,"originalPrice":0,"currency":"USD","dealScore":80,"isOnline":true,"isStudentOnly":true,"shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":"https://www.spotify.com/us/student/","latitude":null,"longitude":null,"locationTags":["online","nationwide"],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let page2 = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: withoutBrand)
+        XCTAssertNil(page2.items[0].toDeal().redemptionBrand)
+    }
 }

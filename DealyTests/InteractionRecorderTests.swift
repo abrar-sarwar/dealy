@@ -22,10 +22,20 @@ final class InteractionRecorderTests: XCTestCase {
             RemoteInteractionRecorder.route(for: .redemptionClicked(dealID: "d1")).path,
             "/v1/deals/d1/clicks"
         )
-        XCTAssertEqual(
-            RemoteInteractionRecorder.route(for: .markedUsed(dealID: "d1")).path,
-            "/v1/deals/d1/redemptions"
-        )
+        let redemption = RemoteInteractionRecorder.route(for: .markedUsed(
+            dealID: "d1", savingsAmount: 199.00, campusID: "gt", inventoryClass: "national"))
+        XCTAssertEqual(redemption.path, "/v1/deals/d1/redemptions")
+        XCTAssertEqual(redemption.body["savings_amount"] as? String, "199")
+        XCTAssertEqual(redemption.body["campus_id"] as? String, "gt")
+        XCTAssertEqual(redemption.body["inventory_class"] as? String, "national")
+    }
+
+    func testRedemptionWithoutCampusOmitsCampusID() {
+        let route = RemoteInteractionRecorder.route(for: .markedUsed(
+            dealID: "d1", savingsAmount: 12.50, campusID: nil, inventoryClass: "online"))
+        XCTAssertNil(route.body["campus_id"])
+        XCTAssertEqual(route.body["savings_amount"] as? String, "12.5")
+        XCTAssertEqual(route.body["inventory_class"] as? String, "online")
     }
 
     func testNoPreciseCoordinatesInAnyPayload() {
@@ -34,7 +44,7 @@ final class InteractionRecorderTests: XCTestCase {
             .opened(dealID: "d"),
             .swiped(dealID: "d", direction: .left),
             .redemptionClicked(dealID: "d"),
-            .markedUsed(dealID: "d"),
+            .markedUsed(dealID: "d", savingsAmount: 10, campusID: "gt", inventoryClass: "local"),
         ]
         for event in events {
             let body = RemoteInteractionRecorder.route(for: event).body

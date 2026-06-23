@@ -222,6 +222,7 @@ model Deal {
   isStudentOnly       Boolean          @default(false) @map("is_student_only")
   couponCode          String?          @map("coupon_code")
   destinationUrl      String?          @map("destination_url")
+  redemptionBrand     String?          @map("redemption_brand")
   latitude            Float?
   longitude           Float?
   geog                Unsupported("geography(Point, 4326)")?

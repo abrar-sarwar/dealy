@@ -135,6 +135,7 @@ export class TicketmasterProvider implements DealProvider {
       isStudentOnly: false,
       couponCode: null,
       destinationUrl: e.url ?? null,
+      redemptionBrand: null,
       latitude: lat,
       longitude: lng,
       locationTags: venue?.city?.name ? [venue.city.name.toLowerCase()] : ['atlanta'],

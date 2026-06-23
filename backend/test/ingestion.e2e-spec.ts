@@ -49,6 +49,7 @@ function authoritativeDeal(over: Partial<NormalizedDeal> = {}): NormalizedDeal {
     isStudentOnly: false,
     couponCode: null,
     destinationUrl: 'https://www.ticketmaster.com/event/tm-1',
+    redemptionBrand: null,
     latitude: 33.757,
     longitude: -84.396,
     locationTags: ['atlanta'],

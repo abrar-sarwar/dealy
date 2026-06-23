@@ -61,6 +61,7 @@ export class EditorialProvider implements DealProvider {
       isStudentOnly: false,
       couponCode: null,
       destinationUrl: d.sourceUrl,
+      redemptionBrand: null,
       latitude: d.lat,
       longitude: d.lng,
       locationTags: ['atlanta'],

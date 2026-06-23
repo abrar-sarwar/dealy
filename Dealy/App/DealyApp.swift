@@ -30,7 +30,8 @@ struct DealyApp: App {
         _appState = State(initialValue: AppState(
             dealService: service,
             locationProvider: CoreLocationProvider(),
-            interactionRecorder: recorder
+            interactionRecorder: recorder,
+            nearbyStores: MapKitNearbyStoresService()
         ))
     }
 

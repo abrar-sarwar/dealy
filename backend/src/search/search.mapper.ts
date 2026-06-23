@@ -106,6 +106,10 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     terms: doc.terms,
     couponCode: doc.couponCode,
     destinationUrl: doc.destinationUrl,
+    // Search results don't drive the nearby-redemption finder; not indexed yet.
+    redemptionBrand: null,
+    // Trending is computed for feed surfaces, not the search index.
+    isTrending: false,
     latitude: doc.latitude,
     longitude: doc.longitude,
     locationTags: doc.locationTags,

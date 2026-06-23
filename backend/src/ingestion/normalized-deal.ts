@@ -28,6 +28,8 @@ export interface NormalizedDeal {
   isStudentOnly: boolean;
   couponCode: string | null;
   destinationUrl: string | null;
+  /** Brand to search for physical redemption (e.g. "Apple Store"); null = online-only. */
+  redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
   locationTags: string[];
@@ -85,8 +87,17 @@ export interface DealProvider {
   verify?(deal: VerifiableDeal): Promise<VerificationResult>;
 }
 
-export type FingerprintInput = Pick<NormalizedDeal,
-  'merchant' | 'title' | 'isOnline' | 'locationTags' | 'latitude' | 'longitude' | 'currentPriceMinor' | 'categorySlug'>;
+export type FingerprintInput = Pick<
+  NormalizedDeal,
+  | 'merchant'
+  | 'title'
+  | 'isOnline'
+  | 'locationTags'
+  | 'latitude'
+  | 'longitude'
+  | 'currentPriceMinor'
+  | 'categorySlug'
+>;
 
 /**
  * Stable cross-source dedup fingerprint. Intentionally combines several fields

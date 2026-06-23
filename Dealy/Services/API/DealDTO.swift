@@ -30,11 +30,14 @@ struct DealDTO: Decodable {
     let verified: Bool?
     let isOnline: Bool
     let isStudentOnly: Bool
+    /// First-class TrendingCampusDeals signal; absent on older payloads → false.
+    let isTrending: Bool?
     let shortDescription: String
     let detailedDescription: String
     let terms: String
     let couponCode: String?
     let destinationUrl: String?
+    let redemptionBrand: String?
     let latitude: Double?
     let longitude: Double?
     let locationTags: [String]
@@ -66,7 +69,10 @@ struct DealDTO: Decodable {
             longitude: longitude,
             visualSeed: visualSeed,
             publishedAt: publishedAt,
-            verified: verified ?? false
+            verified: verified ?? false,
+            isStudentOnly: isStudentOnly,
+            isTrending: isTrending ?? false,
+            redemptionBrand: redemptionBrand
         )
     }
 }

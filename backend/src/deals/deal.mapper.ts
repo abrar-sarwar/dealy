@@ -8,6 +8,30 @@ function minorToDollars(minor: bigint | null): number {
   return Number(minor) / 100;
 }
 
+/** Hours within which an offer counts as "ending soon" for trending. */
+const TRENDING_URGENCY_HOURS = 48;
+/** Minimum percent off for a non-urgent deal to trend. */
+const TRENDING_MIN_PERCENT = 50;
+
+/**
+ * A deal trends (is featured cross-campus to every supported campus) when it is
+ * authoritative + verified AND exceptional: a strong discount OR ending soon.
+ * Pure + deterministic; derived at map time, never stored.
+ */
+export function deriveTrending(input: {
+  sourceTrust: string;
+  verificationStatus: string;
+  savingsPercentage: number;
+  expiresAt: Date;
+  now?: Date;
+}): boolean {
+  if (input.sourceTrust !== 'authoritative' || input.verificationStatus !== 'verified') return false;
+  const now = input.now ?? new Date();
+  const msToExpiry = input.expiresAt.getTime() - now.getTime();
+  const endingSoon = msToExpiry > 0 && msToExpiry <= TRENDING_URGENCY_HOURS * 3600 * 1000;
+  return input.savingsPercentage >= TRENDING_MIN_PERCENT || endingSoon;
+}
+
 /** Normalized inputs shared by the Prisma-row and raw-SQL-row mappers. */
 interface NormalizedDeal {
   id: string;
@@ -25,6 +49,7 @@ interface NormalizedDeal {
   isStudentOnly: boolean;
   couponCode: string | null;
   destinationUrl: string | null;
+  redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
   locationTags: string[];
@@ -68,6 +93,7 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     terms: n.terms,
     couponCode: n.couponCode,
     destinationUrl: n.destinationUrl,
+    redemptionBrand: n.redemptionBrand,
     latitude: n.latitude,
     longitude: n.longitude,
     locationTags: n.locationTags,
@@ -83,6 +109,12 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
       isOnline: n.isOnline,
     }),
     confidenceScore: n.confidenceScore,
+    isTrending: deriveTrending({
+      sourceTrust: n.sourceTrust,
+      verificationStatus: n.verificationStatus,
+      savingsPercentage,
+      expiresAt: n.expiresAt,
+    }),
   };
 }
 
@@ -105,6 +137,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       isStudentOnly: deal.isStudentOnly,
       couponCode: deal.couponCode,
       destinationUrl: deal.destinationUrl,
+      redemptionBrand: deal.redemptionBrand,
       latitude: deal.latitude,
       longitude: deal.longitude,
       locationTags: deal.locationTags,
@@ -140,6 +173,7 @@ export interface NearbyRow {
   is_student_only: boolean;
   coupon_code: string | null;
   destination_url: string | null;
+  redemption_brand: string | null;
   latitude: number | null;
   longitude: number | null;
   location_tags: string[];
@@ -183,6 +217,7 @@ export function mapNearbyRow(row: NearbyRow) {
       isStudentOnly: row.is_student_only,
       couponCode: row.coupon_code,
       destinationUrl: row.destination_url,
+      redemptionBrand: row.redemption_brand,
       latitude: row.latitude,
       longitude: row.longitude,
       locationTags: row.location_tags,

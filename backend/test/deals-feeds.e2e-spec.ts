@@ -3,7 +3,11 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { seedAuthoritativeNearby, seedAuthoritativeOnline } from './helpers';
+import {
+  seedAuthoritativeNearby,
+  seedAuthoritativeOnline,
+  seedCuratedStudentOnline,
+} from './helpers';
 
 // Georgia State campus center. Feeds now require AUTHORITATIVE inventory, so the
 // suite seeds its own authoritative deals here (seed data is non-authoritative).
@@ -58,6 +62,11 @@ describe('Deals + Feeds (e2e, public)', () => {
       lng: REMOTE.lng,
     });
     await seedAuthoritativeOnline(prisma, { source: 'e2e-feeds', count: 4 });
+    await seedCuratedStudentOnline(prisma, {
+      source: 'e2e-feeds',
+      count: 1,
+      redemptionBrand: 'Apple Store',
+    });
   });
 
   afterAll(async () => {
@@ -156,6 +165,48 @@ describe('Deals + Feeds (e2e, public)', () => {
     expect(body.items.length).toBeGreaterThan(0);
     expect(body.items.every((deal) => deal.isOnline)).toBe(true);
     expect(body.items.every((deal) => deal.distanceMiles === null)).toBe(true);
+  });
+
+  it('GET /v1/feeds/student returns only curated student-online deals with redemptionBrand', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/feeds/student?limit=50' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<
+        DealItem & { isStudentOnly: boolean; trustLevel: string; redemptionBrand: string | null }
+      >;
+    };
+    expect(body.items.length).toBeGreaterThanOrEqual(1);
+    for (const it of body.items) {
+      expect(it.isOnline).toBe(true);
+      expect(it.isStudentOnly).toBe(true);
+      expect(it.trustLevel).toBe('curated');
+      expect(it.verified).toBe(false);
+    }
+    expect(body.items.some((it) => it.redemptionBrand === 'Apple Store')).toBe(true);
+  });
+
+  it('GET /v1/feeds/online still excludes curated student deals (authoritative only)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=50' });
+    const body = res.json() as { items: Array<{ trustLevel: string }> };
+    expect(body.items.every((it) => it.trustLevel !== 'curated')).toBe(true);
+  });
+
+  it('GET /v1/feeds/trending returns high-value verified deals regardless of location', async () => {
+    const far = new Date(Date.now() + 30 * 24 * 3600 * 1000); // beyond the 48h urgency window
+    const trendingId = await makeDeal({
+      currentPriceMinor: 2000n, originalPriceMinor: 5000n, // 60% off
+      latitude: 34.0, longitude: -84.58, locationTags: ['Kennesaw'], expiresAt: far,
+    });
+    const dullId = await makeDeal({
+      currentPriceMinor: 4500n, originalPriceMinor: 5000n, // 10% off, not urgent
+      latitude: 33.7531, longitude: -84.3857, expiresAt: far,
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/feeds/trending?limit=50' });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{ id: string; isTrending: boolean }>;
+    expect(items.every((d) => d.isTrending)).toBe(true);
+    expect(items.some((d) => d.id === trendingId)).toBe(true);  // far, high-value → featured
+    expect(items.some((d) => d.id === dullId)).toBe(false);     // low-value → excluded
   });
 
   it('paginates online deals without overlap', async () => {

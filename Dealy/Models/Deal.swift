@@ -28,6 +28,17 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Server-controlled trust signal: Dealy recently confirmed this deal through
     /// its authoritative source. Never set or trusted from the client.
     var verified: Bool = false
+    /// Student-exclusive offer (e.g. an education/student program). Drives the
+    /// `.national` inventory class for online deals. Defaults false.
+    var isStudentOnly: Bool = false
+    /// First-class TrendingCampusDeals slot: a high-value promotion surfaced
+    /// across all supported campuses regardless of which campus it is near.
+    /// Server-controlled; defaults false. The selection logic that sets this is
+    /// a follow-on sub-project — this is the slot, not fabricated data.
+    var isTrending: Bool = false
+    /// Brand to search for physical redemption of an online program (e.g.
+    /// "Apple Store"); nil = online-only. Drives the "Find Nearby Stores" finder.
+    var redemptionBrand: String? = nil
 
     // MARK: Computed money
 

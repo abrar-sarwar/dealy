@@ -22,6 +22,7 @@ function deal(overrides: Partial<NormalizedDeal> = {}): NormalizedDeal {
     isStudentOnly: false,
     couponCode: null,
     destinationUrl: null,
+    redemptionBrand: null,
     latitude: 33.75,
     longitude: -84.39,
     locationTags: ['atlanta'],

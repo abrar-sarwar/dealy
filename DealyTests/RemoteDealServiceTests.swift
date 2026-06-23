@@ -98,6 +98,17 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertEqual(page.coverage?.qualified, true)
     }
 
+    func testTrendingRoutesToTrendingFeed() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { path in
+            XCTAssertEqual(path, "/v1/feeds/trending")
+            return Self.page(ids: ["t1", "t2"], online: false)
+        }
+        let service = RemoteDealService(client: Self.stubbedClient())
+        let page = try await service.fetchDeals(for: .trending)
+        XCTAssertEqual(page.items.map(\.id), ["t1", "t2"])
+    }
+
     // MARK: Helpers
 
     private static func stubbedClient() -> APIClient {

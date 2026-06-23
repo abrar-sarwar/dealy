@@ -144,3 +144,41 @@ describe('VerificationService.verifyProvider — run finalization on failure', (
     expect(updateCalls[0].finishedAt).toBeInstanceOf(Date);
   });
 });
+
+describe('checkCuratedLinks (link liveness — flag, never archive)', () => {
+  function makeService(deal: { id: string; destinationUrl: string }) {
+    const updates: Array<{ where: any; data: any }> = [];
+    const prisma: any = {
+      deal: {
+        findMany: async () => [deal],
+        update: async (args: any) => {
+          updates.push(args);
+          return {};
+        },
+      },
+    };
+    const registry: any = { get: () => ({ trust: 'editorial', name: 'student-programs' }) };
+    const search: any = { index: async () => {} };
+    const service = new VerificationService(prisma, registry, search);
+    return { service, updates };
+  }
+
+  it('flags a dead link without archiving and never marks verified', async () => {
+    const { service, updates } = makeService({ id: 'd1', destinationUrl: 'https://dead.example' });
+    const failing = async () => ({ ok: false, status: 500 });
+    const res = await service.checkCuratedLinks(new Date(), failing);
+    expect(res.flagged).toBe(1);
+    const data = updates[0].data;
+    expect(data.verificationFailureReason).toBeTruthy();
+    expect(data.status).toBeUndefined(); // not archived
+    expect(data.verificationStatus).toBeUndefined(); // never promoted to verified
+  });
+
+  it('clears the failure reason for a healthy link', async () => {
+    const { service, updates } = makeService({ id: 'd2', destinationUrl: 'https://ok.example' });
+    const healthy = async () => ({ ok: true, status: 200 });
+    const res = await service.checkCuratedLinks(new Date(), healthy);
+    expect(res.flagged).toBe(0);
+    expect(updates[0].data.verificationFailureReason).toBeNull();
+  });
+});

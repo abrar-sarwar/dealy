@@ -25,11 +25,16 @@ export interface DealDto {
   confidenceScore: number | null;
   isOnline: boolean;
   isStudentOnly: boolean;
+  /** Derived: an exceptional (high-value or urgent) verified deal, featured
+   * across all campuses. Computed at map time; never stored. */
+  isTrending: boolean;
   shortDescription: string;
   detailedDescription: string;
   terms: string;
   couponCode: string | null;
   destinationUrl: string | null;
+  /** Brand to search for physical redemption (e.g. "Apple Store"); null = online-only. */
+  redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
   locationTags: string[];

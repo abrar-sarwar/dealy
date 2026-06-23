@@ -27,12 +27,29 @@ final class MockDealService: DealServicing {
         }
 
         let all = MockDeals.dataset(reference: reference)
+
+        // Student Perks: curated national programs (the offline/preview double).
+        // Curated, so not marked verified.
+        if case .student = request {
+            let students = all.filter { $0.isStudentOnly }
+            return DealPage(items: students, nextCursor: nil)
+        }
+
+        // Cross-campus trending: high-value deals, marked trending (offline double).
+        if case .trending = request {
+            let trending = all.filter { $0.savingsPercentage >= 50 }
+                .map { deal -> Deal in var d = deal; d.isTrending = true; d.verified = true; return d }
+            return DealPage(items: trending, nextCursor: nil)
+        }
+
         // Mirror the production contract: return already-eligible inventory so
         // view models never re-apply location filtering.
         let preference: DiscoveryPreference
         switch request {
         case .nearby(let p): preference = p
         case .anywhere: preference = .default.switching(to: .anywhere)
+        case .student: preference = .default.switching(to: .anywhere) // handled by the early return above
+        case .trending: preference = .default.switching(to: .anywhere) // handled by the early return above
         }
         // Mock inventory is curated/trusted, so it stands in for verified deals.
         let items = DealFilter.byDiscovery(all, preference: preference, reference: reference)

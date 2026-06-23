@@ -30,6 +30,13 @@ export class FeedsController {
     return this.feeds.online(query);
   }
 
+  @Public()
+  @Get('student')
+  @ApiOperation({ summary: 'Curated national student programs, newest first (cursor paginated)' })
+  student(@Query() query: OnlineFeedQuery) {
+    return this.feeds.student(query);
+  }
+
   @ApiBearerAuth('supabase')
   @Get('recommended')
   @ApiOperation({ summary: 'Personalized, explainable recommendations (with reasons)' })
@@ -39,8 +46,8 @@ export class FeedsController {
 
   @Public()
   @Get('trending')
-  @ApiOperation({ summary: 'Trending deals by recent popularity' })
-  trending(@Query() q: FeedPageQuery) {
-    return this.recs.trending(q.limit ?? 20);
+  @ApiOperation({ summary: 'Cross-campus trending deals (high-value/urgent, location-independent)' })
+  trending(@Query() query: OnlineFeedQuery) {
+    return this.feeds.trending(query);
   }
 }

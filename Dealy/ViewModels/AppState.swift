@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import Observation
 
@@ -17,7 +18,10 @@ enum DealInteractionEvent: Equatable {
     case opened(dealID: String)
     case swiped(dealID: String, direction: SwipeDirection)
     case redemptionClicked(dealID: String)
-    case markedUsed(dealID: String)
+    /// Realized savings — the primary KPI boundary. Carries the dollar amount
+    /// saved, the assigned campus (if any), and the deal's inventory class so the
+    /// backend can aggregate total dollars saved by students.
+    case markedUsed(dealID: String, savingsAmount: Decimal, campusID: String?, inventoryClass: String)
 }
 
 /// Sink for interaction events. The shipping default is a no-op until
@@ -43,10 +47,18 @@ final class AppState {
     private let locationProvider: LocationProviding
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
+    /// Finds physical stores for an online deal's redemption brand (MapKit).
+    let nearbyStores: NearbyStoreSearching
 
     // MARK: State
     private(set) var persisted: PersistedState
     private(set) var allDeals: [Deal] = []
+    /// Curated national student programs for the Student Perks section. Loaded
+    /// independently of the main deck; always available regardless of location.
+    private(set) var studentDeals: [Deal] = []
+    /// Cross-campus trending deals (high-value/urgent), featured regardless of
+    /// location. Loaded independently of the main deck.
+    private(set) var trendingDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -60,9 +72,11 @@ final class AppState {
          dealService: DealServicing = MockDealService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
-         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()) {
+         interactionRecorder: DealInteractionRecording = NoopInteractionRecorder(),
+         nearbyStores: NearbyStoreSearching = MockNearbyStoresService()) {
         self.store = store
         self.dealService = dealService
+        self.nearbyStores = nearbyStores
         self.locationProvider = locationProvider
         self.redemptionHandler = redemptionHandler
         self.interactionRecorder = interactionRecorder
@@ -95,6 +109,35 @@ final class AppState {
     }
 
     func deal(id: String) -> Deal? { dealsByID[id] }
+
+    /// Load curated national student programs for the Student Perks section.
+    /// Independent of the main deck; failures leave the section empty (the UI
+    /// shows an empty state) and never block the app. Loaded programs are merged
+    /// into `dealsByID` so detail/save/watch lookups resolve them.
+    @MainActor
+    func loadStudentDeals() async {
+        do {
+            let page = try await dealService.fetchDeals(for: .student)
+            studentDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            studentDeals = []
+        }
+    }
+
+    /// Load cross-campus trending deals for the Trending section. Independent of
+    /// the main deck; failures leave the section empty and never block the app.
+    /// Loaded deals are merged into `dealsByID` so detail/save/watch resolve them.
+    @MainActor
+    func loadTrendingDeals() async {
+        do {
+            let page = try await dealService.fetchDeals(for: .trending)
+            trendingDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            trendingDeals = []
+        }
+    }
 
     // MARK: - Discovery (atomic updates)
 
@@ -192,6 +235,16 @@ final class AppState {
         _ = await enableNearbyOrFallbackToAnywhere()
     }
 
+    /// Re-detect the campus from a fresh device fix on app activation. No-op
+    /// while a manual override is active (we never stomp a user's correction).
+    /// Failures fall back honestly without blocking, matching onboarding — and
+    /// because campus assignment is advisory, falling back never removes deals.
+    @MainActor
+    func refreshCampusOnForeground() async {
+        guard !isCampusOverridden else { return }
+        _ = await enableNearbyOrFallbackToAnywhere()
+    }
+
     func completeOnboarding(campus: Campus, radius: Int, interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
         persisted.discovery = .nearby(center: .legacyCampus(campus), radiusMiles: radius)
@@ -218,6 +271,35 @@ final class AppState {
     var currentCampus: Campus { Self.compatibilityCampus(for: persisted.discovery.center) }
     var radius: Int { persisted.discovery.radiusMiles }
     var interests: Set<DealCategory> { persisted.interests }
+
+    // MARK: - Campus assignment (advisory — never gates deal access)
+
+    /// Automatic campus match for the active discovery center. Feeds
+    /// ranking/personalization and analytics ONLY; it can never remove a deal
+    /// from the feed. A center that is not a real device fix yields
+    /// `.unavailable` (we don't pretend a legacy anchor is the user's location).
+    var campusAssignment: CampusAssignment {
+        guard persisted.discovery.center.source == .device else { return .unavailable }
+        return CampusLocator.locate(from: CLLocationCoordinate2D(
+            latitude: persisted.discovery.center.latitude,
+            longitude: persisted.discovery.center.longitude
+        ))
+    }
+
+    /// Whether the user manually corrected their campus in Settings.
+    var isCampusOverridden: Bool { persisted.manualCampusOverride }
+
+    /// Demoted correction: pin a campus and stop auto-detect from stomping it.
+    func selectCampusOverride(_ campus: Campus) {
+        persisted.manualCampusOverride = true
+        selectCampus(campus)            // existing helper: sets a legacy campus center
+    }
+
+    /// Resume automatic detection.
+    func clearCampusOverride() {
+        persisted.manualCampusOverride = false
+        persist()
+    }
 
     func setDiscovery(_ preference: DiscoveryPreference) {
         persisted.discovery = preference
@@ -350,7 +432,15 @@ final class AppState {
         let event = SavingsEvent(dealID: deal.id, dealTitle: deal.title, amount: deal.savingsAmount)
         persisted.savingsEvents.append(event)
         persist()
-        interactionRecorder.record(.markedUsed(dealID: deal.id))
+        // Emit the dollars-saved KPI signal with campus + inventory-class context.
+        let campusID: String?
+        if case let .assigned(campus, _) = campusAssignment { campusID = campus.id } else { campusID = nil }
+        interactionRecorder.record(.markedUsed(
+            dealID: deal.id,
+            savingsAmount: deal.savingsAmount,
+            campusID: campusID,
+            inventoryClass: InventoryClassifier.classify(deal).rawValue
+        ))
         return true
     }
 
