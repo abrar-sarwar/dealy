@@ -320,4 +320,30 @@ export class FeedsService {
 
     return { items: page.map((d) => mapPrismaDeal(d, null)), nextCursor };
   }
+
+  /**
+   * Cross-campus trending: exceptional (high-value or ending-soon) authoritative
+   * + verified deals, featured to every campus regardless of location. Strongest
+   * savings first. No geo filter by design — discovery, not proximity. A trending
+   * deal near one campus reaches students at all four.
+   */
+  async trending(q: OnlineFeedQuery): Promise<DealPage> {
+    const limit = q.limit ?? 20;
+    const rows = await this.prisma.deal.findMany({
+      where: {
+        status: 'published',
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        expiresAt: { gt: new Date() },
+      },
+      include: { category: true },
+      orderBy: [{ dealScore: 'desc' }, { id: 'asc' }],
+    });
+    const items = rows
+      .map((d) => mapPrismaDeal(d, null))
+      .filter((d) => d.isTrending)
+      .sort((a, b) => b.savingsPercentage - a.savingsPercentage || b.dealScore - a.dealScore)
+      .slice(0, limit);
+    return { items, nextCursor: null };
+  }
 }

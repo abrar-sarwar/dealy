@@ -46,8 +46,8 @@ export class FeedsController {
 
   @Public()
   @Get('trending')
-  @ApiOperation({ summary: 'Trending deals by recent popularity' })
-  trending(@Query() q: FeedPageQuery) {
-    return this.recs.trending(q.limit ?? 20);
+  @ApiOperation({ summary: 'Cross-campus trending deals (high-value/urgent, location-independent)' })
+  trending(@Query() query: OnlineFeedQuery) {
+    return this.feeds.trending(query);
   }
 }

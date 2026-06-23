@@ -191,6 +191,24 @@ describe('Deals + Feeds (e2e, public)', () => {
     expect(body.items.every((it) => it.trustLevel !== 'curated')).toBe(true);
   });
 
+  it('GET /v1/feeds/trending returns high-value verified deals regardless of location', async () => {
+    const far = new Date(Date.now() + 30 * 24 * 3600 * 1000); // beyond the 48h urgency window
+    const trendingId = await makeDeal({
+      currentPriceMinor: 2000n, originalPriceMinor: 5000n, // 60% off
+      latitude: 34.0, longitude: -84.58, locationTags: ['Kennesaw'], expiresAt: far,
+    });
+    const dullId = await makeDeal({
+      currentPriceMinor: 4500n, originalPriceMinor: 5000n, // 10% off, not urgent
+      latitude: 33.7531, longitude: -84.3857, expiresAt: far,
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/feeds/trending?limit=50' });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{ id: string; isTrending: boolean }>;
+    expect(items.every((d) => d.isTrending)).toBe(true);
+    expect(items.some((d) => d.id === trendingId)).toBe(true);  // far, high-value → featured
+    expect(items.some((d) => d.id === dullId)).toBe(false);     // low-value → excluded
+  });
+
   it('paginates online deals without overlap', async () => {
     const first = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=2' });
     const p1 = first.json() as { items: DealItem[]; nextCursor: string | null };
