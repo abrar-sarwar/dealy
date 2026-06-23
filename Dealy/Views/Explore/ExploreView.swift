@@ -48,6 +48,7 @@ struct ExploreView: View {
             }
             .task { await app.loadStudentDeals() }
             .task { await app.loadTrendingDeals() }
+            .task { await app.loadLocalDeals() }
         }
     }
 
@@ -143,6 +144,11 @@ struct ExploreView: View {
             }
             // Always-available curated student programs (location-independent).
             StudentPerksSection(deals: app.studentDeals) { deal in
+                app.recordOpened(deal.id)
+                selectedDeal = deal
+            }
+            // Curated local deals within ~15mi (restaurants, cafés, student spots).
+            LocalDealsSection(deals: app.localDeals) { deal in
                 app.recordOpened(deal.id)
                 selectedDeal = deal
             }
