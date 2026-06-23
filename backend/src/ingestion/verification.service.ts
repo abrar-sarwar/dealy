@@ -299,4 +299,55 @@ export class VerificationService {
       throw err;
     }
   }
+
+  /**
+   * Link-liveness pass for curated student programs. Issues a HEAD (then GET on
+   * non-2xx) against each active program's destinationUrl. Healthy (2xx/3xx)
+   * clears any prior failure note. Failure flags `verificationFailureReason` for
+   * manual review but NEVER archives the deal or promotes it to verified — these
+   * are stable, hand-vetted programs and transient link issues must not yank real
+   * inventory. `doFetch` is injectable for testing.
+   */
+  async checkCuratedLinks(
+    now = new Date(),
+    doFetch: (
+      url: string,
+      init?: { method: string; redirect: 'follow' },
+    ) => Promise<{ ok: boolean; status: number }> = (url, init) =>
+      fetch(url, init as RequestInit) as unknown as Promise<{ ok: boolean; status: number }>,
+  ): Promise<{ checked: number; flagged: number }> {
+    const deals = await this.prisma.deal.findMany({
+      where: { status: 'published', source: 'student-programs', destinationUrl: { not: null } },
+      select: { id: true, destinationUrl: true },
+    });
+    let flagged = 0;
+    for (const d of deals) {
+      const url = d.destinationUrl as string;
+      let healthy = false;
+      try {
+        let r = await doFetch(url, { method: 'HEAD', redirect: 'follow' });
+        if (!r.ok) r = await doFetch(url, { method: 'GET', redirect: 'follow' });
+        healthy = r.ok;
+      } catch {
+        healthy = false;
+      }
+      if (healthy) {
+        await this.prisma.deal.update({
+          where: { id: d.id },
+          data: { lastVerificationAttemptAt: now, verificationFailureReason: null },
+        });
+      } else {
+        flagged++;
+        this.logger.warn(`Curated link unhealthy (flagged for review): ${url}`);
+        await this.prisma.deal.update({
+          where: { id: d.id },
+          data: {
+            lastVerificationAttemptAt: now,
+            verificationFailureReason: `link unreachable: ${url}`,
+          },
+        });
+      }
+    }
+    return { checked: deals.length, flagged };
+  }
 }
