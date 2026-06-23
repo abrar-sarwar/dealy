@@ -25,6 +25,7 @@ interface NormalizedDeal {
   isStudentOnly: boolean;
   couponCode: string | null;
   destinationUrl: string | null;
+  redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
   locationTags: string[];
@@ -68,6 +69,7 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     terms: n.terms,
     couponCode: n.couponCode,
     destinationUrl: n.destinationUrl,
+    redemptionBrand: n.redemptionBrand,
     latitude: n.latitude,
     longitude: n.longitude,
     locationTags: n.locationTags,
@@ -105,6 +107,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       isStudentOnly: deal.isStudentOnly,
       couponCode: deal.couponCode,
       destinationUrl: deal.destinationUrl,
+      redemptionBrand: deal.redemptionBrand,
       latitude: deal.latitude,
       longitude: deal.longitude,
       locationTags: deal.locationTags,
@@ -140,6 +143,7 @@ export interface NearbyRow {
   is_student_only: boolean;
   coupon_code: string | null;
   destination_url: string | null;
+  redemption_brand: string | null;
   latitude: number | null;
   longitude: number | null;
   location_tags: string[];
@@ -183,6 +187,7 @@ export function mapNearbyRow(row: NearbyRow) {
       isStudentOnly: row.is_student_only,
       couponCode: row.coupon_code,
       destinationUrl: row.destination_url,
+      redemptionBrand: row.redemption_brand,
       latitude: row.latitude,
       longitude: row.longitude,
       locationTags: row.location_tags,

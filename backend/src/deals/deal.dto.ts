@@ -30,6 +30,8 @@ export interface DealDto {
   terms: string;
   couponCode: string | null;
   destinationUrl: string | null;
+  /** Brand to search for physical redemption (e.g. "Apple Store"); null = online-only. */
+  redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
   locationTags: string[];
