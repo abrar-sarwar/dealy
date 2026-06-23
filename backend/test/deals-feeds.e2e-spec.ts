@@ -209,6 +209,31 @@ describe('Deals + Feeds (e2e, public)', () => {
     expect(items.some((d) => d.id === dullId)).toBe(false);     // low-value → excluded
   });
 
+  it('GET /v1/feeds/local returns curated physical deals within radius, nearest first', async () => {
+    const near = await makeDeal({
+      title: 'Curated Taco Near', sourceTrust: 'editorial', moderationStatus: 'approved',
+      verificationStatus: 'pending', latitude: GSU.lat + 0.01, longitude: GSU.lng, // ~0.7mi
+    });
+    const far = await makeDeal({
+      title: 'Curated Taco Far', sourceTrust: 'editorial', moderationStatus: 'approved',
+      verificationStatus: 'pending', latitude: GSU.lat + 0.5, longitude: GSU.lng, // ~34mi
+    });
+    const authoritative = await makeDeal({
+      title: 'Authoritative Event', latitude: GSU.lat + 0.01, longitude: GSU.lng, // verified, not curated
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/feeds/local?lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=15&limit=50`,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{ id: string; trustLevel: string; isOnline: boolean }>;
+    expect(items.some((d) => d.id === near)).toBe(true);
+    expect(items.some((d) => d.id === far)).toBe(false); // beyond 15mi
+    expect(items.some((d) => d.id === authoritative)).toBe(false); // curated-only surface
+    expect(items.every((d) => d.trustLevel === 'curated')).toBe(true);
+    expect(items.every((d) => d.isOnline === false)).toBe(true);
+  });
+
   it('paginates online deals without overlap', async () => {
     const first = await app.inject({ method: 'GET', url: '/v1/feeds/online?limit=2' });
     const p1 = first.json() as { items: DealItem[]; nextCursor: string | null };

@@ -291,4 +291,49 @@ export class FeedsService {
       .slice(0, limit);
     return { items, nextCursor: null };
   }
+
+  /**
+   * Local Deals: curated (editorial), approved, published, PHYSICAL deals within
+   * the radius (default 15mi), nearest first. NOT coverage-gated — this is the
+   * curated discovery surface (the verified deck is /feeds/nearby). Online and
+   * authoritative-only deals never appear here.
+   */
+  async local(q: NearbyFeedQuery): Promise<DealPage> {
+    const limit = q.limit ?? 20;
+    const radiusMeters = (q.radiusMiles ?? 15) * METERS_PER_MILE;
+    const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
+    const categoryFilter = q.category
+      ? Prisma.sql`AND d.category_id = (SELECT id FROM categories WHERE slug = ${q.category})`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<NearbyRow[]>(Prisma.sql`
+      SELECT d.id, d.title, d.merchant, cat.slug AS category_slug,
+             d.short_description, d.detailed_description, d.terms,
+             d.current_price_minor, d.original_price_minor, d.currency,
+             d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
+             d.redemption_brand,
+             d.latitude, d.longitude, d.location_tags, d.visual_seed,
+             d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
+             d.status, d.confidence_score, d.created_at, d.start_at, d.expires_at,
+             ST_Distance(d.geog, ${center}) AS distance_meters,
+             (${Prisma.raw(FEED_TIER_CASE_SQL)})::int AS tier_rank,
+             CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
+               WHEN 0 THEN 'verified' WHEN 1 THEN 'curated'
+               WHEN 2 THEN 'online' ELSE 'community' END AS feed_tier,
+             ST_Distance(d.geog, ${center})::double precision AS sort_key
+      FROM deals d
+      JOIN categories cat ON cat.id = d.category_id
+      WHERE d.status = 'published'::deal_status
+        AND d.source_trust = 'editorial'::source_trust
+        AND d.moderation_status = 'approved'::moderation_status
+        AND d.is_online = false
+        AND d.geog IS NOT NULL
+        AND d.expires_at > now()
+        AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
+        ${categoryFilter}
+      ORDER BY distance_meters ASC, id ASC
+      LIMIT ${limit}
+    `);
+    return { items: rows.map(mapNearbyRow), nextCursor: null };
+  }
 }

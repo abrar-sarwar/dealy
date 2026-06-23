@@ -37,6 +37,13 @@ export class FeedsController {
     return this.feeds.student(query);
   }
 
+  @Public()
+  @Get('local')
+  @ApiOperation({ summary: 'Curated local deals within radius (default 15mi), nearest first' })
+  local(@Query() query: NearbyFeedQuery) {
+    return this.feeds.local(query);
+  }
+
   @ApiBearerAuth('supabase')
   @Get('recommended')
   @ApiOperation({ summary: 'Personalized, explainable recommendations (with reasons)' })
