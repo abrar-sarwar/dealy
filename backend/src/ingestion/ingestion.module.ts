@@ -6,6 +6,7 @@ import { ProviderRegistry } from './provider-registry';
 import { FixtureProvider } from './providers/fixture.provider';
 import { TicketmasterProvider } from './providers/ticketmaster.provider';
 import { EditorialProvider } from './providers/editorial.provider';
+import { StudentProgramsProvider } from './providers/student-programs.provider';
 import { VerificationService } from './verification.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { VerificationService } from './verification.service';
     FixtureProvider,
     TicketmasterProvider,
     EditorialProvider,
+    StudentProgramsProvider,
   ],
   exports: [IngestionService, VerificationService, ProviderRegistry],
 })

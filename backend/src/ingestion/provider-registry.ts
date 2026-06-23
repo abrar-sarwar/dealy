@@ -6,6 +6,7 @@ import type { DealProvider } from './normalized-deal';
 import { FixtureProvider } from './providers/fixture.provider';
 import { TicketmasterProvider } from './providers/ticketmaster.provider';
 import { EditorialProvider } from './providers/editorial.provider';
+import { StudentProgramsProvider } from './providers/student-programs.provider';
 
 @Injectable()
 export class ProviderRegistry {
@@ -15,12 +16,17 @@ export class ProviderRegistry {
     fixture: FixtureProvider,
     ticketmaster: TicketmasterProvider,
     editorial: EditorialProvider,
+    studentPrograms: StudentProgramsProvider,
     config: ConfigService<Env, true>,
   ) {
-    // Authoritative providers are always available. Fixture/editorial (non-
-    // authoritative dev/demo sources) are registered ONLY when fixtures are
-    // enabled — so they cannot be silently ingested in staging/production.
-    this.providers = new Map<string, DealProvider>([[ticketmaster.name, ticketmaster]]);
+    // Always-on providers. Ticketmaster is authoritative; student-programs is a
+    // curated (editorial-trust) source of REAL national programs — production-
+    // visible by design, landing in the `curated` tier (never Verified). Fixture/
+    // editorial dev sources stay gated behind fixturesEnabled below.
+    this.providers = new Map<string, DealProvider>([
+      [ticketmaster.name, ticketmaster],
+      [studentPrograms.name, studentPrograms],
+    ]);
     if (
       fixturesEnabled({
         APP_ENV: config.get('APP_ENV', { infer: true }),
