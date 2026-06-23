@@ -8,6 +8,30 @@ function minorToDollars(minor: bigint | null): number {
   return Number(minor) / 100;
 }
 
+/** Hours within which an offer counts as "ending soon" for trending. */
+const TRENDING_URGENCY_HOURS = 48;
+/** Minimum percent off for a non-urgent deal to trend. */
+const TRENDING_MIN_PERCENT = 50;
+
+/**
+ * A deal trends (is featured cross-campus to every supported campus) when it is
+ * authoritative + verified AND exceptional: a strong discount OR ending soon.
+ * Pure + deterministic; derived at map time, never stored.
+ */
+export function deriveTrending(input: {
+  sourceTrust: string;
+  verificationStatus: string;
+  savingsPercentage: number;
+  expiresAt: Date;
+  now?: Date;
+}): boolean {
+  if (input.sourceTrust !== 'authoritative' || input.verificationStatus !== 'verified') return false;
+  const now = input.now ?? new Date();
+  const msToExpiry = input.expiresAt.getTime() - now.getTime();
+  const endingSoon = msToExpiry > 0 && msToExpiry <= TRENDING_URGENCY_HOURS * 3600 * 1000;
+  return input.savingsPercentage >= TRENDING_MIN_PERCENT || endingSoon;
+}
+
 /** Normalized inputs shared by the Prisma-row and raw-SQL-row mappers. */
 interface NormalizedDeal {
   id: string;
@@ -85,6 +109,12 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
       isOnline: n.isOnline,
     }),
     confidenceScore: n.confidenceScore,
+    isTrending: deriveTrending({
+      sourceTrust: n.sourceTrust,
+      verificationStatus: n.verificationStatus,
+      savingsPercentage,
+      expiresAt: n.expiresAt,
+    }),
   };
 }
 

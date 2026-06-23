@@ -25,6 +25,9 @@ export interface DealDto {
   confidenceScore: number | null;
   isOnline: boolean;
   isStudentOnly: boolean;
+  /** Derived: an exceptional (high-value or urgent) verified deal, featured
+   * across all campuses. Computed at map time; never stored. */
+  isTrending: boolean;
   shortDescription: string;
   detailedDescription: string;
   terms: string;
