@@ -56,6 +56,9 @@ final class AppState {
     /// Curated national student programs for the Student Perks section. Loaded
     /// independently of the main deck; always available regardless of location.
     private(set) var studentDeals: [Deal] = []
+    /// Cross-campus trending deals (high-value/urgent), featured regardless of
+    /// location. Loaded independently of the main deck.
+    private(set) var trendingDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -119,6 +122,20 @@ final class AppState {
             for deal in page.items { dealsByID[deal.id] = deal }
         } catch {
             studentDeals = []
+        }
+    }
+
+    /// Load cross-campus trending deals for the Trending section. Independent of
+    /// the main deck; failures leave the section empty and never block the app.
+    /// Loaded deals are merged into `dealsByID` so detail/save/watch resolve them.
+    @MainActor
+    func loadTrendingDeals() async {
+        do {
+            let page = try await dealService.fetchDeals(for: .trending)
+            trendingDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            trendingDeals = []
         }
     }
 
