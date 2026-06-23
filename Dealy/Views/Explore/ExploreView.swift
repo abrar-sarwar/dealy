@@ -47,6 +47,7 @@ struct ExploreView: View {
                 LocationSelectorView()
             }
             .task { await app.loadStudentDeals() }
+            .task { await app.loadTrendingDeals() }
         }
     }
 
@@ -135,6 +136,11 @@ struct ExploreView: View {
         let sections = ExploreSections(base: areaDeals)
             .curated(interests: app.interests, campus: app.currentCampus, radius: app.radius)
         return VStack(alignment: .leading, spacing: Spacing.xl) {
+            // Cross-campus trending deals, featured regardless of location.
+            TrendingSection(deals: app.trendingDeals) { deal in
+                app.recordOpened(deal.id)
+                selectedDeal = deal
+            }
             // Always-available curated student programs (location-independent).
             StudentPerksSection(deals: app.studentDeals) { deal in
                 app.recordOpened(deal.id)
