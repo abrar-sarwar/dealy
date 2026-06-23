@@ -109,6 +109,19 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertEqual(page.items.map(\.id), ["t1", "t2"])
     }
 
+    func testLocalRoutesToLocalFeedWithCoords() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { path in
+            XCTAssertEqual(path, "/v1/feeds/local")
+            return Self.page(ids: ["l1", "l2"], online: false)
+        }
+        let service = RemoteDealService(client: Self.stubbedClient())
+        let center = DiscoveryCenter(latitude: 33.7531, longitude: -84.3857,
+                                     displayName: "Current location", source: .device)
+        let page = try await service.fetchDeals(for: .local(center: center, radiusMiles: 15))
+        XCTAssertEqual(page.items.map(\.id), ["l1", "l2"])
+    }
+
     // MARK: Helpers
 
     private static func stubbedClient() -> APIClient {

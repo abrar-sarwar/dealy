@@ -516,6 +516,14 @@ final class AppStateTests: XCTestCase {
         XCTAssertNotNil(app.deal(id: app.trendingDeals[0].id))
     }
 
+    func testLoadLocalDealsPopulatesAndResolves() async {
+        let app = makeApp()
+        await app.loadLocalDeals()
+        XCTAssertFalse(app.localDeals.isEmpty)
+        XCTAssertTrue(app.localDeals.allSatisfy { !$0.isOnline })
+        XCTAssertNotNil(app.deal(id: app.localDeals[0].id))
+    }
+
     // MARK: - Campus assignment & manual override
 
     func testCampusAssignmentReflectsDeviceCenterOnCampus() {
@@ -658,6 +666,7 @@ final class ControllableDealService: DealServicing {
         case .anywhere: return "anywhere"
         case .student: return "student"
         case .trending: return "trending"
+        case .local: return "local"
         }
     }
 }

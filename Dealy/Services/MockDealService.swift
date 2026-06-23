@@ -42,6 +42,12 @@ final class MockDealService: DealServicing {
             return DealPage(items: trending, nextCursor: nil)
         }
 
+        // Curated local deals: physical only (offline double).
+        if case .local = request {
+            let local = all.filter { !$0.isOnline }
+            return DealPage(items: Array(local.prefix(8)), nextCursor: nil)
+        }
+
         // Mirror the production contract: return already-eligible inventory so
         // view models never re-apply location filtering.
         let preference: DiscoveryPreference
@@ -50,6 +56,7 @@ final class MockDealService: DealServicing {
         case .anywhere: preference = .default.switching(to: .anywhere)
         case .student: preference = .default.switching(to: .anywhere) // handled by the early return above
         case .trending: preference = .default.switching(to: .anywhere) // handled by the early return above
+        case .local: preference = .default.switching(to: .anywhere) // handled by the early return above
         }
         // Mock inventory is curated/trusted, so it stands in for verified deals.
         let items = DealFilter.byDiscovery(all, preference: preference, reference: reference)

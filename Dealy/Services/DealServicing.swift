@@ -9,6 +9,9 @@ enum DealFeedRequest: Equatable, Sendable {
     case student
     /// Cross-campus high-value/urgent deals, featured regardless of location.
     case trending
+    /// Curated local deals (restaurants, student discounts, …) within a radius
+    /// of a coordinate. Curated trust; its own discovery surface.
+    case local(center: DiscoveryCenter, radiusMiles: Int)
 }
 
 /// Density-first Nearby coverage status from the server. `qualified == false`
