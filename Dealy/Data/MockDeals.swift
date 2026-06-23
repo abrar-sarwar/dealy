@@ -6,7 +6,36 @@ enum MockDeals {
 
     /// Build the full dataset relative to `reference` (defaults to now).
     static func dataset(reference: Date = Date()) -> [Deal] {
-        seeds.map { $0.makeDeal(reference: reference) }
+        seeds.map { $0.makeDeal(reference: reference) } + studentPrograms(reference: reference)
+    }
+
+    /// Curated student programs for the offline/preview double. Online + student-
+    /// only; one carries a `redemptionBrand` so the nearby-store finder is
+    /// exercisable without the backend. Not shipped inventory.
+    private static func studentPrograms(reference: Date) -> [Deal] {
+        let expires = reference.addingTimeInterval(365 * 24 * 3600)
+        func program(_ id: String, _ title: String, _ merchant: String, _ url: String,
+                     brand: String?) -> Deal {
+            Deal(
+                id: id, title: title, merchant: merchant, category: .tech,
+                currentPrice: 0, originalPrice: 0, distanceMiles: 0,
+                expirationDate: expires, dealScore: 80, isOnline: true,
+                shortDescription: "Student program at \(merchant).",
+                detailedDescription: "Verified students save with \(merchant). Eligibility verified at the official page.",
+                terms: "Student eligibility verified by \(merchant). See official page.",
+                locationTags: ["online", "nationwide"],
+                couponCode: nil, destinationURL: url, latitude: nil, longitude: nil,
+                visualSeed: 7, publishedAt: reference.addingTimeInterval(-3600),
+                verified: false, isStudentOnly: true, isTrending: false,
+                redemptionBrand: brand
+            )
+        }
+        return [
+            program("student-apple-education", "Apple Education Pricing", "Apple",
+                    "https://www.apple.com/us-edu/store", brand: "Apple Store"),
+            program("student-spotify", "Spotify Premium Student", "Spotify",
+                    "https://www.spotify.com/us/student/", brand: nil),
+        ]
     }
 
     // MARK: - Seed

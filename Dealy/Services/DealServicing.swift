@@ -4,6 +4,9 @@ import Foundation
 enum DealFeedRequest: Equatable, Sendable {
     case nearby(DiscoveryPreference)
     case anywhere
+    /// Curated national student programs (Apple Education, Spotify Student, …).
+    /// Always available regardless of location.
+    case student
 }
 
 /// Density-first Nearby coverage status from the server. `qualified == false`
