@@ -473,7 +473,14 @@ final class AppStateTests: XCTestCase {
         await app.loadDeals()
         let deal = try! XCTUnwrap(app.deal(id: "food-bogo-pizza"))
         XCTAssertTrue(app.markUsed(deal))
-        XCTAssertEqual(recorder.events, [.markedUsed(dealID: "food-bogo-pizza")])
+        // Default discovery is a legacy anchor (no real fix) → no campus id; a
+        // BOGO pizza is a local, non-online deal → inventory class "local".
+        XCTAssertEqual(recorder.events, [.markedUsed(
+            dealID: "food-bogo-pizza",
+            savingsAmount: deal.savingsAmount,
+            campusID: nil,
+            inventoryClass: "local"
+        )])
     }
 
     func testChangingLocationRecordsNoInteractionAndPreservesHistory() async {
@@ -488,6 +495,63 @@ final class AppStateTests: XCTestCase {
         // Changing location is not an interaction signal and must not erase history.
         XCTAssertEqual(recorder.events, before)
         XCTAssertTrue(app.swipedDealIDs.contains("food-wings"))
+    }
+
+    // MARK: - Campus assignment & manual override
+
+    func testCampusAssignmentReflectsDeviceCenterOnCampus() {
+        let app = makeApp()
+        let gt = DiscoveryCenter(latitude: 33.7756, longitude: -84.3963,
+                                 displayName: "Current location", source: .device)
+        app.setDiscovery(.nearby(center: gt, radiusMiles: 5))
+        guard case let .assigned(campus, _) = app.campusAssignment else {
+            return XCTFail("expected .assigned")
+        }
+        XCTAssertEqual(campus.id, "gt")
+    }
+
+    func testCampusAssignmentIsUnavailableForLegacyDefaultBeforeLocation() {
+        // The shipped default center is a legacy anchor with no real fix.
+        let app = makeApp()
+        XCTAssertEqual(app.campusAssignment, .unavailable)
+    }
+
+    func testManualOverrideFlagSetAndCleared() {
+        let app = makeApp()
+        XCTAssertFalse(app.isCampusOverridden)
+        app.selectCampusOverride(.uga)
+        XCTAssertTrue(app.isCampusOverridden)
+        XCTAssertEqual(app.currentCampus.id, "uga")
+        app.clearCampusOverride()
+        XCTAssertFalse(app.isCampusOverridden)
+    }
+
+    func testForegroundRefreshSkippedWhenOverridden() async {
+        // Override pins UGA; a foreground refresh must not replace it even though
+        // the provider would return a different (downtown) fix.
+        let provider = MockLocationProvider(
+            authorization: .authorizedWhenInUse,
+            result: .success(DiscoveryCenter(latitude: 33.7531, longitude: -84.3857,
+                                             displayName: "Current location", source: .device))
+        )
+        let app = makeApp(locationProvider: provider)
+        app.selectCampusOverride(.uga)
+        await app.refreshCampusOnForeground()
+        XCTAssertEqual(app.currentCampus.id, "uga")
+    }
+
+    func testForegroundRefreshAppliesDeviceLocationWhenNotOverridden() async {
+        let provider = MockLocationProvider(
+            authorization: .authorizedWhenInUse,
+            result: .success(DiscoveryCenter(latitude: 33.7756, longitude: -84.3963,
+                                             displayName: "Current location", source: .device))
+        )
+        let app = makeApp(locationProvider: provider)
+        await app.refreshCampusOnForeground()
+        guard case let .assigned(campus, _) = app.campusAssignment else {
+            return XCTFail("expected .assigned")
+        }
+        XCTAssertEqual(campus.id, "gt")
     }
 }
 

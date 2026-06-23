@@ -33,8 +33,15 @@ final class RemoteInteractionRecorder: DealInteractionRecording {
             return ("/v1/deals/\(dealID)/swipes", ["direction": direction.rawValue])
         case .redemptionClicked(let dealID):
             return ("/v1/deals/\(dealID)/clicks", [:])
-        case .markedUsed(let dealID):
-            return ("/v1/deals/\(dealID)/redemptions", [:])
+        case let .markedUsed(dealID, savingsAmount, campusID, inventoryClass):
+            // Dollars-saved KPI. Decimal serialized as a string to preserve
+            // precision. Still carries NO precise coordinates.
+            var body: [String: Any] = [
+                "savings_amount": String(describing: savingsAmount),
+                "inventory_class": inventoryClass,
+            ]
+            if let campusID { body["campus_id"] = campusID }
+            return ("/v1/deals/\(dealID)/redemptions", body)
         }
     }
 }

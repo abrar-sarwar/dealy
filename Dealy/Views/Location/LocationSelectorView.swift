@@ -62,6 +62,11 @@ struct LocationSelectorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Apply") {
                         Task {
+                            // Applying a real device fix is an explicit "use my
+                            // location" — resume automatic campus detection.
+                            if draft.center.source == .device {
+                                app.clearCampusOverride()
+                            }
                             await app.applyDiscovery(draft)
                             dismiss()
                         }
