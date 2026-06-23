@@ -119,15 +119,42 @@ export class FeedsService {
     if (!cursor && page.length < limit) {
       const onlineRows = await this.prisma.deal.findMany({
         where: {
-          status: 'published', sourceTrust: 'authoritative', verificationStatus: 'verified',
-          isOnline: true, expiresAt: { gt: new Date() },
+          status: 'published',
+          sourceTrust: 'authoritative',
+          verificationStatus: 'verified',
+          isOnline: true,
+          expiresAt: { gt: new Date() },
         },
         include: { category: true },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit - page.length,
       });
       const onlineItems = onlineRows.map((d) => mapPrismaDeal(d, null));
-      const items = [...page.map(mapNearbyRow), ...onlineItems];
+
+      // Also blend in curated, student-only ONLINE programs (national student
+      // perks) so they surface during normal browsing. Curated, never Verified;
+      // their presence never depends on campus/location (location ≠ access).
+      const remaining = limit - page.length - onlineItems.length;
+      const studentItems =
+        remaining > 0
+          ? (
+              await this.prisma.deal.findMany({
+                where: {
+                  status: 'published',
+                  sourceTrust: 'editorial',
+                  moderationStatus: 'approved',
+                  isOnline: true,
+                  isStudentOnly: true,
+                  expiresAt: { gt: new Date() },
+                },
+                include: { category: true },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: remaining,
+              })
+            ).map((d) => mapPrismaDeal(d, null))
+          : [];
+
+      const items = [...page.map(mapNearbyRow), ...onlineItems, ...studentItems];
       const tiersIncluded = [...new Set(items.map((d) => d.trustLevel))];
       return { items, nextCursor, coverage, blend: { radiusMilesUsed: radiusUsed, tiersIncluded } };
     }
@@ -178,6 +205,7 @@ export class FeedsService {
                d.short_description, d.detailed_description, d.terms,
                d.current_price_minor, d.original_price_minor, d.currency,
                d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
+               d.redemption_brand,
                d.latitude, d.longitude, d.location_tags, d.visual_seed,
                d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
                d.status, d.confidence_score, d.created_at, d.start_at, d.expires_at,
@@ -233,6 +261,50 @@ export class FeedsService {
         sourceTrust: 'authoritative',
         verificationStatus: 'verified',
         isOnline: true,
+        expiresAt: { gt: new Date() },
+        ...cursorFilter,
+      },
+      include: { category: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page.at(-1);
+    const nextCursor = hasMore && last ? encodeOnlineCursor(last.createdAt, last.id) : null;
+
+    return { items: page.map((d) => mapPrismaDeal(d, null)), nextCursor };
+  }
+
+  /**
+   * Student Perks feed: curated, published, unexpired, student-only ONLINE
+   * programs (Apple Education, Spotify Student, …), newest first, cursor-
+   * paginated. These are CURATED (editorial trust), so each carries
+   * `trustLevel: 'curated'` and never a Verified badge. No location required —
+   * always available regardless of campus (location determines relevance, not
+   * access). Keyset pagination on (createdAt DESC, id DESC), shared with online().
+   */
+  async student(q: OnlineFeedQuery): Promise<DealPage> {
+    const limit = q.limit ?? 20;
+    const cursor = q.cursor ? decodeOnlineCursor(q.cursor) : null;
+
+    const cursorFilter: Prisma.DealWhereInput = cursor
+      ? {
+          OR: [
+            { createdAt: { lt: cursor.createdAt } },
+            { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+          ],
+        }
+      : {};
+
+    const rows = await this.prisma.deal.findMany({
+      where: {
+        status: 'published',
+        sourceTrust: 'editorial',
+        moderationStatus: 'approved',
+        isOnline: true,
+        isStudentOnly: true,
         expiresAt: { gt: new Date() },
         ...cursorFilter,
       },

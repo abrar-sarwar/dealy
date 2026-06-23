@@ -30,6 +30,13 @@ export class FeedsController {
     return this.feeds.online(query);
   }
 
+  @Public()
+  @Get('student')
+  @ApiOperation({ summary: 'Curated national student programs, newest first (cursor paginated)' })
+  student(@Query() query: OnlineFeedQuery) {
+    return this.feeds.student(query);
+  }
+
   @ApiBearerAuth('supabase')
   @Get('recommended')
   @ApiOperation({ summary: 'Personalized, explainable recommendations (with reasons)' })

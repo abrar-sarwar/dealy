@@ -54,6 +54,43 @@ export async function seedAuthoritativeNearby(
   return ids;
 }
 
+/**
+ * Seed a curated (editorial-trust), approved, published, student-only ONLINE
+ * program — the shape served by /v1/feeds/student and the nearby backfill.
+ * Returns created deal ids.
+ */
+export async function seedCuratedStudentOnline(
+  prisma: PrismaService,
+  opts: { count?: number; source?: string; redemptionBrand?: string | null } = {},
+): Promise<string[]> {
+  const count = opts.count ?? 1;
+  const source = opts.source ?? 'e2e-auth';
+  const cat = await prisma.category.findFirstOrThrow({ where: { slug: 'food' } });
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = await prisma.deal.create({
+      data: {
+        title: `curated-student-${source}-${i}`,
+        merchant: 'Apple',
+        categoryId: cat.id,
+        source,
+        sourceTrust: 'editorial',
+        moderationStatus: 'approved',
+        status: 'published',
+        verificationStatus: 'pending',
+        isOnline: true,
+        isStudentOnly: true,
+        destinationUrl: 'https://www.apple.com/us-edu/store',
+        redemptionBrand: opts.redemptionBrand ?? 'Apple Store',
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+      select: { id: true },
+    });
+    ids.push(d.id);
+  }
+  return ids;
+}
+
 /** Seed authoritative, verified ONLINE-only deals for Anywhere-feed tests. */
 export async function seedAuthoritativeOnline(
   prisma: PrismaService,
