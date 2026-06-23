@@ -9,6 +9,7 @@ struct DealDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showGetDeal = false
+    @State private var showNearbyStores = false
     @State private var showScoreInfo = false
     @State private var showUsedConfirm = false
     @State private var didMarkUsed = false
@@ -66,6 +67,9 @@ struct DealDetailView: View {
             }
         }
         .sheet(isPresented: $showGetDeal) { GetDealSheet(deal: deal) }
+        .sheet(isPresented: $showNearbyStores) {
+            NearbyStoresSheet(brand: deal.redemptionBrand ?? deal.merchant)
+        }
         .alert("Score explained", isPresented: $showScoreInfo) {
             Button("Got it", role: .cancel) {}
         } message: {
@@ -240,6 +244,17 @@ struct DealDetailView: View {
             }
             .buttonStyle(.primaryDealy)
 
+            if let brand = deal.redemptionBrand {
+                Button {
+                    app.recordRedemptionClicked(deal.id)
+                    showNearbyStores = true
+                    Haptics.impact(.light)
+                } label: {
+                    Label("Find Nearby \(brand)s", systemImage: "mappin.circle.fill")
+                }
+                .buttonStyle(GhostButtonStyle(fullWidth: true))
+            }
+
             if deal.savingsAmount > 0 {
                 Button {
                     if app.markUsed(deal) {
@@ -289,7 +304,13 @@ struct GetDealSheet: View {
     let deal: Deal
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var revealedCode = false
+
+    private var dealURL: URL? {
+        guard let raw = deal.destinationURL else { return nil }
+        return URL(string: raw)
+    }
 
     var body: some View {
         NavigationStack {
@@ -306,11 +327,23 @@ struct GetDealSheet: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.primaryText)
 
-                Text("Backend coming soon. This will open the merchant link, coupon, map, or affiliate page.")
+                Text(dealURL != nil
+                     ? "Opens the official page in your browser to redeem."
+                     : "Show this deal at the store to redeem.")
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.mutedText)
                     .padding(.horizontal, Spacing.lg)
+
+                if let url = dealURL {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        Label("Get Deal Online", systemImage: "arrow.up.right.square.fill")
+                    }
+                    .buttonStyle(.primaryDealy)
+                    .padding(.horizontal, Spacing.lg)
+                }
 
                 if let code = deal.couponCode {
                     VStack(spacing: Spacing.xs) {
