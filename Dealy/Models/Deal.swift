@@ -36,6 +36,9 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Server-controlled; defaults false. The selection logic that sets this is
     /// a follow-on sub-project — this is the slot, not fabricated data.
     var isTrending: Bool = false
+    /// Brand to search for physical redemption of an online program (e.g.
+    /// "Apple Store"); nil = online-only. Drives the "Find Nearby Stores" finder.
+    var redemptionBrand: String? = nil
 
     // MARK: Computed money
 

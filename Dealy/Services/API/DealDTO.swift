@@ -37,6 +37,7 @@ struct DealDTO: Decodable {
     let terms: String
     let couponCode: String?
     let destinationUrl: String?
+    let redemptionBrand: String?
     let latitude: Double?
     let longitude: Double?
     let locationTags: [String]
@@ -70,7 +71,8 @@ struct DealDTO: Decodable {
             publishedAt: publishedAt,
             verified: verified ?? false,
             isStudentOnly: isStudentOnly,
-            isTrending: isTrending ?? false
+            isTrending: isTrending ?? false,
+            redemptionBrand: redemptionBrand
         )
     }
 }
