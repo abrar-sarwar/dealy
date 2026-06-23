@@ -13,6 +13,9 @@ struct PersistedState: Codable, Equatable {
     var notificationsEnabled = false
     /// User intentionally chose to stay in Anywhere — suppresses repeat nudges.
     var anywhereNudgeDismissed = false
+    /// User manually corrected their campus in Settings. While true, automatic
+    /// foreground re-detection is suppressed so we never stomp their choice.
+    var manualCampusOverride = false
 
     init() {}
 
@@ -28,6 +31,7 @@ struct PersistedState: Codable, Equatable {
         case savingsEvents
         case notificationsEnabled
         case anywhereNudgeDismissed
+        case manualCampusOverride
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +59,7 @@ struct PersistedState: Codable, Equatable {
         savingsEvents = try container.decodeIfPresent([SavingsEvent].self, forKey: .savingsEvents) ?? []
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         anywhereNudgeDismissed = try container.decodeIfPresent(Bool.self, forKey: .anywhereNudgeDismissed) ?? false
+        manualCampusOverride = try container.decodeIfPresent(Bool.self, forKey: .manualCampusOverride) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -68,6 +73,7 @@ struct PersistedState: Codable, Equatable {
         try container.encode(savingsEvents, forKey: .savingsEvents)
         try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
         try container.encode(anywhereNudgeDismissed, forKey: .anywhereNudgeDismissed)
+        try container.encode(manualCampusOverride, forKey: .manualCampusOverride)
     }
 
     static let `default` = PersistedState()

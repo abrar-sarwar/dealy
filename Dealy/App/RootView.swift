@@ -12,6 +12,7 @@ enum AppPhase {
 struct RootView: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var phase: AppPhase = .startup
 
     var body: some View {
@@ -29,6 +30,11 @@ struct RootView: View {
             }
         }
         .task { await app.loadDeals() }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Re-detect campus each time the app comes to the foreground.
+            guard newPhase == .active, app.hasCompletedOnboarding else { return }
+            Task { await app.refreshCampusOnForeground() }
+        }
         .onChange(of: app.hasCompletedOnboarding) { _, completed in
             // Allow Profile's "Reset onboarding" to route back, and completion forward.
             if !completed && phase == .main {
