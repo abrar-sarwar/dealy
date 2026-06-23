@@ -59,6 +59,9 @@ final class AppState {
     /// Cross-campus trending deals (high-value/urgent), featured regardless of
     /// location. Loaded independently of the main deck.
     private(set) var trendingDeals: [Deal] = []
+    /// Curated local deals (restaurants, student discounts, …) within ~15mi of
+    /// the active discovery center. Curated trust; its own discovery surface.
+    private(set) var localDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -136,6 +139,21 @@ final class AppState {
             for deal in page.items { dealsByID[deal.id] = deal }
         } catch {
             trendingDeals = []
+        }
+    }
+
+    /// Load curated local deals within `radiusMiles` (default 15) of the active
+    /// discovery center. Independent of the deck; failures leave it empty and
+    /// never block. Loaded deals are merged into `dealsByID` for detail lookups.
+    @MainActor
+    func loadLocalDeals(radiusMiles: Int = 15) async {
+        do {
+            let page = try await dealService.fetchDeals(
+                for: .local(center: persisted.discovery.center, radiusMiles: radiusMiles))
+            localDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            localDeals = []
         }
     }
 
