@@ -1,114 +1,95 @@
 import SwiftUI
 
-struct OnboardingPage {
-    let symbol: String
-    let title: String
-    let subtitle: String
-    let tint: [Color]
-
-    static let page1 = OnboardingPage(
-        symbol: "mappin.and.ellipse",
-        title: "Find deals around you",
-        subtitle: "Discover food, tech, student supplies, groceries, and more near your campus or city.",
-        tint: [Color(hex: 0x3B82F6), Color(hex: 0x1D4ED8)]
-    )
-    static let page2 = OnboardingPage(
-        symbol: "hand.draw.fill",
-        title: "Swipe to save",
-        subtitle: "Like deals you want, skip what you don’t, and build your personalized savings feed.",
-        tint: [Color(hex: 0x22C55E), Color(hex: 0x15803D)]
-    )
-    static let page3 = OnboardingPage(
-        symbol: "chart.line.uptrend.xyaxis",
-        title: "Track your savings",
-        subtitle: "See how much money Dealy helps you save every week.",
-        tint: [Color(hex: 0xF59E0B), Color(hex: 0xB45309)]
-    )
-}
-
 struct OnboardingIntroView: View {
-    let page: OnboardingPage
-    let pageIndex: Int
-    let pageCount: Int
-    var onSkip: () -> Void
     var onContinue: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appear = false
+    @State private var drift: CGFloat = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button("Skip", action: onSkip)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.mutedText)
-            }
-            .padding(.horizontal, Spacing.lg)
-            .padding(.top, Spacing.sm)
-
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(colors: page.tint, startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 168, height: 168)
-                    .dealyShadow(.card)
-                Image(systemName: page.symbol)
-                    .font(.system(size: 72, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .scaleEffect(appear ? 1 : 0.85)
-            .opacity(appear ? 1 : 0)
-
-            VStack(spacing: Spacing.sm) {
-                Text(page.title)
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.primaryText)
-                Text(page.subtitle)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.mutedText)
-                    .padding(.horizontal, Spacing.lg)
-            }
-            .padding(.top, Spacing.xl)
-            .opacity(appear ? 1 : 0)
-            .offset(y: appear ? 0 : 14)
-
-            Spacer()
-
-            PageDots(count: pageCount, index: pageIndex)
-                .padding(.bottom, Spacing.lg)
-
-            Button(action: onContinue) {
-                Text(pageIndex == pageCount - 1 ? "Get started" : "Continue")
-            }
-            .buttonStyle(.primaryDealy)
-            .padding(.horizontal, Spacing.lg)
-            .padding(.bottom, Spacing.xl)
+        VStack(alignment: .leading, spacing: 0) {
+            brand
+            Spacer(minLength: Spacing.lg)
+            glyph
+            Spacer(minLength: Spacing.lg)
+            hero
+            Spacer(minLength: Spacing.lg)
+            footer
         }
-        .onAppear {
-            appear = false
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { appear = true }
+        .padding(.horizontal, Spacing.xl)
+        .padding(.top, Spacing.lg)
+        .padding(.bottom, Spacing.xl)
+        .background(Theme.background.ignoresSafeArea())
+        .onAppear(perform: animateIn)
+    }
+
+    private var brand: some View {
+        Text("dealy")
+            .font(.system(size: 22, weight: .black, design: .rounded))
+            .tracking(-0.5)
+            .foregroundStyle(Theme.primaryText)
+            .accessibilityLabel("Dealy")
+    }
+
+    /// The Dealy tag glyph on its own — no tile, no stacked cards. Its built-in
+    /// speed lines plus a gentle horizontal drift hint at the swipe.
+    private var glyph: some View {
+        Image("DealyGlyph")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 208)
+            .frame(maxWidth: .infinity)
+            .scaleEffect(appear ? 1 : 0.82)
+            .opacity(appear ? 1 : 0)
+            .offset(x: drift)
+            .accessibilityHidden(true)
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Save what you\ncan on deals.")
+                .font(.system(size: 50, weight: .black, design: .rounded))
+                .tracking(-1.6)
+                .minimumScaleFactor(0.72)
+                .foregroundStyle(Theme.primaryText)
+                .opacity(appear ? 1 : 0)
+                .offset(y: appear ? 0 : 16)
+
+            Text("Swipe deals near you and keep the ones worth it.")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(Theme.mutedText)
+                .lineSpacing(4)
+                .opacity(appear ? 1 : 0)
+                .offset(y: appear ? 0 : 10)
         }
     }
-}
 
-/// Native-feeling page indicator dots.
-struct PageDots: View {
-    let count: Int
-    let index: Int
-    var body: some View {
-        HStack(spacing: Spacing.xs) {
-            ForEach(0..<count, id: \.self) { i in
-                Capsule()
-                    .fill(i == index ? Theme.primary : Theme.separator)
-                    .frame(width: i == index ? 22 : 8, height: 8)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: index)
-            }
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Next, Dealy will ask for your location. You can change the distance anytime from Home filters.")
+                .font(.footnote)
+                .foregroundStyle(Theme.faintText)
+
+            Button("Show me how", action: onContinue)
+                .buttonStyle(.primaryDealy)
         }
-        .accessibilityElement()
-        .accessibilityLabel("Page \(index + 1) of \(count)")
+        .opacity(appear ? 1 : 0)
+    }
+
+    private func animateIn() {
+        guard !appear else { return }
+
+        if reduceMotion {
+            appear = true
+            return
+        }
+
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.8)) {
+            appear = true
+        }
+        withAnimation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true)) {
+            drift = 9
+        }
     }
 }

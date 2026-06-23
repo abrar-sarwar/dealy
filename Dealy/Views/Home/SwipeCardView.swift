@@ -49,6 +49,15 @@ struct SwipeCardView: View {
                     Text(deal.merchant)
                         .font(.subheadline.weight(.medium))
                         .opacity(0.82)
+                    if deal.verified {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.seal.fill")
+                            Text("Verified")
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .opacity(0.9)
+                        .accessibilityLabel("Verified — recently confirmed with the source")
+                    }
                 }
 
                 Spacer(minLength: Spacing.sm)

@@ -1,5 +1,6 @@
 import { IsInt, IsLatitude, IsLongitude, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { FeedTier } from '../feeds/feed-tier';
 
 /** Public deal shape returned by feeds + detail. Maps 1:1 to the iOS `DealDTO`. */
 export interface DealDto {
@@ -14,6 +15,14 @@ export interface DealDto {
   savingsPercentage: number;
   distanceMiles: number | null;
   dealScore: number;
+  /** Server-controlled trust signal: Dealy recently confirmed this deal through
+   * its authoritative source. NEVER derived from a client-supplied value. */
+  verified: boolean;
+  verifiedAt: string | null;
+  /** Derived display/ranking tier (verified|curated|online|community). */
+  trustLevel: FeedTier;
+  /** Crawler confidence (0–100) for curated deals; null otherwise. */
+  confidenceScore: number | null;
   isOnline: boolean;
   isStudentOnly: boolean;
   shortDescription: string;
@@ -35,6 +44,23 @@ export interface DealPage {
   nextCursor: string | null;
 }
 
+/** Machine-readable Nearby coverage status (density-first rollout). */
+export interface NearbyCoverage {
+  qualified: boolean;
+  reason: 'qualified' | 'outside_coverage' | 'low_coverage';
+  zoneSlug: string | null;
+}
+
+/** Nearby feed response: a trust-tier-ranked blend (verified > curated > online)
+ * that is never empty when any inventory exists in range. `coverage` reports the
+ * zone's density status (honesty signal); `blend` reports the radius used and
+ * which tiers were included. */
+export interface NearbyDealPage extends DealPage {
+  coverage: NearbyCoverage;
+  /** How the never-empty ladder assembled this page (honesty signal). */
+  blend: { radiusMilesUsed: number; tiersIncluded: FeedTier[] };
+}
+
 export class NearbyFeedQuery {
   @ApiProperty({ example: 33.7531 })
   @IsLatitude()
@@ -44,7 +70,7 @@ export class NearbyFeedQuery {
   @IsLongitude()
   lng!: number;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 5 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 10 })
   @IsOptional()
   @IsInt()
   @Min(1)

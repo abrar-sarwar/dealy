@@ -41,17 +41,17 @@ final class DealFilterTests: XCTestCase {
         XCTAssertTrue(DealFilter.isInRange(onlineDeal, campus: .uga, radius: 1))
     }
 
-    func testByDiscoveryNearbyLeadsLocalAndCapsOnline() {
+    func testByDiscoveryNearbyReturnsPhysicalOnlyNeverOnline() {
+        // Nearby never blends online deals (spec §6): a sparse local feed stays
+        // honest rather than being padded with online inventory.
         let local = (0..<7).map { deal("l\($0)", category: .food, distance: 2, tags: ["Atlanta"]) }
         let online = (0..<5).map { deal("o\($0)", category: .tech, distance: 0, online: true, tags: ["Online"]) }
         let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
 
         let result = DealFilter.byDiscovery(local + online, preference: preference, reference: ref)
 
-        XCTAssertFalse(result.first?.isOnline ?? true)        // local leads
-        let onlineCount = result.filter(\.isOnline).count
-        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(result.count), 0.30)
-        XCTAssertEqual(onlineCount, 3)                         // floor(7 * 3/7) = 3
+        XCTAssertEqual(result.count, 7)
+        XCTAssertTrue(result.allSatisfy { !$0.isOnline })
     }
 
     func testByDiscoveryNearbyExcludesOutOfRangeLocalDeals() {

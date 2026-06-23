@@ -1,4 +1,10 @@
-import { dealFingerprint, validateNormalizedDeal, type NormalizedDeal } from './normalized-deal';
+import {
+  dealFingerprint,
+  isPilotCategory,
+  PILOT_CATEGORIES,
+  validateNormalizedDeal,
+  type NormalizedDeal,
+} from './normalized-deal';
 
 function deal(overrides: Partial<NormalizedDeal> = {}): NormalizedDeal {
   return {
@@ -23,6 +29,8 @@ function deal(overrides: Partial<NormalizedDeal> = {}): NormalizedDeal {
     visualSeed: 1,
     startAt: null,
     expiresAt: new Date(Date.now() + 86_400_000),
+    sourceUrl: 'https://example.test/deal',
+    providerAttribution: 'Example',
     ...overrides,
   };
 }
@@ -55,5 +63,19 @@ describe('validateNormalizedDeal', () => {
     expect(() => validateNormalizedDeal(deal({ title: '  ' }))).toThrow(/title/);
     expect(() => validateNormalizedDeal(deal({ merchant: '' }))).toThrow(/merchant/);
     expect(() => validateNormalizedDeal(deal({ currentPriceMinor: -5n }))).toThrow(/negative/);
+  });
+});
+
+describe('pilot categories', () => {
+  it('includes exactly Food, Groceries, and Local events (entertainment)', () => {
+    expect([...PILOT_CATEGORIES].sort()).toEqual(['entertainment', 'food', 'groceries']);
+  });
+
+  it('classifies pilot vs non-pilot slugs', () => {
+    expect(isPilotCategory('food')).toBe(true);
+    expect(isPilotCategory('groceries')).toBe(true);
+    expect(isPilotCategory('entertainment')).toBe(true);
+    expect(isPilotCategory('tech')).toBe(false);
+    expect(isPilotCategory('clothing')).toBe(false);
   });
 });

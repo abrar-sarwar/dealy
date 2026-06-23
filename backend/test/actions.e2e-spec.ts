@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { JWKS_RESOLVER } from '../src/auth/auth.constants';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby } from './helpers';
 
 const SUB_A = '33333333-3333-3333-3333-3333333333aa';
 const SUB_B = '44444444-4444-4444-4444-4444444444bb';
@@ -54,6 +55,10 @@ describe('Actions (e2e)', () => {
 
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B] } } });
     await prisma.idempotencyKey.deleteMany({ where: { key: IDEM_KEY } });
+    // Feeds return only authoritative inventory inside a qualified zone now; seed
+    // >=20 near GSU (inside the enabled 'atl-downtown' zone) so Nearby is served.
+    await prisma.deal.deleteMany({ where: { source: 'e2e-actions' } });
+    await seedAuthoritativeNearby(prisma, { source: 'e2e-actions', count: 24 });
 
     const feed = await app.inject({
       method: 'GET',
@@ -66,6 +71,7 @@ describe('Actions (e2e)', () => {
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_A, SUB_B] } } });
     await prisma.idempotencyKey.deleteMany({ where: { key: IDEM_KEY } });
+    await prisma.deal.deleteMany({ where: { source: 'e2e-actions' } });
     await app.close();
   });
 
@@ -193,5 +199,54 @@ describe('Actions (e2e)', () => {
       headers: bare(t),
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  it('records impressions and dedupes repeats within the same day', async () => {
+    const t = await token(SUB_A);
+    const user = await prisma.user.findUnique({ where: { supabaseUserId: SUB_A } });
+    const post = () =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/deals/${dealIds[4]}/impressions`,
+        headers: json(t),
+        payload: { distanceMiles: 2.34, priceMinor: 599, category: 'food', freshnessDays: 1 },
+      });
+    expect((await post()).statusCode).toBe(201);
+    expect((await post()).statusCode).toBe(201);
+
+    const rows = await prisma.dealInteraction.findMany({
+      where: { userId: user!.id, dealId: dealIds[4], type: 'impression' },
+    });
+    expect(rows.length).toBe(1); // deduped
+  });
+
+  it('buckets distance and never stores precise coordinates in metadata', async () => {
+    const t = await token(SUB_A);
+    const user = await prisma.user.findUnique({ where: { supabaseUserId: SUB_A } });
+    await app.inject({
+      method: 'POST',
+      url: `/v1/deals/${dealIds[5]}/opens`,
+      headers: json(t),
+      payload: { distanceMiles: 2.34, priceMinor: 599, category: 'food' },
+    });
+    const row = await prisma.dealInteraction.findFirst({
+      where: { userId: user!.id, dealId: dealIds[5], type: 'open' },
+    });
+    const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+    expect(meta.distanceMilesBucket).toBe(2.5); // rounded to 0.5mi bucket
+    expect(meta).not.toHaveProperty('latitude');
+    expect(meta).not.toHaveProperty('longitude');
+    expect(meta).not.toHaveProperty('distanceMiles');
+  });
+
+  it('rejects precise coordinates in an interaction payload (whitelist)', async () => {
+    const t = await token(SUB_A);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/deals/${dealIds[5]}/impressions`,
+      headers: json(t),
+      payload: { latitude: 33.75, longitude: -84.39 },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });

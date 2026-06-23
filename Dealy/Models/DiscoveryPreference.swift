@@ -7,7 +7,6 @@ enum DiscoveryMode: String, Codable, CaseIterable {
 
 enum DiscoverySource: String, Codable {
     case device
-    case manual
     case legacyCampus
 }
 

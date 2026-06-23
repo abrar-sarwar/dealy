@@ -9,14 +9,15 @@ final class RemoteDealServiceTests: XCTestCase {
 
     // MARK: MockDealService feed behavior
 
-    func testNearbyMockFeedLeadsWithLocalAndCapsOnlineShare() async throws {
+    func testNearbyMockFeedIsPhysicalOnlyAndVerified() async throws {
         let service = MockDealService(reference: reference, artificialDelay: .zero)
         let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 25)
         let page = try await service.fetchDeals(for: .nearby(preference))
         XCTAssertFalse(page.items.isEmpty)
-        XCTAssertFalse(page.items.first?.isOnline ?? true)
-        let onlineCount = page.items.filter(\.isOnline).count
-        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(page.items.count), 0.30)
+        // Nearby never includes online deals (spec §6).
+        XCTAssertTrue(page.items.allSatisfy { !$0.isOnline })
+        // Mock inventory stands in for verified deals.
+        XCTAssertTrue(page.items.allSatisfy(\.verified))
     }
 
     func testAnywhereMockFeedContainsOnlyOnlineDeals() async throws {
@@ -43,7 +44,7 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertEqual(page.items.map(\.id), ["o1", "o2"])
     }
 
-    func testNearbyRoutesToBothFeedsAndBlendsLocalFirst() async throws {
+    func testNearbyRoutesToNearbyFeedOnlyAndNeverBlendsOnline() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.responder = { path in
             switch path {
@@ -59,12 +60,42 @@ final class RemoteDealServiceTests: XCTestCase {
 
         let page = try await service.fetchDeals(for: .nearby(preference))
 
-        XCTAssertEqual(Set(StubURLProtocol.paths), ["/v1/feeds/nearby", "/v1/feeds/online"])
-        // Local deals lead.
-        XCTAssertFalse(page.items.first?.isOnline ?? true)
-        // Online capped at 30% of the blended page.
-        let onlineCount = page.items.filter(\.isOnline).count
-        XCTAssertLessThanOrEqual(Double(onlineCount) / Double(page.items.count), 0.30)
+        // Nearby hits ONLY the nearby feed — the online feed is never queried (spec §6).
+        XCTAssertEqual(StubURLProtocol.paths, ["/v1/feeds/nearby"])
+        XCTAssertEqual(page.items.map(\.id), ["l1", "l2", "l3"])
+        XCTAssertTrue(page.items.allSatisfy { !$0.isOnline })
+    }
+
+    func testNearbyLowCoverageReturnsEmptyWithCoverageStatus() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { _ in
+            Data(
+                "{\"items\":[],\"nextCursor\":null,\"coverage\":{\"qualified\":false,\"reason\":\"outside_coverage\"}}"
+                    .utf8)
+        }
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+        let service = RemoteDealService(client: Self.stubbedClient())
+
+        let page = try await service.fetchDeals(for: .nearby(preference))
+
+        XCTAssertTrue(page.items.isEmpty)
+        XCTAssertEqual(page.coverage?.qualified, false)
+        XCTAssertEqual(page.coverage?.reason, "outside_coverage")
+    }
+
+    func testNearbyQualifiedCoveragePassesThrough() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { path in
+            XCTAssertEqual(path, "/v1/feeds/nearby")
+            return Data(
+                "{\"items\":[],\"nextCursor\":null,\"coverage\":{\"qualified\":true,\"reason\":\"qualified\"}}"
+                    .utf8)
+        }
+        let preference = DiscoveryPreference.nearby(center: .legacyCampus(.atlanta), radiusMiles: 10)
+        let service = RemoteDealService(client: Self.stubbedClient())
+
+        let page = try await service.fetchDeals(for: .nearby(preference))
+        XCTAssertEqual(page.coverage?.qualified, true)
     }
 
     // MARK: Helpers
@@ -104,17 +135,28 @@ final class RemoteDealServiceTests: XCTestCase {
 final class StubURLProtocol: URLProtocol {
     static let lock = NSLock()
     static var responder: ((String) -> Data)?
+    /// When set, all responses use this HTTP status (for failure-path tests).
+    static var failWithStatus: Int?
     private static var recordedPaths: [String] = []
+    private static var recordedAuth: [String: String?] = [:]
 
     static var paths: [String] {
         lock.lock(); defer { lock.unlock() }
         return recordedPaths
     }
 
+    /// The Authorization header seen for the most recent request to `path`.
+    static func authHeader(for path: String) -> String?? {
+        lock.lock(); defer { lock.unlock() }
+        return recordedAuth[path]
+    }
+
     static func reset() {
         lock.lock(); defer { lock.unlock() }
         recordedPaths = []
+        recordedAuth = [:]
         responder = nil
+        failWithStatus = nil
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -124,11 +166,13 @@ final class StubURLProtocol: URLProtocol {
         let path = request.url?.path ?? ""
         StubURLProtocol.lock.lock()
         StubURLProtocol.recordedPaths.append(path)
+        StubURLProtocol.recordedAuth[path] = request.value(forHTTPHeaderField: "Authorization")
         let responder = StubURLProtocol.responder
         StubURLProtocol.lock.unlock()
 
         let data = responder?(path) ?? Data("{}".utf8)
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+        let status = StubURLProtocol.failWithStatus ?? 200
+        let response = HTTPURLResponse(url: request.url!, statusCode: status,
                                        httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)

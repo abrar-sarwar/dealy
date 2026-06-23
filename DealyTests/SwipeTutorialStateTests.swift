@@ -13,4 +13,17 @@ final class SwipeTutorialStateTests: XCTestCase {
 
         XCTAssertTrue(SwipeTutorialState.hasSeen(in: defaults))
     }
+
+    func testResetReArmsTutorialSoTheDemoShowsAgain() throws {
+        let suiteName = "SwipeTutorialStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        SwipeTutorialState.markSeen(in: defaults)
+        XCTAssertTrue(SwipeTutorialState.hasSeen(in: defaults))
+
+        SwipeTutorialState.reset(in: defaults)
+
+        XCTAssertFalse(SwipeTutorialState.hasSeen(in: defaults))
+    }
 }

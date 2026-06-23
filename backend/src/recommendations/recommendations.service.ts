@@ -59,13 +59,17 @@ export class RecommendationsService {
              d.current_price_minor, d.original_price_minor, d.currency,
              d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
              d.latitude, d.longitude, d.location_tags, d.visual_seed,
+             d.verification_status, d.last_verified_at,
              d.start_at, d.expires_at, d.created_at,
              ST_Distance(d.geog, ${center}) AS distance_meters,
              (SELECT count(*) FROM saved_deals sd WHERE sd.deal_id = d.id) AS save_count,
              (SELECT count(*) FROM deal_interactions di WHERE di.deal_id = d.id AND di.type = 'view'::interaction_type) AS view_count
       FROM deals d
       JOIN categories cat ON cat.id = d.category_id
-      WHERE d.status = 'published'::deal_status AND d.expires_at > now() AND d.geog IS NOT NULL
+      WHERE d.status = 'published'::deal_status
+        AND d.source_trust = 'authoritative'::source_trust
+        AND d.verification_status = 'verified'::verification_status
+        AND d.expires_at > now() AND d.geog IS NOT NULL
         AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
         AND NOT EXISTS (
           SELECT 1 FROM deal_swipes s
@@ -124,7 +128,12 @@ export class RecommendationsService {
   /** Trending by recent popularity (saves weighted over views). Public. */
   async trending(limit = 20): Promise<{ items: DealDto[]; total: number }> {
     const deals = await this.prisma.deal.findMany({
-      where: { status: 'published', expiresAt: { gt: new Date() } },
+      where: {
+        status: 'published',
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        expiresAt: { gt: new Date() },
+      },
       include: { category: true, _count: { select: { savedBy: true, interactions: true } } },
     });
     deals.sort(

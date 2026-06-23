@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { JWKS_RESOLVER } from '../src/auth/auth.constants';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby } from './helpers';
 
 const SUB = '88888888-8888-8888-8888-8888888888dd';
 
@@ -63,10 +64,22 @@ describe('Recommendations + Analytics (e2e)', () => {
       headers: json(bearerToken),
       payload: { campusId: gsu.id, interests: ['food'], onboardingCompleted: true },
     });
+
+    // Recommendations draw only from authoritative, verified inventory; seed some
+    // near the GSU campus (its default radius is small).
+    await prisma.deal.deleteMany({ where: { source: 'e2e-rec' } });
+    await seedAuthoritativeNearby(prisma, {
+      source: 'e2e-rec',
+      count: 8,
+      lat: 33.7531,
+      lng: -84.3857,
+      stepDeg: 0.001,
+    });
   });
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { supabaseUserId: SUB } });
+    await prisma.deal.deleteMany({ where: { source: 'e2e-rec' } });
     await app.close();
   });
 

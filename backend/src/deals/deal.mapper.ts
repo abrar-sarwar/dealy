@@ -1,5 +1,6 @@
 import type { Deal, Category } from '@prisma/client';
 import type { DealDto } from './deal.dto';
+import { deriveFeedTier } from '../feeds/feed-tier';
 
 /** Minor units (cents) → dollars as a JS number. Never floating-point math on storage. */
 function minorToDollars(minor: bigint | null): number {
@@ -28,9 +29,15 @@ interface NormalizedDeal {
   longitude: number | null;
   locationTags: string[];
   visualSeed: number;
+  verificationStatus: string;
+  lastVerifiedAt: Date | null;
   createdAt: Date;
   startAt: Date | null;
   expiresAt: Date;
+  sourceTrust: string;
+  moderationStatus: string;
+  status: string;
+  confidenceScore: number | null;
 }
 
 function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
@@ -52,6 +59,8 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     savingsPercentage,
     distanceMiles: distanceMiles === null ? null : Math.round(distanceMiles * 10) / 10,
     dealScore: n.dealScore,
+    verified: n.verificationStatus === 'verified',
+    verifiedAt: n.lastVerifiedAt ? n.lastVerifiedAt.toISOString() : null,
     isOnline: n.isOnline,
     isStudentOnly: n.isStudentOnly,
     shortDescription: n.shortDescription,
@@ -66,6 +75,14 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     publishedAt: n.createdAt.toISOString(),
     startAt: n.startAt ? n.startAt.toISOString() : null,
     expiresAt: n.expiresAt.toISOString(),
+    trustLevel: deriveFeedTier({
+      sourceTrust: n.sourceTrust,
+      verificationStatus: n.verificationStatus,
+      moderationStatus: n.moderationStatus,
+      status: n.status,
+      isOnline: n.isOnline,
+    }),
+    confidenceScore: n.confidenceScore,
   };
 }
 
@@ -92,9 +109,15 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       longitude: deal.longitude,
       locationTags: deal.locationTags,
       visualSeed: deal.visualSeed,
+      verificationStatus: deal.verificationStatus,
+      lastVerifiedAt: deal.lastVerifiedAt,
       createdAt: deal.createdAt,
       startAt: deal.startAt,
       expiresAt: deal.expiresAt,
+      sourceTrust: deal.sourceTrust,
+      moderationStatus: deal.moderationStatus,
+      status: deal.status,
+      confidenceScore: deal.confidenceScore,
     },
     distanceMiles,
   );
@@ -121,10 +144,22 @@ export interface NearbyRow {
   longitude: number | null;
   location_tags: string[];
   visual_seed: number;
+  verification_status: string;
+  last_verified_at: Date | null;
   created_at: Date;
   start_at: Date | null;
   expires_at: Date;
   distance_meters: number;
+  /** Distance + freshness ranking key (lower = higher rank). Ordering only. */
+  sort_key: number;
+  source_trust: string;
+  moderation_status: string;
+  status: string;
+  confidence_score: number | null;
+  /** Tier rank (0=verified, 1=curated, 2=online, 3=community). Ordering only. */
+  tier_rank: number;
+  /** Human-readable tier label derived from tier_rank. */
+  feed_tier: string;
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -152,9 +187,15 @@ export function mapNearbyRow(row: NearbyRow) {
       longitude: row.longitude,
       locationTags: row.location_tags,
       visualSeed: row.visual_seed,
+      verificationStatus: row.verification_status,
+      lastVerifiedAt: row.last_verified_at,
       createdAt: row.created_at,
       startAt: row.start_at,
       expiresAt: row.expires_at,
+      sourceTrust: row.source_trust,
+      moderationStatus: row.moderation_status,
+      status: row.status,
+      confidenceScore: row.confidence_score,
     },
     Number(row.distance_meters) / METERS_PER_MILE,
   );

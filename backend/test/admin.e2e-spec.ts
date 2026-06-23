@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { JWKS_RESOLVER } from '../src/auth/auth.constants';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedAuthoritativeNearby } from './helpers';
 
 const SUB_ADMIN = 'bbbbbbbb-0000-4000-8000-0000000000b1';
 const SUB_USER = 'bbbbbbbb-0000-4000-8000-0000000000b2';
@@ -51,16 +52,14 @@ describe('Admin (e2e)', () => {
     prisma = app.get(PrismaService);
 
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_ADMIN, SUB_USER] } } });
-
-    const feed = await app.inject({
-      method: 'GET',
-      url: '/v1/feeds/nearby?lat=33.7531&lng=-84.3857&radiusMiles=50&limit=3',
-    });
-    dealId = (feed.json() as { items: Array<{ id: string }> }).items[0].id;
+    await prisma.deal.deleteMany({ where: { source: 'e2e-admin' } });
+    const [seededId] = await seedAuthoritativeNearby(prisma, { source: 'e2e-admin', count: 1 });
+    dealId = seededId;
   });
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { supabaseUserId: { in: [SUB_ADMIN, SUB_USER] } } });
+    await prisma.deal.deleteMany({ where: { source: 'e2e-admin' } });
     await app.close();
   });
 
@@ -126,5 +125,31 @@ describe('Admin (e2e)', () => {
       where: { action: 'deal.publish', targetId: dealId },
     });
     expect(audit).not.toBeNull();
+  });
+
+  it('exposes the density-first coverage report (admin only)', async () => {
+    const forbidden = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/coverage',
+      headers: bare(await token(SUB_USER)),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/coverage',
+      headers: bare(await token(SUB_ADMIN)),
+    });
+    expect(res.statusCode).toBe(200);
+    const report = res.json();
+    // Same source of truth as feed gating: zones with qualified + enabled flags.
+    expect(report.thresholds).toEqual({ minDeals: 20, radiusMiles: 10 });
+    expect(Array.isArray(report.zones)).toBe(true);
+    expect(
+      report.zones.every(
+        (z: { qualifies: unknown; enabled: unknown }) =>
+          typeof z.qualifies === 'boolean' && typeof z.enabled === 'boolean',
+      ),
+    ).toBe(true);
   });
 });

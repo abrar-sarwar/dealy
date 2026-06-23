@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.schema';
-import type { DealProvider, NormalizedDeal } from '../normalized-deal';
+import type {
+  DealProvider,
+  NormalizedDeal,
+  VerifiableDeal,
+  VerificationResult,
+} from '../normalized-deal';
 
 /**
  * Ticketmaster Discovery API (https://developer.ticketmaster.com) — a documented
@@ -38,6 +43,7 @@ interface TmResponse {
 @Injectable()
 export class TicketmasterProvider implements DealProvider {
   readonly name = 'ticketmaster';
+  readonly trust = 'authoritative' as const;
   private readonly apiKey?: string;
 
   constructor(config: ConfigService<Env, true>) {
@@ -67,6 +73,39 @@ export class TicketmasterProvider implements DealProvider {
     return events
       .map((e) => this.toNormalized(e))
       .filter((d): d is NormalizedDeal => d !== null && d.expiresAt.getTime() > now);
+  }
+
+  /**
+   * Re-check one event against the Discovery API. Distinguishes a source-confirmed
+   * removal (404 → `invalid`) and a past event (`expired`) from a transient
+   * provider failure (network/5xx/timeout → `unreachable`), so the daily job can
+   * apply a grace policy without dropping deals on provider downtime.
+   */
+  async verify(deal: VerifiableDeal): Promise<VerificationResult> {
+    if (!this.apiKey) return { status: 'unreachable', reason: 'missing credentials' };
+    const eventId = deal.externalId.replace(/^tm-/, '');
+    const url = new URL(`https://app.ticketmaster.com/discovery/v2/events/${eventId}.json`);
+    url.searchParams.set('apikey', this.apiKey);
+
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    } catch (err) {
+      return { status: 'unreachable', reason: (err as Error).message };
+    }
+    if (res.status === 404 || res.status === 410) {
+      return { status: 'invalid', reason: `event gone (${res.status})` };
+    }
+    if (!res.ok) return { status: 'unreachable', reason: `Ticketmaster API ${res.status}` };
+
+    const event = (await res.json()) as TmEvent;
+    const startStr = event.dates?.start?.dateTime ?? event.dates?.start?.localDate;
+    const start = startStr ? new Date(startStr) : null;
+    if (!start || Number.isNaN(start.getTime())) {
+      return { status: 'invalid', reason: 'event missing start date' };
+    }
+    if (start.getTime() <= Date.now()) return { status: 'expired' };
+    return { status: 'confirmed', expiresAt: start };
   }
 
   private toNormalized(e: TmEvent): NormalizedDeal | null {
@@ -104,6 +143,8 @@ export class TicketmasterProvider implements DealProvider {
       startAt: start,
       // Event "deals" expire when the event starts.
       expiresAt: start,
+      sourceUrl: e.url ?? `https://www.ticketmaster.com/event/${e.id}`,
+      providerAttribution: 'Powered by Ticketmaster',
     };
   }
 

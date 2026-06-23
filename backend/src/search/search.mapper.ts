@@ -1,5 +1,6 @@
 import type { Deal, Category } from '@prisma/client';
 import type { DealDto } from '../deals/deal.dto';
+import { deriveFeedTier, type FeedTier } from '../feeds/feed-tier';
 
 /** Flattened, denormalized deal document stored in Meilisearch. */
 export interface SearchDoc {
@@ -25,9 +26,13 @@ export interface SearchDoc {
   locationTags: string[];
   visualSeed: number;
   status: string;
+  verified: boolean;
+  verifiedAtTs: number | null;
   startAtTs: number | null;
   createdAtTs: number;
   expiresAtTs: number;
+  trustLevel: FeedTier;
+  confidenceScore: number | null;
 }
 
 function minorToDollars(minor: bigint | null): number {
@@ -63,9 +68,19 @@ export function dealToSearchDoc(deal: Deal & { category: Category }): SearchDoc 
     locationTags: deal.locationTags,
     visualSeed: deal.visualSeed,
     status: deal.status,
+    verified: deal.verificationStatus === 'verified',
+    verifiedAtTs: deal.lastVerifiedAt ? Math.floor(deal.lastVerifiedAt.getTime() / 1000) : null,
     startAtTs: deal.startAt ? Math.floor(deal.startAt.getTime() / 1000) : null,
     createdAtTs: Math.floor(deal.createdAt.getTime() / 1000),
     expiresAtTs: Math.floor(deal.expiresAt.getTime() / 1000),
+    trustLevel: deriveFeedTier({
+      sourceTrust: deal.sourceTrust,
+      verificationStatus: deal.verificationStatus,
+      moderationStatus: deal.moderationStatus,
+      status: deal.status,
+      isOnline: deal.isOnline,
+    }),
+    confidenceScore: deal.confidenceScore,
   };
 }
 
@@ -82,6 +97,8 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     savingsPercentage: doc.savingsPercentage,
     distanceMiles: null,
     dealScore: doc.dealScore,
+    verified: doc.verified,
+    verifiedAt: doc.verifiedAtTs ? new Date(doc.verifiedAtTs * 1000).toISOString() : null,
     isOnline: doc.isOnline,
     isStudentOnly: doc.isStudentOnly,
     shortDescription: doc.shortDescription,
@@ -96,5 +113,7 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     publishedAt: new Date(doc.createdAtTs * 1000).toISOString(),
     startAt: doc.startAtTs ? new Date(doc.startAtTs * 1000).toISOString() : null,
     expiresAt: new Date(doc.expiresAtTs * 1000).toISOString(),
+    trustLevel: doc.trustLevel,
+    confidenceScore: doc.confidenceScore,
   };
 }

@@ -25,6 +25,9 @@ struct Deal: Identifiable, Codable, Hashable {
     let visualSeed: Int
     /// When this offer was published, used for accurate recent-first sorting.
     var publishedAt: Date = .distantPast
+    /// Server-controlled trust signal: Dealy recently confirmed this deal through
+    /// its authoritative source. Never set or trusted from the client.
+    var verified: Bool = false
 
     // MARK: Computed money
 

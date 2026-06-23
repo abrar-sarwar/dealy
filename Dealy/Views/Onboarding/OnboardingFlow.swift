@@ -1,75 +1,53 @@
 import SwiftUI
 
-/// First-run experience: 3 intro pages → location setup → interests → confirm.
+/// First-run experience: welcome → interests, then straight into Home where the
+/// live deck demonstrates the swipe itself. Device location prepares itself in
+/// the background; there is no location form and no separate practice step.
 struct OnboardingFlow: View {
     var onFinished: () -> Void
     @Environment(AppState.self) private var app
 
-    private enum Step: Int, CaseIterable {
-        case intro1, intro2, intro3, location, interests, confirm
-    }
-
-    @State private var step: Step = .intro1
-    @State private var discovery = DiscoveryPreference.default
-    @State private var interests: Set<DealCategory> = [.food, .tech, .studentSupplies]
+    @State private var step: OnboardingStep = .welcome
+    @State private var interests: Set<DealCategory> = [.food, .groceries, .entertainment]
 
     var body: some View {
-        VStack(spacing: 0) {
-            content
-        }
-        .background(Theme.background.ignoresSafeArea())
+        content
+            .background(Theme.background.ignoresSafeArea())
     }
 
     @ViewBuilder
     private var content: some View {
         switch step {
-        case .intro1, .intro2, .intro3:
-            OnboardingIntroView(
-                page: introPage(for: step),
-                pageIndex: step.rawValue,
-                pageCount: 3,
-                onSkip: { goTo(.location) },
-                onContinue: { advanceIntro() }
-            )
-            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                    removal: .move(edge: .leading).combined(with: .opacity)))
-        case .location:
-            OnboardingLocationView(discovery: $discovery) {
-                goTo(.interests)
-            }
+        case .welcome:
+            OnboardingIntroView { advance() }
+                .transition(stepTransition)
         case .interests:
-            OnboardingInterestsView(interests: $interests) {
-                goTo(.confirm)
-            }
-        case .confirm:
-            OnboardingConfirmView(discovery: discovery, interests: interests) {
-                finish()
-            }
+            OnboardingInterestsView(interests: $interests) { finish() }
+                .transition(stepTransition)
         }
     }
 
-    private func introPage(for step: Step) -> OnboardingPage {
-        switch step {
-        case .intro1: return .page1
-        case .intro2: return .page2
-        default:      return .page3
-        }
+    private var stepTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .opacity),
+            removal: .move(edge: .leading).combined(with: .opacity)
+        )
     }
 
-    private func advanceIntro() {
-        switch step {
-        case .intro1: goTo(.intro2)
-        case .intro2: goTo(.intro3)
-        default:      goTo(.location)
+    private func advance() {
+        guard let next = step.next else { return }
+        if step == .welcome {
+            Task { await app.prepareDiscoveryForOnboarding() }
         }
-    }
-
-    private func goTo(_ newStep: Step) {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = newStep }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            step = next
+        }
     }
 
     private func finish() {
-        // Discovery was already selected and applied during the location step.
+        // Re-arm the in-deck demo so the live Home deck always teaches the swipe
+        // right after onboarding; it interrupts the moment the user acts.
+        SwipeTutorialState.reset()
         app.completeOnboarding(interests: interests)
         onFinished()
     }

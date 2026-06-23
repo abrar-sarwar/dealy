@@ -1,4 +1,4 @@
-import { validateEnv } from './env.schema';
+import { validateEnv, envSchema, autoPublishKinds } from './env.schema';
 
 describe('validateEnv', () => {
   it('accepts a minimal valid development env and applies defaults', () => {
@@ -41,5 +41,26 @@ describe('validateEnv', () => {
   it('treats empty-string optional values as undefined', () => {
     const env = validateEnv({ DATABASE_URL: 'postgresql://localhost/dealy', SENTRY_DSN: '' });
     expect(env.SENTRY_DSN).toBeUndefined();
+  });
+});
+
+describe('crawler env', () => {
+  const base = { DATABASE_URL: 'postgres://x' };
+  it('defaults auto-publish off and kinds empty', () => {
+    const env = envSchema.parse(base);
+    expect(env.CRAWLER_AUTOPUBLISH_THRESHOLD).toBeUndefined();
+    expect(autoPublishKinds(env)).toEqual([]);
+  });
+  it('parses threshold and kinds csv', () => {
+    const env = envSchema.parse({
+      ...base,
+      CRAWLER_AUTOPUBLISH_THRESHOLD: '90',
+      CRAWLER_AUTOPUBLISH_KINDS: 'grocery_circular, restaurant',
+    });
+    expect(env.CRAWLER_AUTOPUBLISH_THRESHOLD).toBe(90);
+    expect(autoPublishKinds(env)).toEqual(['grocery_circular', 'restaurant']);
+  });
+  it('rejects an out-of-range threshold', () => {
+    expect(() => envSchema.parse({ ...base, CRAWLER_AUTOPUBLISH_THRESHOLD: '150' })).toThrow();
   });
 });

@@ -1,5 +1,17 @@
 import { createHash } from 'node:crypto';
 
+/**
+ * Pilot-eligible categories for the Atlanta verified-inventory launch
+ * (Food, Groceries, Local events). `entertainment` is the taxonomy slug that
+ * backs "Local events" (Ticketmaster maps to it). Coverage qualification counts
+ * only deals in these categories. The taxonomy itself is unchanged.
+ */
+export const PILOT_CATEGORIES = ['food', 'groceries', 'entertainment'] as const;
+export type PilotCategory = (typeof PILOT_CATEGORIES)[number];
+export function isPilotCategory(slug: string): slug is PilotCategory {
+  return (PILOT_CATEGORIES as readonly string[]).includes(slug);
+}
+
 /** Provider-agnostic normalized deal (the common ingestion currency). */
 export interface NormalizedDeal {
   externalId: string;
@@ -23,24 +35,65 @@ export interface NormalizedDeal {
   visualSeed: number;
   startAt: Date | null;
   expiresAt: Date;
+  /** Provenance: canonical URL/identifier the offer was confirmed against. */
+  sourceUrl: string | null;
+  /** Human-facing attribution string required by some providers. */
+  providerAttribution: string | null;
+}
+
+/** The minimal deal shape a provider needs to re-verify an offer at its source. */
+export interface VerifiableDeal {
+  externalId: string;
+  expiresAt: Date;
 }
 
 /**
+ * Outcome of re-checking a deal against its authoritative source.
+ * - `confirmed`   — source still offers it (optionally with a refreshed expiry).
+ * - `invalid`     — source no longer offers it; remove from active feeds now.
+ * - `expired`     — source marks it expired/past; expire now.
+ * - `unreachable` — transient provider failure; distinct from `invalid` so a
+ *                   short grace policy can apply (never overrides invalid/expired).
+ */
+export type VerificationOutcomeStatus = 'confirmed' | 'invalid' | 'expired' | 'unreachable';
+export interface VerificationResult {
+  status: VerificationOutcomeStatus;
+  reason?: string;
+  /** Refreshed expiry when the source moved/extended the offer. */
+  expiresAt?: Date;
+}
+
+/**
+ * Provenance trust tier of a provider (mirrors the Prisma `SourceTrust` enum).
+ * ONLY `authoritative` providers produce verifiable, badge-able, coverage-counting
+ * inventory. `editorial`/`fixture` are dev/demo sources that never enter trust paths.
+ */
+export type SourceTrust = 'authoritative' | 'editorial' | 'fixture';
+
+/**
  * A content provider. `isAvailable()` gates real providers behind credentials so
- * unrelated ingestion keeps working without them.
+ * unrelated ingestion keeps working without them. `trust` classifies provenance:
+ * only `authoritative` providers yield source-confirmed (verifiable) deals.
+ * `verify()` re-checks a single deal against the source for the daily
+ * re-verification job; providers that cannot re-check individually may omit it.
  */
 export interface DealProvider {
   readonly name: string;
+  readonly trust: SourceTrust;
   isAvailable(): boolean;
   fetch(): Promise<NormalizedDeal[]>;
+  verify?(deal: VerifiableDeal): Promise<VerificationResult>;
 }
+
+export type FingerprintInput = Pick<NormalizedDeal,
+  'merchant' | 'title' | 'isOnline' | 'locationTags' | 'latitude' | 'longitude' | 'currentPriceMinor' | 'categorySlug'>;
 
 /**
  * Stable cross-source dedup fingerprint. Intentionally combines several fields
  * (merchant + title + location + price + category) — never title alone — so
  * lookalike titles don't collapse distinct deals.
  */
-export function dealFingerprint(d: NormalizedDeal): string {
+export function dealFingerprint(d: FingerprintInput): string {
   const location = d.isOnline
     ? 'online'
     : (d.locationTags[0] ?? `${d.latitude ?? ''},${d.longitude ?? ''}`);

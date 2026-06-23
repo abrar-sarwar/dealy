@@ -4,8 +4,8 @@ import Foundation
 // These protocols mark where real backends plug in. They are intentionally
 // small and live here rather than being scattered through the UI.
 
-// Location resolution now lives in `LocationProviding.swift` (Core Location)
-// and manual place search in `PlaceResolving.swift` (Apple geocoder).
+// Device-location resolution lives in `LocationProviding.swift` (Core Location).
+// Nearby is device-location-only — there is no manual city/ZIP entry.
 
 /// Handles "Get Deal" — opening a merchant link, coupon, map, or affiliate page.
 ///

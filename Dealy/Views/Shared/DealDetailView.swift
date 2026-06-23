@@ -115,6 +115,9 @@ struct DealDetailView: View {
 
     private var chipsRow: some View {
         FlexibleWrap(spacing: Spacing.xs, lineSpacing: Spacing.xs) {
+            if deal.verified {
+                VerifiedBadge()
+            }
             InfoChip(symbol: deal.isOnline ? "globe" : "location.fill",
                      text: Format.distance(deal.distanceMiles, isOnline: deal.isOnline),
                      tint: Theme.primary)

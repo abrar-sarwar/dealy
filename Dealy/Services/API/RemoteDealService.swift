@@ -15,7 +15,7 @@ final class RemoteDealService: DealServicing {
         do {
             switch request {
             case .nearby(let preference):
-                return try await fetchNearbyBlend(preference)
+                return try await fetchNearby(preference)
             case .anywhere:
                 let page = try await client.get(
                     "/v1/feeds/online",
@@ -30,30 +30,23 @@ final class RemoteDealService: DealServicing {
         }
     }
 
-    /// Fetch `/v1/feeds/nearby` and `/v1/feeds/online` concurrently and blend
-    /// them: local deals first, online capped at 30% of the page.
-    private func fetchNearbyBlend(_ preference: DiscoveryPreference) async throws -> DealPage {
+    /// Nearby = the server's verified, physical deals within the radius, in the
+    /// server's distance+freshness order. Online-only deals are NOT blended in
+    /// (spec §6); the client preserves server ordering.
+    private func fetchNearby(_ preference: DiscoveryPreference) async throws -> DealPage {
         let nearbyQuery: [URLQueryItem] = [
             URLQueryItem(name: "lat", value: String(preference.center.latitude)),
             URLQueryItem(name: "lng", value: String(preference.center.longitude)),
             URLQueryItem(name: "radiusMiles", value: String(preference.radiusMiles)),
             URLQueryItem(name: "limit", value: "50"),
         ]
-        async let nearby = client.get("/v1/feeds/nearby", query: nearbyQuery, as: DealPageDTO.self)
-        async let online = client.get(
-            "/v1/feeds/online",
-            query: [URLQueryItem(name: "limit", value: "20")],
-            as: DealPageDTO.self
-        )
-        let nearbyPage = try await nearby
-        let onlinePage = try await online
-        // The nearby feed is the local supply; ignore any online deals it returns
-        // here and use the dedicated online feed for the capped online share.
-        let local = nearbyPage.items.map { $0.toDeal() }.filter { !$0.isOnline }
-        let onlineDeals = onlinePage.items.map { $0.toDeal() }
-        return DealPage(
-            items: DealFilter.blendNearby(local: local, online: onlineDeals),
-            nextCursor: nearbyPage.nextCursor
-        )
+        let page = try await client.get("/v1/feeds/nearby", query: nearbyQuery, as: DealPageDTO.self)
+        let coverage = page.coverage.map {
+            NearbyCoverageStatus(qualified: $0.qualified, reason: $0.reason)
+        }
+        // Defensive: the server already excludes online deals from nearby and
+        // serves none outside a qualified zone.
+        let items = page.items.map { $0.toDeal() }.filter { !$0.isOnline }
+        return DealPage(items: items, nextCursor: page.nextCursor, coverage: coverage)
     }
 }

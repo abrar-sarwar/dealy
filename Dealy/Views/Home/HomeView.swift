@@ -12,6 +12,21 @@ struct HomeView: View {
     @State private var showFilters = false
     @AppStorage(SwipeTutorialState.key) private var hasSeenSwipeTutorial = false
 
+    // First-run self-demo that runs on the real top card until the user acts.
+    @State private var demo = SwipeDemoState()
+    @State private var demoTask: Task<Void, Never>?
+    @State private var demoNudge: CGSize = .zero
+
+    private var isDemoRunning: Bool {
+        !hasSeenSwipeTutorial && !demo.isInterrupted
+    }
+
+    /// The top card follows the idle demo's gentle nudge until any interaction
+    /// hands control back to the user's real drag.
+    private var topCardOffset: CGSize {
+        isDemoRunning ? demoNudge : dragOffset
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             header
@@ -22,6 +37,7 @@ struct HomeView: View {
         .onChange(of: app.loadState) { _, _ in rebuild() }
         .onChange(of: app.discovery) { _, _ in rebuild() }
         .onAppear { if viewModel.deck.isEmpty { rebuild() } }
+        .onDisappear { demoTask?.cancel() }
         .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
         .sheet(item: $getDeal) { GetDealSheet(deal: $0) }
         .sheet(isPresented: $showFilters) {
@@ -116,25 +132,37 @@ struct HomeView: View {
                 // stack) and is revealed only as the top card is swiped away.
                 SwipeCardView(deal: deal,
                               campus: app.currentCampus,
-                              dragTranslation: isTop ? dragOffset : .zero)
-                    .offset(isTop ? dragOffset : .zero)
-                    .rotationEffect(.degrees(isTop ? Double(dragOffset.width) / 18 : 0))
+                              // Suppress the card's own SAVE/SKIP stamps during the
+                              // idle demo so only the single-word label teaches.
+                              dragTranslation: (isTop && !isDemoRunning) ? dragOffset : .zero)
+                    .offset(isTop ? topCardOffset : .zero)
+                    .rotationEffect(.degrees(isTop ? Double(topCardOffset.width) / 18 : 0))
                     .zIndex(Double(viewModel.visibleCards.count - idx))
                     .allowsHitTesting(isTop && !isSwiping)
                     .gesture(dragGesture(for: deal))   // only the top card hit-tests
-                    .onTapGesture { if isTop { app.recordOpened(deal.id); selectedDeal = deal } }
+                    // Card-display boundary: the top card is "shown" to the user.
+                    .onAppear {
+                        if isTop {
+                            app.recordImpression(deal.id)
+                            startDemoIfNeeded()
+                        }
+                    }
+                    .onTapGesture {
+                        if isTop {
+                            interruptDemo()
+                            app.recordOpened(deal.id)
+                            selectedDeal = deal
+                        }
+                    }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(deal.title) at \(deal.merchant). \(saveSkipHint)")
             }
 
-            if !hasSeenSwipeTutorial, viewModel.topDeal != nil {
-                SwipeTutorialView {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        hasSeenSwipeTutorial = true
-                    }
-                }
-                .zIndex(100)
-                .transition(.opacity)
+            if isDemoRunning, viewModel.topDeal != nil {
+                SwipeDemoLabel(phase: demo.phase)
+                    .zIndex(100)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.deck.map(\.id))
@@ -148,6 +176,29 @@ struct HomeView: View {
     private var emptyState: some View {
         let reason = viewModel.emptyReason(using: app)
         switch reason {
+        case _ where app.discovery.mode == .nearby && app.nearbyCoverage?.qualified == false:
+            // Server says this area isn't part of the live pilot yet — be honest
+            // and offer Anywhere. Never expose internal rollout-zone terminology.
+            EmptyStateView(
+                symbol: "mappin.slash",
+                title: "Dealy isn’t live here yet",
+                message: "We’re verifying enough nearby deals to launch your area. In the meantime, browse great online deals from Anywhere.",
+                primaryTitle: "Browse online",
+                primaryAction: { browseOnline() },
+                secondaryTitle: "Try again",
+                secondaryAction: { refresh() }
+            )
+        case .noneInArea where app.discovery.mode == .nearby && app.locationAuthorization != .authorizedWhenInUse:
+            // Nearby needs location access — explain calmly and offer to enable it.
+            EmptyStateView(
+                symbol: "location.slash",
+                title: "Nearby needs your location",
+                message: "Turn on location to see verified deals around you, or browse online deals from Anywhere.",
+                primaryTitle: "Enable Nearby deals",
+                primaryAction: { enableNearby() },
+                secondaryTitle: "Browse online",
+                secondaryAction: { browseOnline() }
+            )
         case .noneInArea where app.discovery.mode == .nearby:
             // Offer explicit choices instead of silently widening the search.
             EmptyStateView(
@@ -186,6 +237,10 @@ struct HomeView: View {
         Task { await app.applyDiscovery(app.discovery.switching(to: .anywhere)) }
     }
 
+    private func enableNearby() {
+        Task { await app.switchToNearby() }
+    }
+
     private func widenRange() {
         let widened = min(app.discovery.radiusMiles * 2, DiscoveryPreference.maxRadius)
         Task {
@@ -199,6 +254,7 @@ struct HomeView: View {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
                 guard !isSwiping else { return }
+                interruptDemo()
                 dragOffset = value.translation
             }
             .onEnded { value in
@@ -230,6 +286,46 @@ struct HomeView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             dragOffset = .zero
         }
+    }
+
+    // MARK: First-run swipe demo
+
+    /// Loop the four controls on the real top card while idle: nudge slightly,
+    /// hold, settle back to rest, advance. ~1.3s per phase, ~5s a cycle. Never
+    /// dismisses the card or opens a sheet on its own.
+    private func startDemoIfNeeded() {
+        guard isDemoRunning, demoTask == nil else { return }
+        demoTask = Task { @MainActor in
+            demoNudge = .zero
+            demo.resumeFromBeginning()
+
+            while !Task.isCancelled && !demo.isInterrupted {
+                let target = reduceMotion ? .zero : demo.offset(reduceMotion: reduceMotion)
+
+                withAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.4)) {
+                    demoNudge = target
+                }
+                try? await Task.sleep(for: .milliseconds(650))
+                guard !Task.isCancelled && !demo.isInterrupted else { return }
+
+                withAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.4)) {
+                    demoNudge = .zero
+                }
+                try? await Task.sleep(for: .milliseconds(650))
+                guard !Task.isCancelled && !demo.isInterrupted else { return }
+
+                demo.advance()
+            }
+        }
+    }
+
+    /// Any touch hands control back immediately and retires the demo for good.
+    private func interruptDemo() {
+        guard isDemoRunning else { return }
+        demoTask?.cancel()
+        demo.interrupt()
+        demoNudge = .zero
+        hasSeenSwipeTutorial = true
     }
 
     private func performSwipe(_ direction: SwipeDirection) {

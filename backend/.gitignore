@@ -15,8 +15,8 @@ dist/
 src/generated/
 prisma/*.db
 
-# test
-coverage/
+# test — Jest coverage output (anchored to repo root so it does not match src/coverage/)
+/coverage/
 
 # misc
 .DS_Store

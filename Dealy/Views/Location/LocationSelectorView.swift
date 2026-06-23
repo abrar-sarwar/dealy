@@ -2,18 +2,17 @@ import SwiftUI
 
 /// Search-owned discovery editor. Edits a local `draft` and only mutates global
 /// discovery on Apply, so the feed and saved deals update together atomically.
-/// Supports Nearby (current location / city / ZIP + radius) and online-only
-/// Anywhere. Changing location never affects saved deals.
+/// Nearby uses the device's current location (no city/ZIP entry); Anywhere is
+/// online-only. Changing location never affects saved deals.
 struct LocationSelectorView: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: DiscoveryPreference = .default
-    @State private var query = ""
-    @State private var candidates: [PlaceCandidate] = []
     @State private var isLocating = false
-    @State private var isResolving = false
     @State private var errorMessage: String?
+    /// True once the device returned a real fix during this editing session.
+    @State private var locatedThisSession = false
 
     private var radiusBinding: Binding<Int> {
         Binding(
@@ -27,6 +26,11 @@ struct LocationSelectorView: View {
             get: { draft.mode },
             set: { draft = draft.switching(to: $0) }
         )
+    }
+
+    /// Whether the staged Nearby center is a real device fix (vs a legacy anchor).
+    private var hasDeviceCenter: Bool {
+        draft.center.source == .device
     }
 
     var body: some View {
@@ -63,6 +67,7 @@ struct LocationSelectorView: View {
                         }
                     }
                     .fontWeight(.semibold)
+                    .disabled(draft.mode == .nearby && !hasDeviceCenter)
                 }
             }
             .onAppear { draft = app.discovery }
@@ -87,22 +92,21 @@ struct LocationSelectorView: View {
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedText)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        }
 
-        manualSearchField
-
-        if !candidates.isEmpty {
-            LocationSearchResultsView(candidates: candidates) { candidate in
-                select(candidate.center)
+            if app.locationAuthorization == .denied {
+                Button("Open Settings") { openSettings() }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
 
-        selectedCenterCard
-
-        DealyCard {
-            RadiusControl(radius: radiusBinding)
+        if hasDeviceCenter {
+            selectedCenterCard
+            DealyCard {
+                RadiusControl(radius: radiusBinding)
+            }
+            .padding(.top, Spacing.xs)
         }
-        .padding(.top, Spacing.xs)
     }
 
     private var currentLocationButton: some View {
@@ -122,7 +126,7 @@ struct LocationSelectorView: View {
                     Text("Use my current location")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
-                    Text("Find deals right around you")
+                    Text("Find verified deals right around you")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedText)
                 }
@@ -137,31 +141,12 @@ struct LocationSelectorView: View {
         .accessibilityLabel("Use my current location")
     }
 
-    private var manualSearchField: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Theme.mutedText)
-            TextField("City or ZIP code", text: $query)
-                .textInputAutocapitalization(.words)
-                .submitLabel(.search)
-                .onSubmit(runSearch)
-            if isResolving {
-                ProgressView()
-            } else if !query.isEmpty {
-                Button("Search", action: runSearch)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.primary)
-            }
-        }
-        .padding(Spacing.md)
-        .dealyCardSurface()
-    }
-
     private var selectedCenterCard: some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: "mappin.circle.fill").foregroundStyle(Theme.primary)
+            Image(systemName: "location.fill").foregroundStyle(Theme.primary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Selected location").font(.caption).foregroundStyle(Theme.mutedText)
-                Text(draft.center.displayName)
+                Text("Nearby").font(.caption).foregroundStyle(Theme.mutedText)
+                Text("Using your current location")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
             }
@@ -197,58 +182,37 @@ struct LocationSelectorView: View {
     private func useCurrentLocation() {
         isLocating = true
         errorMessage = nil
-        candidates = []
         Task { @MainActor in
             defer { isLocating = false }
             do {
                 let center = try await app.resolveDeviceCenter()
-                select(center)
+                draft = .nearby(center: center, radiusMiles: draft.radiusMiles)
+                locatedThisSession = true
                 Haptics.selection()
             } catch let error as LocationProviderError {
                 errorMessage = Self.message(for: error)
             } catch {
-                errorMessage = "We couldn't get your location. Try a city or ZIP instead."
+                errorMessage = "We couldn't get your location right now. Try again, or use Anywhere."
             }
         }
     }
 
-    private func runSearch() {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        isResolving = true
-        errorMessage = nil
-        candidates = []
-        Task { @MainActor in
-            defer { isResolving = false }
-            do {
-                let results = try await app.resolvePlaces(trimmed)
-                if results.isEmpty {
-                    errorMessage = "No places found for “\(trimmed)”."
-                } else if results.count == 1 {
-                    select(results[0].center)
-                } else {
-                    candidates = results
-                }
-            } catch {
-                errorMessage = "Location search is unavailable right now."
-            }
+    private func openSettings() {
+        #if canImport(UIKit)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
-    }
-
-    private func select(_ center: DiscoveryCenter) {
-        draft = .nearby(center: center, radiusMiles: draft.radiusMiles)
-        candidates = []
-        errorMessage = nil
+        #endif
     }
 
     private static func message(for error: LocationProviderError) -> String {
         switch error {
         case .denied:
-            return "Location access is off. Enter a city or ZIP below — no permission needed."
+            return "Location access is off. Enable it in Settings to use Nearby, or switch to Anywhere."
         case .restricted:
-            return "Location is restricted on this device. Enter a city or ZIP below."
+            return "Location is restricted on this device. Switch to Anywhere for online deals."
         case .unavailable, .timeout:
-            return "We couldn't get your location right now. Try a city or ZIP instead."
+            return "We couldn't get your location right now. Try again, or switch to Anywhere."
         }
     }
 }

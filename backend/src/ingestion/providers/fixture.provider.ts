@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { DealProvider, NormalizedDeal } from '../normalized-deal';
+import type {
+  DealProvider,
+  NormalizedDeal,
+  VerifiableDeal,
+  VerificationResult,
+} from '../normalized-deal';
 
 /**
  * Deterministic local provider for development + tests. Always available; emits
@@ -9,9 +14,18 @@ import type { DealProvider, NormalizedDeal } from '../normalized-deal';
 @Injectable()
 export class FixtureProvider implements DealProvider {
   readonly name = 'fixture';
+  readonly trust = 'fixture' as const;
 
   isAvailable(): boolean {
     return true;
+  }
+
+  /** Deterministic re-verification: a fixture deal is confirmed while it exists. */
+  async verify(deal: VerifiableDeal): Promise<VerificationResult> {
+    const known = (await this.fetch()).some((d) => d.externalId === deal.externalId);
+    if (!known) return { status: 'invalid', reason: 'no longer in fixture set' };
+    if (deal.expiresAt.getTime() <= Date.now()) return { status: 'expired' };
+    return { status: 'confirmed' };
   }
 
   async fetch(): Promise<NormalizedDeal[]> {
@@ -90,6 +104,8 @@ export class FixtureProvider implements DealProvider {
       visualSeed: 200 + i,
       startAt: null,
       expiresAt: inDays(7 + i),
+      sourceUrl: `fixture://deal/${s.id}`,
+      providerAttribution: 'Dealy fixture data',
     }));
   }
 }

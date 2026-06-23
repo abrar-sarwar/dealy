@@ -6,10 +6,22 @@ enum DealFeedRequest: Equatable, Sendable {
     case anywhere
 }
 
-/// A page of already-eligible deals plus an opaque pagination cursor.
+/// Density-first Nearby coverage status from the server. `qualified == false`
+/// means the user is outside the launched Atlanta pilot area (or it isn't dense
+/// enough yet) and Nearby intentionally serves no deals — the UI shows an honest
+/// low-coverage state and offers Anywhere. Never exposes internal zone details.
+struct NearbyCoverageStatus: Equatable, Sendable {
+    let qualified: Bool
+    /// Server reason code: "qualified" | "outside_coverage" | "low_coverage".
+    let reason: String
+}
+
+/// A page of already-eligible deals plus an opaque pagination cursor. `coverage`
+/// is set for Nearby requests (nil for Anywhere / mock).
 struct DealPage: Equatable, Sendable {
     let items: [Deal]
     let nextCursor: String?
+    var coverage: NearbyCoverageStatus? = nil
 }
 
 /// Async-friendly boundary for sourcing deals. Implementations return inventory

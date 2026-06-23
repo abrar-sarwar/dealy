@@ -41,7 +41,6 @@ final class AppState {
     private let store: PreferenceStoring
     private let dealService: DealServicing
     private let locationProvider: LocationProviding
-    private let placeResolver: PlaceResolving
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
 
@@ -50,6 +49,8 @@ final class AppState {
     private(set) var allDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
+    /// Server density-first coverage for the last Nearby load (nil for Anywhere).
+    private(set) var nearbyCoverage: NearbyCoverageStatus?
 
     private let maxSwipeHistory = 60
     /// Monotonic load token: only the newest in-flight load may publish results.
@@ -58,13 +59,11 @@ final class AppState {
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
          locationProvider: LocationProviding = MockLocationProvider(),
-         placeResolver: PlaceResolving = MockPlaceResolver(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
          interactionRecorder: DealInteractionRecording = NoopInteractionRecorder()) {
         self.store = store
         self.dealService = dealService
         self.locationProvider = locationProvider
-        self.placeResolver = placeResolver
         self.redemptionHandler = redemptionHandler
         self.interactionRecorder = interactionRecorder
         self.persisted = store.load()
@@ -85,6 +84,7 @@ final class AppState {
             guard generation == loadGeneration else { return }
             allDeals = page.items
             dealsByID = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
+            nearbyCoverage = page.coverage
             loadState = .loaded
         } catch is CancellationError {
             return
@@ -114,9 +114,51 @@ final class AppState {
         await applyDiscovery(.nearby(center: center, radiusMiles: discovery.radiusMiles))
     }
 
-    /// City/ZIP search candidates from the place resolver (no global mutation).
-    func resolvePlaces(_ query: String) async throws -> [PlaceCandidate] {
-        try await placeResolver.resolve(query)
+    /// Try to enter Nearby using the device's location; on ANY failure fall back
+    /// to Anywhere (online-only) without blocking the app. Returns the failure so
+    /// callers can show a calm explanation + "Enable Nearby" affordance. Used at
+    /// onboarding and from the "Enable Nearby deals" action.
+    @discardableResult
+    @MainActor
+    func enableNearbyOrFallbackToAnywhere() async -> LocationProviderError? {
+        do {
+            try await refreshFromDeviceLocation()
+            return nil
+        } catch let error as LocationProviderError {
+            await switchToAnywhere()
+            return error
+        } catch {
+            await switchToAnywhere()
+            return .unavailable
+        }
+    }
+
+    /// Enter Anywhere (online-only). Never requires location permission.
+    @MainActor
+    func switchToAnywhere() async {
+        await applyDiscovery(discovery.switching(to: .anywhere))
+    }
+
+    /// Switch to Nearby. Prefer a fresh device fix; if that fails, reuse the last
+    /// VALID device location when we have one; otherwise stay honest and use
+    /// Anywhere rather than fabricated/default coordinates.
+    @discardableResult
+    @MainActor
+    func switchToNearby() async -> LocationProviderError? {
+        do {
+            try await refreshFromDeviceLocation()
+            return nil
+        } catch let error as LocationProviderError {
+            if discovery.center.source == .device {
+                await applyDiscovery(.nearby(center: discovery.center, radiusMiles: discovery.radiusMiles))
+                return nil
+            }
+            await switchToAnywhere()
+            return error
+        } catch {
+            await switchToAnywhere()
+            return .unavailable
+        }
     }
 
     /// Resolve the device's current center WITHOUT applying it, for editors that
@@ -130,9 +172,25 @@ final class AppState {
     @MainActor
     var locationAuthorization: LocationAuthorization { locationProvider.authorization }
 
+    /// Whether the user intentionally dismissed the "Enable Nearby" nudge. We
+    /// honor this so we don't repeatedly nag people who chose to stay in Anywhere.
+    var anywhereNudgeDismissed: Bool { persisted.anywhereNudgeDismissed }
+    func dismissAnywhereNudge() {
+        persisted.anywhereNudgeDismissed = true
+        persist()
+    }
+
     // MARK: - Onboarding
 
     var hasCompletedOnboarding: Bool { persisted.hasCompletedOnboarding }
+
+    /// Prepare first-run discovery without presenting a dedicated location step.
+    /// Nearby is selected when a device fix succeeds; all failures continue
+    /// honestly in Anywhere so onboarding is never blocked.
+    @MainActor
+    func prepareDiscoveryForOnboarding() async {
+        _ = await enableNearbyOrFallbackToAnywhere()
+    }
 
     func completeOnboarding(campus: Campus, radius: Int, interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
@@ -141,9 +199,8 @@ final class AppState {
         persist()
     }
 
-    /// Finish onboarding, persisting interests. The discovery preference has
-    /// already been selected/applied during the location step, so it is left
-    /// untouched here.
+    /// Finish onboarding, persisting interests. Discovery was prepared
+    /// automatically during the first-run flow, so it is left untouched here.
     func completeOnboarding(interests: Set<DealCategory>) {
         persisted.hasCompletedOnboarding = true
         persisted.interests = interests
@@ -177,6 +234,14 @@ final class AppState {
             radiusMiles: min(max(value, DiscoveryPreference.minRadius), DiscoveryPreference.maxRadius)
         )
         persist()
+    }
+
+    /// Clamp + persist a new radius AND immediately refresh the feed so Home (and
+    /// every other discovery consumer) reflects the change right away.
+    @MainActor
+    func setRadiusAndReload(_ value: Int) async {
+        let clamped = min(max(value, DiscoveryPreference.minRadius), DiscoveryPreference.maxRadius)
+        await applyDiscovery(updatedDiscovery(radiusMiles: clamped))
     }
 
     func setInterests(_ interests: Set<DealCategory>) {
@@ -301,8 +366,13 @@ final class AppState {
         interactionRecorder.record(.redemptionClicked(dealID: dealID))
     }
 
-    /// Record that a deal card was shown to the user.
+    /// Deal ids already counted as impressions this session (dedup policy: one
+    /// impression per deal per session; the backend additionally dedups per day).
+    private var impressedDealIDs: Set<String> = []
+
+    /// Record that a deal card was shown to the user (deduped per session).
     func recordImpression(_ dealID: String) {
+        guard impressedDealIDs.insert(dealID).inserted else { return }
         interactionRecorder.record(.impression(dealID: dealID))
     }
 

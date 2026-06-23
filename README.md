@@ -3,34 +3,51 @@
 **Swipe. Save. Repeat.** Dealy is a swipe-first, location-aware savings app — a
 "Tinder/TikTok for deals." This repository is a polished, compile-ready SwiftUI
 app that runs on local mock data by default and can talk to the Dealy API when
-`DEALY_API_ENV` is set. Location-first discovery uses **Apple Core Location +
-geocoding only** — no paid third-party location API and no background location.
+`DEALY_API_ENV` is set. Discovery uses the **device's current location only**
+(Apple Core Location, When-In-Use) — no paid third-party location API, no
+background location, and **no manual city/ZIP entry**.
 
-The app is themed around Atlanta and Georgia campuses, but discovery is
-location-first: the user's current location or any city/ZIP drives the feed.
+The app is themed around Atlanta and Georgia campuses. The backend implements a
+density-first Atlanta verified-inventory pilot (food, groceries, local events):
+Nearby serves a zone only once it holds ≥20 deals recently confirmed against a
+real authoritative source. Whether any zone is actually live depends on connected
+authoritative providers (see `backend/docs/providers.md`) — curated/fixture
+inventory never qualifies a zone.
 
 ---
 
-## Location-first discovery
+## Device-location-only discovery
 
-- **Permission:** only **When-In-Use** Core Location is requested, and it is
-  never mandatory — a city/ZIP fallback (Apple geocoding) works just as well.
-  No background location, no paid location SDK.
+- **Permission:** only **When-In-Use** Core Location is requested during
+  onboarding. If location is unavailable (denied/restricted/failed), the app is
+  never blocked — the user drops into **Anywhere** (online-only) and can enable
+  Nearby later via a calm "Enable Nearby deals" action (→ Settings when denied).
 - **Search owns location.** One shared `DiscoveryPreference` (mode, center,
-  radius) drives both Home and Explore; changing it in Search refreshes Home
-  immediately and never affects saved deals or swipe history.
-- **Radius:** 1–100 miles (default 10).
-- **Nearby vs Anywhere:** Nearby is location-first but blended — local deals
-  lead, online deals are clearly labeled and capped at ~30% of the page. Anywhere
-  returns online-only inventory. API routes: `GET /v1/feeds/nearby` (with
-  `lat`/`lng`/`radiusMiles`) and `GET /v1/feeds/online`.
+  radius) drives Home, Map, and Explore; changing it refreshes Home immediately
+  and never affects saved deals or swipe history. Precise coordinates are never
+  shown in the UI or sent to analytics.
+- **Radius:** 1–100 miles (default 10). Changing it immediately refreshes Home.
+- **Nearby vs Anywhere:** Nearby returns a **never-empty**, tier-ranked blend —
+  VERIFIED physical deals first, then CURATED (crawled + moderator-approved)
+  inventory, then verified online deals as a final fallback. Each tier carries
+  an honest per-tier badge: **Verified** (authoritative source confirmed) vs
+  **Curated** (operator-crawled, moderator-approved). A radius expansion ladder
+  (base → 25 mi → 50 mi) is tried before falling back to online inventory, so
+  the feed is always populated when any inventory exists in range. The
+  `coverage` signal is retained in API responses as an honesty indicator
+  (reflecting the density of authoritative-verified inventory) but no longer
+  hard-gates the feed — "Verified" as a badge remains strictly authoritative-only
+  and is never diluted by curated or online tiers. Anywhere returns verified
+  online-only inventory and needs no location. API routes:
+  `GET /v1/feeds/nearby` (`lat`/`lng`/`radiusMiles`) and
+  `GET /v1/feeds/online`.
 - **Map:** the full interactive deal map is a Dealy+ feature; the free entry is a
   non-interactive preview.
 
 ## What's inside
 
 - **Branded startup** transition (respects Reduce Motion) over a static launch screen.
-- **Onboarding**: 3 intro pages → current location or city/ZIP + 1–100 mi radius → interests → confirmation.
+- **Onboarding**: animated welcome → interests, then straight into Home. Location is requested automatically after the welcome; denial continues in Anywhere. There is no separate practice step — while the Home deck is idle on first run, the live top card demonstrates details, pass, save, and use in about five seconds (single-word labels); the moment you touch it, the demo retires and the real swipe takes over.
 - **Home swipe deck** (the hero): draggable cards with rotation, SAVE/SKIP stamps,
   velocity-aware completion, haptics, button-driven save/skip on the same path,
   **Undo**, category filters, ShareLink, watch, and rich empty states.
@@ -42,9 +59,9 @@ location-first: the user's current location or any city/ZIP drives the feed.
   Ending soon).
 - **Saved**: potential-vs-realized savings summary, category filter, swipe to
   remove / watch, empty state that routes back to Home.
-- **Location selector** (Search-owned): current location / city / ZIP, Nearby vs
-  Anywhere, and a 1–100 mi radius slider (applies on Apply, never destroys saved
-  deals).
+- **Location selector** (Search-owned): use current location (device only), Nearby
+  vs Anywhere, and a 1–100 mi radius slider (applies on Apply, never destroys saved
+  deals). When location is denied, an Open Settings affordance is offered.
 - **Dealy+**: tasteful subscription **preview** (Student $2.99 / Regular $5.99),
   no StoreKit, no dark patterns.
 - **Profile/Settings**: stats, interests, location, notification preferences,
@@ -110,8 +127,9 @@ When `DEALY_API_ENV` is unset, `MockDealService` powers previews and offline dev
 
 Core Location needs a simulated position: **Simulator → Features → Location →
 Custom Location…** (or pick a city). On a fresh install, **Allow** the
-When-In-Use prompt and the center becomes the simulated location; **Deny** it and
-use the city/ZIP fallback to finish onboarding.
+When-In-Use prompt and the center becomes the simulated location for Nearby;
+**Deny** it and the app drops into Anywhere (online-only), with an "Enable Nearby
+deals" action to switch back once permission is granted.
 
 ## Architecture
 
@@ -156,26 +174,32 @@ DealyTests/       Model, filter/ranker, AppState, persistence tests
   ranking (interest match, proximity, discount, urgency). It is **not** AI and
   is designed to be replaced by a backend recommender.
 
-## Future backend integration points
+## Backend integration points
 
 Small protocols mark where real services plug in (with focused `TODO`s):
 
 - `DealServicing` → `RemoteDealService` (live) or `MockDealService` (default),
-  selected by `DEALY_API_ENV`.
+  selected by `DEALY_API_ENV`. The live backend now blends **CURATED** (crawled,
+  moderator-approved) inventory into Nearby alongside VERIFIED deals, with honest
+  per-tier badges. Nearby is never-empty: radius expansion and an online fallback
+  ensure inventory is always returned when any tier has matching deals. The
+  `coverage` signal is retained in API responses as an honesty indicator; the
+  "Verified" badge remains strictly authoritative-only.
 - `LocationProviding` → `CoreLocationProvider` (When-In-Use, implemented).
-- `PlaceResolving` → `ApplePlaceResolver` (Apple geocoding, implemented).
+  Nearby is device-location-only — there is no manual city/ZIP entry.
 - `PreferenceStoring` → backend-synced preference store (future).
-- `DealInteractionRecording` → records explicit interaction signals (opened,
-  swiped, redemption-clicked, marked-used). Default is a no-op; a backend sink
-  for personalization / "Ask Dealy" plugs in later.
+- `DealInteractionRecording` → records explicit interaction signals (impression,
+  opened, swiped, redemption-clicked, marked-used). The live app injects
+  `RemoteInteractionRecorder` (best-effort POSTs to `/v1/deals/:id/...`, no
+  precise coordinates); previews/offline/tests use the no-op recorder.
 - `RedemptionHandling` → affiliate/coupon/map link handling ("Get Deal").
 - `NotificationScheduling` → push/local deal alerts.
 
 ## Intentional scope deviations
 
-- **Location**: uses Apple Core Location (When-In-Use) + geocoding only — no paid
-  location API and no background location. Permission is optional (city/ZIP
-  fallback).
+- **Location**: device location only via Apple Core Location (When-In-Use) — no
+  paid location API, no background location, and no manual city/ZIP entry. When
+  permission is unavailable the app falls back to Anywhere (online-only).
 - **No StoreKit/payments**: Dealy+ is a non-functional preview; core features
   are never paywalled.
 - **App icon**: the supplied artwork had pre-rendered rounded corners with black
