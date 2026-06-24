@@ -8,6 +8,10 @@ export interface FirecrawlConfig {
   maxConcurrency: number;
   timeoutMs: number;
   enabled: boolean;
+  maxPagesPerDay: number;
+  maxPagesPerSourcePerDay: number;
+  maxRunsPerDay: number;
+  maxRecrawlsPerDay: number;
 }
 
 export function firecrawlConfig(config: ConfigService<Env, true>): FirecrawlConfig {
@@ -18,5 +22,9 @@ export function firecrawlConfig(config: ConfigService<Env, true>): FirecrawlConf
     maxConcurrency: config.get('FIRECRAWL_MAX_CONCURRENCY', { infer: true }),
     timeoutMs: config.get('FIRECRAWL_TIMEOUT_MS', { infer: true }),
     enabled: config.get('CRAWLER_ENABLED', { infer: true }),
+    maxPagesPerDay: config.get('FIRECRAWL_MAX_PAGES_PER_DAY', { infer: true }),
+    maxPagesPerSourcePerDay: config.get('FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY', { infer: true }),
+    maxRunsPerDay: config.get('FIRECRAWL_MAX_RUNS_PER_DAY', { infer: true }),
+    maxRecrawlsPerDay: config.get('FIRECRAWL_MAX_RECRAWLS_PER_DAY', { infer: true }),
   };
 }

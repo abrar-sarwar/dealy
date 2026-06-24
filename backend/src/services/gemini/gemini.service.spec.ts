@@ -25,6 +25,8 @@ describe('GeminiService', () => {
       model: 'gemini-2.5-flash',
       reasoningModel: 'gemini-2.5-pro',
       cacheTtlHours: 24,
+      escalationMaxConfidence: 60,
+      escalationMinReliability: 80,
     });
 
     const result = await service.extractDeals({
@@ -58,6 +60,8 @@ describe('GeminiService', () => {
       model: 'gemini-2.5-flash',
       reasoningModel: 'gemini-2.5-pro',
       cacheTtlHours: 24,
+      escalationMaxConfidence: 60,
+      escalationMinReliability: 80,
     });
 
     await service.reasonAboutVerification({

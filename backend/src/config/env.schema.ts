@@ -72,6 +72,17 @@ export const envSchema = z
     MAX_DISCOVERY_RUNS_PER_DAY: z.coerce.number().int().positive().default(4),
     CRAWLER_ENABLED: z.coerce.boolean().default(true),
     AI_ENABLED: z.coerce.boolean().default(true),
+    FIRECRAWL_MAX_PAGES_PER_DAY: z.coerce.number().int().positive().default(100),
+    FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY: z.coerce.number().int().positive().default(10),
+    FIRECRAWL_MAX_RUNS_PER_DAY: z.coerce.number().int().positive().default(4),
+    FIRECRAWL_MAX_RECRAWLS_PER_DAY: z.coerce.number().int().positive().default(2),
+    GEMINI_ESCALATION_MAX_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(60),
+    GEMINI_ESCALATION_MIN_RELIABILITY: z.coerce.number().int().min(0).max(100).default(80),
+    DISCOVERY_CRON: z.string().default('0 */6 * * *'),
+    DISCOVERY_TARGET_PATHS: z
+      .string()
+      .default('/deals,/coupons,/promotions,/offers,/weekly-ad,/student-discounts,/events'),
+    DISCOVERY_PUBLISH_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(80),
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
     CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),

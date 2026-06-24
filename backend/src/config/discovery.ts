@@ -7,6 +7,9 @@ export interface DiscoveryConfig {
   maxDiscoveryRunsPerDay: number;
   crawlerEnabled: boolean;
   aiEnabled: boolean;
+  cron: string;
+  targetPaths: string[];
+  publishMinConfidence: number;
 }
 
 export function discoveryConfig(config: ConfigService<Env, true>): DiscoveryConfig {
@@ -16,5 +19,8 @@ export function discoveryConfig(config: ConfigService<Env, true>): DiscoveryConf
     maxDiscoveryRunsPerDay: config.get('MAX_DISCOVERY_RUNS_PER_DAY', { infer: true }),
     crawlerEnabled: config.get('CRAWLER_ENABLED', { infer: true }),
     aiEnabled: config.get('AI_ENABLED', { infer: true }),
+    cron: config.get('DISCOVERY_CRON', { infer: true }),
+    targetPaths: config.get('DISCOVERY_TARGET_PATHS', { infer: true }).split(',').map((p) => p.trim()).filter(Boolean),
+    publishMinConfidence: config.get('DISCOVERY_PUBLISH_MIN_CONFIDENCE', { infer: true }),
   };
 }

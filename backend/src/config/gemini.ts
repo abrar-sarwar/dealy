@@ -7,6 +7,8 @@ export interface GeminiConfig {
   reasoningModel: string;
   cacheTtlHours: number;
   enabled: boolean;
+  escalationMaxConfidence: number;
+  escalationMinReliability: number;
 }
 
 export function geminiConfig(config: ConfigService<Env, true>): GeminiConfig {
@@ -16,5 +18,7 @@ export function geminiConfig(config: ConfigService<Env, true>): GeminiConfig {
     reasoningModel: config.get('GEMINI_REASONING_MODEL', { infer: true }),
     cacheTtlHours: config.get('AI_CACHE_TTL_HOURS', { infer: true }),
     enabled: config.get('AI_ENABLED', { infer: true }),
+    escalationMaxConfidence: config.get('GEMINI_ESCALATION_MAX_CONFIDENCE', { infer: true }),
+    escalationMinReliability: config.get('GEMINI_ESCALATION_MIN_RELIABILITY', { infer: true }),
   };
 }

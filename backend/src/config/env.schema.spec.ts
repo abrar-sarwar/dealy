@@ -98,3 +98,18 @@ describe('crawler env', () => {
     expect(() => envSchema.parse({ ...base, CRAWLER_AUTOPUBLISH_THRESHOLD: '150' })).toThrow();
   });
 });
+
+describe('discovery cost env defaults', () => {
+  it('applies hard Firecrawl caps, escalation, cron, and publish threshold', () => {
+    const env = envSchema.parse({ DATABASE_URL: 'postgres://x' });
+    expect(env.FIRECRAWL_MAX_PAGES_PER_DAY).toBe(100);
+    expect(env.FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY).toBe(10);
+    expect(env.FIRECRAWL_MAX_RUNS_PER_DAY).toBe(4);
+    expect(env.FIRECRAWL_MAX_RECRAWLS_PER_DAY).toBe(2);
+    expect(env.GEMINI_ESCALATION_MAX_CONFIDENCE).toBe(60);
+    expect(env.GEMINI_ESCALATION_MIN_RELIABILITY).toBe(80);
+    expect(env.DISCOVERY_CRON).toBe('0 */6 * * *');
+    expect(env.DISCOVERY_TARGET_PATHS).toContain('/deals');
+    expect(env.DISCOVERY_PUBLISH_MIN_CONFIDENCE).toBe(80);
+  });
+});
