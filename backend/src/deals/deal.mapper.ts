@@ -53,6 +53,7 @@ interface NormalizedDeal {
   redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
+  locationPrecision: string;
   locationTags: string[];
   visualSeed: number;
   verificationStatus: string;
@@ -97,6 +98,7 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     redemptionBrand: n.redemptionBrand,
     latitude: n.latitude,
     longitude: n.longitude,
+    locationPrecision: n.locationPrecision,
     locationTags: n.locationTags,
     visualSeed: n.visualSeed,
     publishedAt: n.createdAt.toISOString(),
@@ -141,6 +143,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       redemptionBrand: deal.redemptionBrand,
       latitude: deal.latitude,
       longitude: deal.longitude,
+      locationPrecision: deal.locationPrecision,
       locationTags: deal.locationTags,
       visualSeed: deal.visualSeed,
       verificationStatus: deal.verificationStatus,
@@ -177,6 +180,7 @@ export interface NearbyRow {
   redemption_brand: string | null;
   latitude: number | null;
   longitude: number | null;
+  location_precision: string;
   location_tags: string[];
   visual_seed: number;
   verification_status: string;
@@ -221,6 +225,7 @@ export function mapNearbyRow(row: NearbyRow) {
       redemptionBrand: row.redemption_brand,
       latitude: row.latitude,
       longitude: row.longitude,
+      locationPrecision: row.location_precision,
       locationTags: row.location_tags,
       visualSeed: row.visual_seed,
       verificationStatus: row.verification_status,

@@ -225,6 +225,7 @@ model Deal {
   redemptionBrand     String?          @map("redemption_brand")
   latitude            Float?
   longitude           Float?
+  locationPrecision   String           @default("approximate") @map("location_precision")
   geog                Unsupported("geography(Point, 4326)")?
   locationTags        String[]         @map("location_tags")
   visualSeed          Int              @default(0) @map("visual_seed")
@@ -817,6 +818,7 @@ model DealCandidate {
   locationText       String?   @map("location_text")
   latitude           Float?
   longitude          Float?
+  locationPrecision  String    @default("approximate") @map("location_precision")
   summary            String
   confidence         Float     @default(0)
   verificationStatus VerificationStatus @default(pending) @map("verification_status")

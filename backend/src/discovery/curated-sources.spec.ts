@@ -67,7 +67,8 @@ describe('curated crawlSources seed', () => {
 describe('curated source category balance', () => {
   const dist = () => {
     const m = new Map<string, number>();
-    for (const s of crawlSources) m.set(s.defaultCategorySlug, (m.get(s.defaultCategorySlug) ?? 0) + 1);
+    for (const s of crawlSources)
+      m.set(s.defaultCategorySlug, (m.get(s.defaultCategorySlug) ?? 0) + 1);
     return m;
   };
 

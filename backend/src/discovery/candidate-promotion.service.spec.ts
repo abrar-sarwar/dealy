@@ -18,6 +18,7 @@ type Candidate = {
   locationText: null;
   latitude: number | null;
   longitude: number | null;
+  locationPrecision: string;
 };
 
 function deps(
@@ -43,6 +44,7 @@ function deps(
     locationText: null,
     latitude: 33.749,
     longitude: -84.388,
+    locationPrecision: 'approximate',
     ...over.candidate,
   };
   return {
@@ -91,6 +93,8 @@ describe('CandidatePromotionService.promoteRegion', () => {
         latitude: 33.749,
         longitude: -84.388,
         isOnline: false,
+        // Precision flows candidate → deal (no geocoding yet; approximate is the default).
+        locationPrecision: 'approximate',
       }),
     );
     expect(d.prisma.dealCandidate.update).toHaveBeenCalledWith(

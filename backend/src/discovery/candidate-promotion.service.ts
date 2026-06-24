@@ -102,6 +102,7 @@ export class CandidatePromotionService {
           destinationUrl: c.sourceUrl,
           latitude: c.latitude,
           longitude: c.longitude,
+          locationPrecision: c.locationPrecision,
           locationTags: regionSlug ? [regionSlug] : [],
           visualSeed: Math.abs(hash(externalId)) % 1000,
           status: 'published',

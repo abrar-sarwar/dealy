@@ -112,6 +112,8 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     isTrending: false,
     latitude: doc.latitude,
     longitude: doc.longitude,
+    // Search results carry 'approximate' by default; geocoding is not indexed.
+    locationPrecision: 'approximate',
     locationTags: doc.locationTags,
     visualSeed: doc.visualSeed,
     publishedAt: new Date(doc.createdAtTs * 1000).toISOString(),

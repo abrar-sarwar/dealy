@@ -85,9 +85,19 @@ describe('Discovery promotion → local feed (e2e)', () => {
       url: `/v1/feeds/local?lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=15&limit=50`,
     });
     expect(res.statusCode).toBe(200);
-    const items = res.json().items as Array<{ title: string; isOnline: boolean }>;
+    const items = res.json().items as Array<{
+      title: string;
+      isOnline: boolean;
+      locationPrecision: string;
+      distanceMiles: number | null;
+    }>;
     const promoted = items.find((d) => d.title === 'E2E Promoted Local Deal');
     expect(promoted).toBeTruthy();
     expect(promoted!.isOnline).toBe(false);
+    // Honest coordinates: precision is surfaced to the client so it can show a
+    // "approximate location" disclaimer instead of a pin-precise marker.
+    expect(promoted!.locationPrecision).toBe('approximate');
+    // Distance is the true ST_Distance from query point to centroid (not scattered).
+    expect(promoted!.distanceMiles).not.toBeNull();
   });
 });

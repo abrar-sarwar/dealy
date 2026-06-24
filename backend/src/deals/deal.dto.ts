@@ -37,6 +37,7 @@ export interface DealDto {
   redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
+  locationPrecision: string;
   locationTags: string[];
   visualSeed: number;
   publishedAt: string;
