@@ -63,6 +63,21 @@ enum Format {
         return String(format: "%.1f mi", miles)
     }
 
+    /// Honest location label for a deal card:
+    /// - Online deal → "Online"
+    /// - Approximate location → "~ Midtown" (first locationTag titlecased) or "~ nearby"
+    /// - Exact location → precise distance e.g. "0.4 mi"
+    static func locationLabel(for deal: Deal) -> String {
+        if deal.isOnline { return "Online" }
+        if deal.isApproximateLocation {
+            if let area = deal.locationTags.first, !area.isEmpty {
+                return "~ \(area.capitalized)"
+            }
+            return "~ nearby"
+        }
+        return distance(deal.distanceMiles, isOnline: false)
+    }
+
     private static let monthDay: DateFormatter = {
         let f = DateFormatter()
         f.locale = .current

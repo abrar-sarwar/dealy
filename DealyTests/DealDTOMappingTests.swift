@@ -81,6 +81,32 @@ final class DealDTOMappingTests: XCTestCase {
         XCTAssertTrue(verified.items[0].toDeal().verified)
     }
 
+    // MARK: - locationPrecision mapping
+
+    func testLocationPrecisionExactMapsThroughAndFlagsNotApproximate() throws {
+        let json = #"{"items":[{"id":"e1","title":"t","merchant":"m","category":"food","currentPrice":1,"originalPrice":2,"currency":"USD","dealScore":50,"isOnline":false,"isStudentOnly":false,"shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":null,"latitude":33.7,"longitude":-84.4,"locationTags":["midtown"],"locationPrecision":"exact","visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: json)
+        let deal = page.items[0].toDeal()
+        XCTAssertEqual(deal.locationPrecision, "exact")
+        XCTAssertFalse(deal.isApproximateLocation)
+    }
+
+    func testLocationPrecisionAbsentDefaultsToApproximate() throws {
+        // The sampleJSON has no locationPrecision field → should default to "approximate"
+        let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: sampleJSON)
+        let deal = page.items[0].toDeal()
+        XCTAssertEqual(deal.locationPrecision, "approximate")
+        XCTAssertTrue(deal.isApproximateLocation)
+    }
+
+    func testLocationPrecisionNilInDTODefaultsToApproximate() throws {
+        let json = #"{"items":[{"id":"a1","title":"t","merchant":"m","category":"food","currentPrice":1,"originalPrice":2,"currency":"USD","dealScore":50,"isOnline":false,"isStudentOnly":false,"shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":null,"latitude":33.7,"longitude":-84.4,"locationTags":[],"locationPrecision":null,"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: json)
+        let deal = page.items[0].toDeal()
+        XCTAssertEqual(deal.locationPrecision, "approximate")
+        XCTAssertTrue(deal.isApproximateLocation)
+    }
+
     func testDecodesRedemptionBrandWhenPresentAndAbsent() throws {
         let withBrand = #"{"items":[{"id":"s1","title":"Apple Education","merchant":"Apple","category":"tech","currentPrice":0,"originalPrice":0,"currency":"USD","dealScore":80,"isOnline":true,"isStudentOnly":true,"redemptionBrand":"Apple Store","shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":"https://www.apple.com/us-edu/store","latitude":null,"longitude":null,"locationTags":["online","nationwide"],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
         let page = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: withBrand)

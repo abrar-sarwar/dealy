@@ -257,20 +257,35 @@ struct DealsMapView: View {
 }
 
 /// Map pin: a category-tinted bubble that grows when selected.
+/// Approximate-location deals render with reduced opacity and a dashed stroke
+/// to signal that the pin placement is region-level, not a real storefront.
 private struct DealMapPin: View {
     let deal: Deal
     let selected: Bool
+
+    private var isApproximate: Bool { deal.isApproximateLocation }
+    private var size: CGFloat { selected ? 46 : 36 }
+    private var iconSize: CGFloat { selected ? 19 : 15 }
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(deal.category.gradient)
-                .frame(width: selected ? 46 : 36, height: selected ? 46 : 36)
-                .overlay(Circle().stroke(.white, lineWidth: 2.5))
+                .opacity(isApproximate ? 0.45 : 1.0)
+                .frame(width: size, height: size)
+                .overlay {
+                    if isApproximate {
+                        Circle()
+                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                            .foregroundStyle(.white.opacity(0.85))
+                    } else {
+                        Circle().stroke(.white, lineWidth: 2.5)
+                    }
+                }
                 .dealyShadow(.soft)
             Image(systemName: deal.category.symbol)
-                .font(.system(size: selected ? 19 : 15, weight: .bold))
-                .foregroundStyle(.white)
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(.white.opacity(isApproximate ? 0.7 : 1.0))
         }
         .accessibilityLabel("\(deal.title) at \(deal.merchant)")
     }

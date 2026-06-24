@@ -39,6 +39,9 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Brand to search for physical redemption of an online program (e.g.
     /// "Apple Store"); nil = online-only. Drives the "Find Nearby Stores" finder.
     var redemptionBrand: String? = nil
+    /// Server-reported coordinate precision. "exact" = real storefront coordinates;
+    /// anything else (default "approximate") means we only know the region centroid.
+    var locationPrecision: String = "approximate"
 
     // MARK: Computed money
 
@@ -69,6 +72,10 @@ struct Deal: Identifiable, Codable, Hashable {
 }
 
 extension Deal {
+    /// True when the deal's coordinates are only region-level (centroid), not a
+    /// real storefront. Approximate deals must never show precise distances.
+    var isApproximateLocation: Bool { locationPrecision != "exact" }
+
     /// Display tag for the closest matching location, for card chips.
     var primaryLocationTag: String {
         isOnline ? "Online" : (locationTags.first ?? "Nearby")

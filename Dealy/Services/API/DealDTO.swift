@@ -41,6 +41,7 @@ struct DealDTO: Decodable {
     let latitude: Double?
     let longitude: Double?
     let locationTags: [String]
+    let locationPrecision: String?
     let visualSeed: Int
     let publishedAt: Date
     let startAt: Date?
@@ -72,7 +73,8 @@ struct DealDTO: Decodable {
             verified: verified ?? false,
             isStudentOnly: isStudentOnly,
             isTrending: isTrending ?? false,
-            redemptionBrand: redemptionBrand
+            redemptionBrand: redemptionBrand,
+            locationPrecision: locationPrecision ?? "approximate"
         )
     }
 }

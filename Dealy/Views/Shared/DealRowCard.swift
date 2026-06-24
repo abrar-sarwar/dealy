@@ -37,7 +37,7 @@ struct DealRowCard: View {
                     }
                     HStack(spacing: Spacing.xs) {
                         InfoChip(symbol: deal.isOnline ? "globe" : "location.fill",
-                                 text: Format.distance(deal.distanceMiles, isOnline: deal.isOnline),
+                                 text: Format.locationLabel(for: deal),
                                  tint: Theme.mutedText)
                         if deal.isEndingSoon() {
                             InfoChip(symbol: "clock", text: Format.expiryShort(deal.expirationDate),
