@@ -99,6 +99,39 @@ async function seedCrawlSources(): Promise<void> {
   }
 }
 
+// Regional inventory buckets for the pilot zones. Discovery promotion looks up a
+// region by slug (and returns nothing if the row is missing), and the runner uses
+// the centroid (latitude/longitude) as coordinates for promoted deals so they
+// surface in the geographic local feed. radiusMiles mirrors each zone's reach.
+export const regionalInventories = [
+  { regionSlug: 'atlanta', regionName: 'Metro Atlanta', regionType: 'metro', latitude: 33.749, longitude: -84.388, radiusMiles: 15 },
+  { regionSlug: 'midtown', regionName: 'Midtown Atlanta', regionType: 'district', latitude: 33.7838, longitude: -84.3836, radiusMiles: 3 },
+  { regionSlug: 'buckhead', regionName: 'Buckhead', regionType: 'district', latitude: 33.8487, longitude: -84.3733, radiusMiles: 3 },
+  { regionSlug: 'downtown', regionName: 'Downtown Atlanta', regionType: 'district', latitude: 33.7556, longitude: -84.39, radiusMiles: 3 },
+  { regionSlug: 'gsu', regionName: 'Georgia State University', regionType: 'campus', latitude: 33.7531, longitude: -84.3857, radiusMiles: 3 },
+  { regionSlug: 'gt', regionName: 'Georgia Tech', regionType: 'campus', latitude: 33.7756, longitude: -84.3963, radiusMiles: 3 },
+  { regionSlug: 'ksu', regionName: 'Kennesaw State University', regionType: 'campus', latitude: 34.039, longitude: -84.5816, radiusMiles: 6 },
+  { regionSlug: 'uga', regionName: 'University of Georgia', regionType: 'campus', latitude: 33.948, longitude: -83.3773, radiusMiles: 6 },
+  { regionSlug: 'cartersville', regionName: 'Cartersville', regionType: 'city', latitude: 34.1651, longitude: -84.7999, radiusMiles: 6 },
+];
+
+async function seedRegionalInventories(): Promise<void> {
+  for (const r of regionalInventories) {
+    await prisma.regionalInventory.upsert({
+      where: { regionSlug: r.regionSlug },
+      // Refresh static descriptors only — never reset runtime health/refresh state.
+      update: {
+        regionName: r.regionName,
+        regionType: r.regionType,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        radiusMiles: r.radiusMiles,
+      },
+      create: r,
+    });
+  }
+}
+
 async function main(): Promise<void> {
   for (const c of categories) {
     await prisma.category.upsert({
@@ -130,17 +163,19 @@ async function main(): Promise<void> {
 
   await seedDeals();
   await seedCrawlSources();
+  await seedRegionalInventories();
 
-  const [cat, sch, cam, deal, crawl] = await Promise.all([
+  const [cat, sch, cam, deal, crawl, region] = await Promise.all([
     prisma.category.count(),
     prisma.school.count(),
     prisma.campus.count(),
     prisma.deal.count(),
     prisma.crawlSource.count(),
+    prisma.regionalInventory.count(),
   ]);
   // eslint-disable-next-line no-console
   console.log(
-    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources`,
+    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources, ${region} regions`,
   );
 }
 

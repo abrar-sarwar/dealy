@@ -94,12 +94,14 @@ export class CandidatePromotionService {
           originalPriceMinor: null,
           currency: 'USD',
           dealScore: 50,
-          isOnline: !c.locationText,
+          // A deal with coordinates is physical (populates geog → appears in the
+          // geographic local feed); coordinate-less ones are treated as online.
+          isOnline: c.latitude == null,
           isStudentOnly: false,
           couponCode: null,
           destinationUrl: c.sourceUrl,
-          latitude: null,
-          longitude: null,
+          latitude: c.latitude,
+          longitude: c.longitude,
           locationTags: regionSlug ? [regionSlug] : [],
           visualSeed: Math.abs(hash(externalId)) % 1000,
           status: 'published',

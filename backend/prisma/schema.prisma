@@ -815,6 +815,8 @@ model DealCandidate {
   categorySlug       String    @map("category_slug")
   expiration         DateTime?
   locationText       String?   @map("location_text")
+  latitude           Float?
+  longitude          Float?
   summary            String
   confidence         Float     @default(0)
   verificationStatus VerificationStatus @default(pending) @map("verification_status")
