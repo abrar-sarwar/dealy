@@ -95,6 +95,44 @@ describe('GeminiClient.generateJson', () => {
       }),
     ).rejects.toThrow('Gemini response missing candidate text');
   });
+
+  it('retries transient 503 (model overloaded) then succeeds', async () => {
+    const overloaded = {
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () => 'overloaded',
+    };
+    const success = {
+      ok: true,
+      status: 200,
+      json: async () => LIVE_RESPONSE,
+      text: async () => '',
+    };
+    const seq = [overloaded, overloaded, success];
+    let i = 0;
+    const fetchFn = jest.fn(async () => seq[i++]) as unknown as typeof fetch;
+    const out = await new GeminiClient({
+      apiKey: 'k',
+      fetchFn,
+      retryDelayMs: 1,
+      maxRetries: 3,
+    }).generateJson({ model: 'm', prompt: 'p', schema: {} });
+    expect(out).toEqual({ crawl: true, reason: 'fresh weekly ad', priority: 90 });
+    expect((fetchFn as jest.Mock).mock.calls.length).toBe(3);
+  });
+
+  it('does not retry a non-retryable 400', async () => {
+    const fetchFn = fakeFetch({ error: { message: 'bad' } }, false, 400);
+    await expect(
+      new GeminiClient({ apiKey: 'k', fetchFn, retryDelayMs: 1 }).generateJson({
+        model: 'm',
+        prompt: 'p',
+        schema: {},
+      }),
+    ).rejects.toThrow('Gemini request failed: 400');
+    expect((fetchFn as jest.Mock).mock.calls.length).toBe(1);
+  });
 });
 
 describe('toGeminiSchema', () => {

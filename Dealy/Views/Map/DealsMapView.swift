@@ -21,16 +21,30 @@ struct DealsMapView: View {
                                          longitude: app.discovery.center.longitude)
     }
 
-    /// Physical (mappable) deals — online deals have no location.
-    private var mappable: [Deal] { DealFilter.active(app.allDeals).filter { !$0.isOnline } }
-
-    /// Newest deals for the strip above the map.
-    private var freshDeals: [Deal] {
-        Array(DealSortOption.mostRecent.sort(DealFilter.active(app.allDeals)).prefix(10))
+    /// Display radius (miles): hugs the nearest deals so the range ring frames the
+    /// closest results, capped at the user's discovery radius.
+    private var displayRadiusMiles: Double {
+        let farthest = mappable.last?.distanceMiles ?? 1
+        return min(Double(app.discovery.radiusMiles), max(farthest * 1.35, 1))
     }
 
+    /// Radius (meters) for the on-map range circle.
+    private var radiusMeters: CLLocationDistance { displayRadiusMiles * 1609.34 }
+
+    /// Physical (mappable) deals within the active range, nearest-first. Sourced
+    /// from the curated local feed (the deals shown inside the range circle).
+    private var mappable: [Deal] {
+        DealFilter.active(app.localDeals)
+            .filter { !$0.isOnline }
+            .filter { ($0.distanceMiles ?? 0) <= Double(app.discovery.radiusMiles) }
+            .sorted { ($0.distanceMiles ?? .greatestFiniteMagnitude) < ($1.distanceMiles ?? .greatestFiniteMagnitude) }
+    }
+
+    /// Closest deals for the strip above the map.
+    private var freshDeals: [Deal] { Array(mappable.prefix(10)) }
+
     private func region() -> MKCoordinateRegion {
-        let delta = max(0.03, Double(app.discovery.radiusMiles) * 2.2 / 69.0)
+        let delta = max(0.02, displayRadiusMiles * 2.6 / 69.0)
         return MKCoordinateRegion(center: center,
                                   span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta))
     }
@@ -53,6 +67,10 @@ struct DealsMapView: View {
             }
             .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
             .onAppear { resolveLocation(force: false) }
+            .task {
+                await app.loadLocalDeals()
+                withAnimation { position = .region(region()) }
+            }
         }
     }
 
@@ -119,6 +137,11 @@ struct DealsMapView: View {
 
     private var mapArea: some View {
         Map(position: $position) {
+            // Range ring: deals shown are within this radius of your location.
+            MapCircle(center: center, radius: radiusMeters)
+                .foregroundStyle(Theme.primary.opacity(0.12))
+                .stroke(Theme.primary.opacity(0.75), lineWidth: 2.5)
+
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 

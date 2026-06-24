@@ -6,6 +6,9 @@ export interface GeminiClientOptions {
   fetchFn?: typeof fetch;
   /** Override for tests / alternate hosts. Defaults to the public v1beta endpoint. */
   baseUrl?: string;
+  /** Retries for transient failures (429 / 5xx incl. the common 503 overload). */
+  maxRetries?: number;
+  retryDelayMs?: number;
 }
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
@@ -47,36 +50,66 @@ export class GeminiClient {
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number;
   private readonly baseUrl: string;
+  private readonly maxRetries: number;
+  private readonly retryDelayMs: number;
 
   constructor(private readonly opts: GeminiClientOptions) {
     this.fetchFn = opts.fetchFn ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+    this.maxRetries = opts.maxRetries ?? 4;
+    this.retryDelayMs = opts.retryDelayMs ?? 800;
   }
 
   async generateJson<T>(request: GeminiGenerateJsonRequest): Promise<T> {
     if (!this.opts.apiKey) throw new Error('GOOGLE_GEMINI_API_KEY is not configured');
-    const res = await this.fetchFn(`${this.baseUrl}/models/${request.model}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': this.opts.apiKey,
+    const url = `${this.baseUrl}/models/${request.model}:generateContent`;
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: request.prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: toGeminiSchema(request.schema),
       },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: request.prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: toGeminiSchema(request.schema),
-        },
-      }),
-      signal: AbortSignal.timeout(this.timeoutMs),
     });
-    if (!res.ok) throw new Error(`Gemini request failed: ${res.status} ${await res.text()}`);
-    const json = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Gemini response missing candidate text');
-    return JSON.parse(text) as T;
+
+    let last: unknown;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      let res: Awaited<ReturnType<typeof fetch>>;
+      try {
+        res = await this.fetchFn(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.opts.apiKey },
+          body,
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+      } catch (err) {
+        // Network/timeout — retryable.
+        last = err;
+        if (attempt >= this.maxRetries) break;
+        await this.backoff(attempt);
+        continue;
+      }
+
+      if (res.ok) {
+        const json = (await res.json()) as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        };
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('Gemini response missing candidate text');
+        return JSON.parse(text) as T;
+      }
+
+      const message = await res.text().catch(() => '');
+      last = new Error(`Gemini request failed: ${res.status} ${message}`.trim());
+      // 429 (rate limit) and 5xx (incl. 503 "model overloaded") are transient.
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt >= this.maxRetries) throw last;
+      await this.backoff(attempt);
+    }
+    throw last instanceof Error ? last : new Error('Gemini request failed');
+  }
+
+  private async backoff(attempt: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, this.retryDelayMs * 2 ** attempt));
   }
 }
