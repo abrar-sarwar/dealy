@@ -1,10 +1,10 @@
 import CoreLocation
 
-/// Maps a deal to a plausible map coordinate. Uses the deal's real coordinates
-/// when present; otherwise scatters it deterministically around the campus using
-/// its distance and a stable per-deal angle, so the map is stable across launches.
-///
-/// TODO: Replace synthetic scatter with real merchant coordinates from the backend.
+/// Maps a deal to a map coordinate. Uses the deal's real backend coordinates
+/// verbatim when present (exact or region-approximate — never re-scattered here;
+/// honesty is conveyed by `Deal.isApproximateLocation`, not by jitter). Only
+/// coordinate-less deals (e.g. online-only) fall back to a deterministic
+/// per-deal scatter around the center so the map stays stable across launches.
 enum DealGeo {
     static func coordinate(for deal: Deal, around campus: Campus) -> CLLocationCoordinate2D {
         coordinate(for: deal, around: CLLocationCoordinate2D(latitude: campus.latitude,
