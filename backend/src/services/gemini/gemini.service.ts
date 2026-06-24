@@ -1,0 +1,163 @@
+import { Injectable } from '@nestjs/common';
+import type { GeminiConfig } from '../../config/gemini';
+import type { GeminiClient } from './gemini.client';
+import type { GeminiDealExtraction, GeminiVerificationReasoning } from './gemini.types';
+
+const dealExtractionSchema = {
+  type: 'object',
+  properties: {
+    deals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          merchant: { type: 'string' },
+          category: { type: 'string' },
+          discount: { type: ['string', 'null'] },
+          expiration: { type: ['string', 'null'] },
+          location: { type: ['string', 'null'] },
+          summary: { type: 'string' },
+          confidence: { type: 'number' },
+          verification_status: {
+            type: 'string',
+            enum: ['pending', 'verified', 'unreachable', 'invalid', 'expired'],
+          },
+          verified: { type: 'boolean' },
+        },
+        required: [
+          'title',
+          'merchant',
+          'category',
+          'discount',
+          'expiration',
+          'location',
+          'summary',
+          'confidence',
+          'verification_status',
+          'verified',
+        ],
+      },
+    },
+  },
+  required: ['deals'],
+};
+
+const verificationSchema = {
+  type: 'object',
+  properties: {
+    verified: { type: 'boolean' },
+    confidence: { type: 'number' },
+    reason: { type: 'string' },
+  },
+  required: ['verified', 'confidence', 'reason'],
+};
+
+@Injectable()
+export class GeminiService {
+  constructor(
+    private readonly client: Pick<GeminiClient, 'generateJson'>,
+    private readonly config: GeminiConfig,
+  ) {}
+
+  async extractDeals(input: {
+    content: string;
+    merchantHint?: string;
+    sourceUrl: string;
+  }): Promise<GeminiDealExtraction> {
+    this.assertEnabled();
+    return this.client.generateJson<GeminiDealExtraction>({
+      model: this.config.model,
+      schema: dealExtractionSchema,
+      prompt:
+        'Extract concrete user-facing deals from the extracted page content. ' +
+        'Return only offers with clear discount, promotion, or special value. ' +
+        `Source URL: ${input.sourceUrl}\nMerchant hint: ${input.merchantHint ?? ''}\n\nCONTENT:\n${input.content.slice(0, 12_000)}`,
+    });
+  }
+
+  async classifyDeal(input: { content: string; title: string }): Promise<Record<string, unknown>> {
+    this.assertEnabled();
+    return this.client.generateJson({
+      model: this.config.model,
+      schema: {
+        type: 'object',
+        properties: { category: { type: 'string' }, confidence: { type: 'number' } },
+        required: ['category', 'confidence'],
+      },
+      prompt: `Classify this deal.\nTITLE:${input.title}\nCONTENT:${input.content}`,
+    });
+  }
+
+  async normalizeMerchant(input: {
+    merchant: string;
+    sourceUrl?: string;
+  }): Promise<Record<string, unknown>> {
+    this.assertEnabled();
+    return this.client.generateJson({
+      model: this.config.model,
+      schema: {
+        type: 'object',
+        properties: { merchant: { type: 'string' }, confidence: { type: 'number' } },
+        required: ['merchant', 'confidence'],
+      },
+      prompt: `Normalize this merchant name for display: ${input.merchant}\nSource: ${input.sourceUrl ?? ''}`,
+    });
+  }
+
+  async detectDuplicate(input: {
+    candidate: string;
+    existing: string[];
+  }): Promise<Record<string, unknown>> {
+    this.assertEnabled();
+    return this.client.generateJson({
+      model: this.config.model,
+      schema: {
+        type: 'object',
+        properties: {
+          duplicate: { type: 'boolean' },
+          match: { type: ['string', 'null'] },
+          confidence: { type: 'number' },
+        },
+        required: ['duplicate', 'match', 'confidence'],
+      },
+      prompt: `Determine whether candidate deal duplicates any existing deal.\nCandidate:${input.candidate}\nExisting:${input.existing.join('\n')}`,
+    });
+  }
+
+  async summarizeForUsers(input: {
+    title: string;
+    evidence: string;
+  }): Promise<Record<string, unknown>> {
+    this.assertEnabled();
+    return this.client.generateJson({
+      model: this.config.model,
+      schema: {
+        type: 'object',
+        properties: { summary: { type: 'string' } },
+        required: ['summary'],
+      },
+      prompt: `Write a short user-facing deal summary.\nTitle:${input.title}\nEvidence:${input.evidence}`,
+    });
+  }
+
+  async reasonAboutVerification(input: {
+    candidateSummary: string;
+    extractedEvidence: string;
+    conflict?: string;
+  }): Promise<GeminiVerificationReasoning> {
+    this.assertEnabled();
+    return this.client.generateJson<GeminiVerificationReasoning>({
+      model: this.config.reasoningModel,
+      schema: verificationSchema,
+      prompt:
+        'Reason about whether this deal is verified from the provided extracted evidence. ' +
+        'Use the evidence only; do not infer facts from outside knowledge.\n' +
+        `Candidate: ${input.candidateSummary}\nEvidence: ${input.extractedEvidence}\nConflict: ${input.conflict ?? ''}`,
+    });
+  }
+
+  private assertEnabled(): void {
+    if (!this.config.enabled) throw new Error('Gemini AI processing is disabled');
+  }
+}

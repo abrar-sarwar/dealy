@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AdminModule } from './admin/admin.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AdminModule } from './admin/admin.module';
     AdminModule,
     IngestionModule,
     CrawlerModule,
+    DiscoveryModule,
   ],
 })
 export class AppModule {}

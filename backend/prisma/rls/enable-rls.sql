@@ -41,7 +41,9 @@ declare t text;
 begin
   foreach t in array array[
     'user_roles','subscription_events','audit_logs','idempotency_keys',
-    'price_history','ingestion_runs','ingestion_failures','health_checks'
+    'price_history','ingestion_runs','ingestion_failures','health_checks',
+    'crawl_sources','crawl_runs','crawl_failures','regional_inventories',
+    'content_hashes','deal_candidates','ai_classifications','ai_cache'
   ] loop
     execute format('alter table public.%I enable row level security;', t);
     -- No policy → RLS denies every row to non-bypassing roles.
