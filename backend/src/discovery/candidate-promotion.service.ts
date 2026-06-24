@@ -111,7 +111,9 @@ export class CandidatePromotionService {
           sourceTrust: 'editorial',
           sourceUrl: c.sourceUrl,
           providerAttribution: null,
-          verificationStatus: c.verificationStatus,
+          // Editorial deals are never source-confirmed by Dealy. Gemini's
+          // self-reported verification_status must not grant trust — start pending.
+          verificationStatus: 'pending',
           confidenceScore: Math.round(c.confidence),
           imageUrl: c.imageUrl,
           crawlSourceId: c.sourceId,
