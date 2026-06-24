@@ -741,6 +741,7 @@ model CrawlRun {
   failures CrawlFailure[]
 
   @@index([sourceId, startedAt])
+  @@index([sourceId, unchanged, startedAt])
   @@map("crawl_runs")
 }
 

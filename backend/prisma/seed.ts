@@ -54,7 +54,8 @@ export const crawlSources = [
   // Student platforms — homepages; targetPaths build the deal path (confirm dealUrl before enabling).
   { url: 'https://www.studentbeans.com/us', sourceType: 'student_platform', kind: 'student_discount' as const, merchantHint: 'Student Beans', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gsu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
   { url: 'https://www.myunidays.com/US/en-US', sourceType: 'student_platform', kind: 'student_discount' as const, merchantHint: 'UNiDAYS', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
-  // Campus dining — seeded URLs already point at /specials.
+  // Campus dining — GSU/GT seeded URLs already point at /specials/ (targetPaths: []);
+  // KSU/UGA are homepages needing targetPaths to build the deal path.
   { url: 'https://dining.gsu.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia State Dining', defaultCategorySlug: 'food', zoneSlug: 'gsu', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://techdining.gatech.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://dining.kennesaw.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'KSU Dining', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/specials', '/deals'], crawlIntervalHours: 72 },
