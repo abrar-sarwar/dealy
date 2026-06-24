@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { GeminiConfig } from '../../config/gemini';
 import type { GeminiClient } from './gemini.client';
-import type { GeminiDealExtraction, GeminiVerificationReasoning } from './gemini.types';
+import type { GeminiCrawlPlan, GeminiDealExtraction, GeminiVerificationReasoning } from './gemini.types';
 
 const dealExtractionSchema = {
   type: 'object',
@@ -64,15 +64,42 @@ export class GeminiService {
     content: string;
     merchantHint?: string;
     sourceUrl: string;
+    model?: string;
   }): Promise<GeminiDealExtraction> {
     this.assertEnabled();
     return this.client.generateJson<GeminiDealExtraction>({
-      model: this.config.model,
+      model: input.model ?? this.config.model,
       schema: dealExtractionSchema,
       prompt:
         'Extract concrete user-facing deals from the extracted page content. ' +
         'Return only offers with clear discount, promotion, or special value. ' +
         `Source URL: ${input.sourceUrl}\nMerchant hint: ${input.merchantHint ?? ''}\n\nCONTENT:\n${input.content.slice(0, 12_000)}`,
+    });
+  }
+
+  async planCrawl(input: {
+    sourceType: string;
+    url: string;
+    category?: string;
+    reliabilityScore: number;
+    averageDealsFound: number;
+    lastSuccessAt: Date | null;
+  }): Promise<GeminiCrawlPlan> {
+    this.assertEnabled();
+    return this.client.generateJson<GeminiCrawlPlan>({
+      model: this.config.model,
+      schema: {
+        type: 'object',
+        properties: { crawl: { type: 'boolean' }, reason: { type: 'string' }, priority: { type: 'number' } },
+        required: ['crawl', 'reason', 'priority'],
+      },
+      prompt:
+        'You decide whether crawling this curated source right now is worth a paid Firecrawl fetch. ' +
+        'Favour sources likely to hold fresh, concrete user-facing deals; skip ones unlikely to have changed or to yield offers. ' +
+        'Return crawl (boolean), reason (short), priority 1-10.\n' +
+        `Source type: ${input.sourceType}\nURL: ${input.url}\nCategory: ${input.category ?? ''}\n` +
+        `Reliability score (0-100): ${input.reliabilityScore}\nAverage deals found per crawl: ${input.averageDealsFound}\n` +
+        `Last successful crawl: ${input.lastSuccessAt?.toISOString() ?? 'never'}`,
     });
   }
 

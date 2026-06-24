@@ -35,3 +35,9 @@ export interface GeminiVerificationReasoning {
   confidence: number;
   reason: string;
 }
+
+export interface GeminiCrawlPlan {
+  crawl: boolean;
+  reason: string;
+  priority: number;
+}
