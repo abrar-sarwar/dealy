@@ -104,7 +104,7 @@ struct DealsMapView: View {
             detailDeal = deal
         } label: {
             HStack(spacing: Spacing.sm) {
-                CategoryArtwork(category: deal.category, seed: deal.visualSeed)
+                DealImage(deal: deal)
                     .frame(width: 50, height: 50)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {

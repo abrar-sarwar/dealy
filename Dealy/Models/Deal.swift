@@ -36,6 +36,10 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Server-controlled; defaults false. The selection logic that sets this is
     /// a follow-on sub-project — this is the slot, not fabricated data.
     var isTrending: Bool = false
+    /// Remote image URL string (OG image scraped from the deal page). Nil when
+    /// the backend couldn't resolve one. The app renders this via AsyncImage with
+    /// CategoryArtwork as the fallback.
+    var imageURL: String? = nil
     /// Brand to search for physical redemption of an online program (e.g.
     /// "Apple Store"); nil = online-only. Drives the "Find Nearby Stores" finder.
     var redemptionBrand: String? = nil
