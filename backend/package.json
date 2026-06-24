@@ -38,7 +38,8 @@
     "verify": "ts-node src/ingestion/verify-cli.ts",
     "coverage": "ts-node src/coverage/coverage-cli.ts",
     "grant-admin": "ts-node src/admin/grant-admin-cli.ts",
-    "openapi:export": "ts-node src/export-openapi.ts"
+    "openapi:export": "ts-node src/export-openapi.ts",
+    "discovery:run": "ts-node -r tsconfig-paths/register src/discovery/discovery.cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -48,6 +49,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-fastify": "^11.1.6",
+    "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.2.0",
     "@prisma/client": "^6.16.2",
     "@sentry/node": "^8.45.0",
