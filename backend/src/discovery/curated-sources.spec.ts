@@ -64,6 +64,51 @@ describe('curated crawlSources seed', () => {
   });
 });
 
+describe('curated source category balance', () => {
+  const dist = () => {
+    const m = new Map<string, number>();
+    for (const s of crawlSources)
+      m.set(s.defaultCategorySlug, (m.get(s.defaultCategorySlug) ?? 0) + 1);
+    return m;
+  };
+
+  it('every source declares a valid category slug', () => {
+    const ok = new Set([
+      'food',
+      'groceries',
+      'tech',
+      'studentSupplies',
+      'clothing',
+      'entertainment',
+      'beauty',
+      'automotive',
+      'home',
+      'books',
+    ]);
+    for (const s of crawlSources) expect(ok.has(s.defaultCategorySlug)).toBe(true);
+  });
+
+  it('covers a diverse category mix (food, entertainment, student, beauty, grocery all present)', () => {
+    const d = dist();
+    for (const cat of ['food', 'entertainment', 'studentSupplies', 'beauty', 'groceries']) {
+      expect(d.get(cat) ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it('is not grocery-dominated (groceries < 30% of sources)', () => {
+    const grocery = dist().get('groceries') ?? 0;
+    expect(grocery / crawlSources.length).toBeLessThan(0.3);
+  });
+
+  it('homepage-style sources (no already-targeted path) declare dealUrl or targetPaths', () => {
+    for (const s of crawlSources) {
+      const path = new URL(s.url).pathname;
+      const targeted = allowed.some((p) => path.includes(p));
+      if (!targeted) expect(Boolean(s.dealUrl) || (s.targetPaths?.length ?? 0) > 0).toBe(true);
+    }
+  });
+});
+
 describe('regionalInventories seed', () => {
   it('seeds an inventory for every pilot zone so promotion has a region to attach to', () => {
     const slugs = new Set(regionalInventories.map((r) => r.regionSlug));

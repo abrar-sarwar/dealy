@@ -225,6 +225,7 @@ model Deal {
   redemptionBrand     String?          @map("redemption_brand")
   latitude            Float?
   longitude           Float?
+  locationPrecision   String           @default("approximate") @map("location_precision")
   geog                Unsupported("geography(Point, 4326)")?
   locationTags        String[]         @map("location_tags")
   visualSeed          Int              @default(0) @map("visual_seed")
@@ -247,6 +248,7 @@ model Deal {
   /// Cross-source dedup fingerprint (merchant+title+location+price+category).
   fingerprint         String?
   confidenceScore     Int?             @map("confidence_score")
+  imageUrl            String?          @map("image_url")
   crawlSourceId       String?          @map("crawl_source_id") @db.Uuid
   crawlSource         CrawlSource?     @relation(fields: [crawlSourceId], references: [id], onDelete: SetNull)
   startAt             DateTime?        @map("start_at")
@@ -817,11 +819,13 @@ model DealCandidate {
   locationText       String?   @map("location_text")
   latitude           Float?
   longitude          Float?
+  locationPrecision  String    @default("approximate") @map("location_precision")
   summary            String
   confidence         Float     @default(0)
   verificationStatus VerificationStatus @default(pending) @map("verification_status")
   fingerprint        String?
   raw                Json?
+  imageUrl           String?   @map("image_url")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
   promotedAt         DateTime? @map("promoted_at")

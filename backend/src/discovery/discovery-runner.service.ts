@@ -9,6 +9,7 @@ import { contentHash } from './discovery-cost';
 import { resolveCrawlTargets } from './url-targeting';
 import { shouldConsiderSource, shouldEscalateToPro } from './escalation';
 import { dealFingerprint } from '../ingestion/normalized-deal';
+import { validImageUrl } from './deal-image';
 
 export interface DiscoveryRunnerConfig {
   gemini: {
@@ -34,26 +35,6 @@ function startOfUtcDay(now = new Date()): Date {
   const d = new Date(now);
   d.setUTCHours(0, 0, 0, 0);
   return d;
-}
-
-/**
- * Deterministically scatter a coordinate within ~2 miles of a centroid, keyed by
- * a stable seed, so multiple promoted deals from one region spread across the map
- * instead of stacking on the exact centroid. Interim presentation aid until
- * per-deal street geocoding of `locationText` lands.
- */
-function scatterCoord(
-  lat: number | null | undefined,
-  lng: number | null | undefined,
-  seed: string,
-): { latitude: number | null; longitude: number | null } {
-  if (lat == null || lng == null) return { latitude: lat ?? null, longitude: lng ?? null };
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  const a = Math.abs(h);
-  const dLat = ((a % 1000) / 1000 - 0.5) * 0.05; // ±~1.7mi
-  const dLng = ((Math.floor(a / 1000) % 1000) / 1000 - 0.5) * 0.06; // ±~2mi
-  return { latitude: lat + dLat, longitude: lng + dLng };
 }
 
 /**
@@ -178,6 +159,10 @@ export class DiscoveryRunnerService {
         pages++;
         summary.pagesFetched++;
         const text = doc.markdown ?? '';
+        // Capture OG image from Firecrawl metadata. Different Firecrawl versions
+        // use `ogImage` (camelCase) or `og:image` (colon-separated key).
+        const meta = doc.metadata as Record<string, unknown> | undefined;
+        const imageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
         const hash = contentHash(text);
 
         const prior = await this.prisma.contentHash.findUnique({
@@ -260,9 +245,6 @@ export class DiscoveryRunnerService {
               categorySlug: dl.category || source.defaultCategorySlug || 'food',
             });
             if (await this.prisma.dealCandidate.findFirst({ where: { fingerprint } })) continue;
-            // Scatter around the region centroid so promoted deals spread across
-            // the map (and the range circle) rather than stacking on one point.
-            const geo = scatterCoord(inventory?.latitude, inventory?.longitude, fingerprint);
             await this.prisma.dealCandidate.create({
               data: {
                 sourceId: source.id,
@@ -275,13 +257,15 @@ export class DiscoveryRunnerService {
                 categorySlug: dl.category || source.defaultCategorySlug || 'food',
                 expiration: dl.expiration ? new Date(dl.expiration) : null,
                 locationText: dl.location,
-                latitude: geo.latitude,
-                longitude: geo.longitude,
+                latitude: inventory?.latitude ?? null,
+                longitude: inventory?.longitude ?? null,
+                locationPrecision: 'approximate',
                 summary: dl.summary,
                 confidence: dl.confidence,
                 verificationStatus: dl.verification_status,
                 fingerprint,
                 raw: dl as object,
+                imageUrl,
               },
             });
             queued++;

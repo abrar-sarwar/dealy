@@ -23,6 +23,7 @@ function fakeDeal(over: Partial<FakeDeal> = {}): FakeDeal {
     destinationUrl: null,
     latitude: 33.7,
     longitude: -84.4,
+    locationPrecision: 'approximate',
     locationTags: [],
     visualSeed: 0,
     verificationStatus: 'verified',
@@ -34,6 +35,7 @@ function fakeDeal(over: Partial<FakeDeal> = {}): FakeDeal {
     moderationStatus: 'approved',
     status: 'published',
     confidenceScore: null,
+    imageUrl: null,
     ...over,
   } as FakeDeal;
 }
@@ -88,6 +90,25 @@ describe('mapPrismaDeal redemptionBrand', () => {
     );
     expect(dto.trustLevel).toBe('curated');
     expect(dto.verified).toBe(false);
+  });
+});
+
+describe('mapPrismaDeal imageUrl', () => {
+  it('passes a valid imageUrl through to the DTO', () => {
+    const url = 'https://cdn.example.com/og.jpg';
+    const dto = mapPrismaDeal(
+      fakeDeal({ imageUrl: url }) as unknown as Deal & { category: Category },
+      null,
+    );
+    expect(dto.imageUrl).toBe(url);
+  });
+
+  it('passes null imageUrl through as null', () => {
+    const dto = mapPrismaDeal(
+      fakeDeal({ imageUrl: null }) as unknown as Deal & { category: Category },
+      null,
+    );
+    expect(dto.imageUrl).toBeNull();
   });
 });
 
@@ -166,6 +187,7 @@ describe('mapPrismaDeal isTrending', () => {
       redemptionBrand: null,
       latitude: 34.0,
       longitude: -84.5,
+      locationPrecision: 'approximate',
       locationTags: ['Kennesaw'],
       visualSeed: 0,
       verificationStatus: 'verified',
@@ -177,6 +199,7 @@ describe('mapPrismaDeal isTrending', () => {
       moderationStatus: 'approved',
       status: 'published',
       confidenceScore: null,
+      imageUrl: null,
       ...over,
     };
   }

@@ -58,7 +58,7 @@ export class RecommendationsService {
              d.short_description, d.detailed_description, d.terms,
              d.current_price_minor, d.original_price_minor, d.currency,
              d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
-             d.latitude, d.longitude, d.location_tags, d.visual_seed,
+             d.latitude, d.longitude, d.location_precision, d.image_url, d.location_tags, d.visual_seed,
              d.verification_status, d.last_verified_at,
              d.start_at, d.expires_at, d.created_at,
              ST_Distance(d.geog, ${center}) AS distance_meters,

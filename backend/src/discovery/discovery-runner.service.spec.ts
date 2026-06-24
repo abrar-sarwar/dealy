@@ -149,15 +149,16 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
     expect(d.gemini.extractDeals).toHaveBeenCalledTimes(1);
     expect(d.prisma.dealCandidate.create).toHaveBeenCalledTimes(1);
-    // Candidate carries coordinates scattered near the region centroid so the
-    // promoted deal gets a geog and spreads on the map (within ~2mi of centroid).
+    // Candidate carries the exact region centroid (honest coordinates) and is
+    // marked approximate; per-deal geocoding is deferred to a future pass.
     const candidateArg = (
       d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
-        { data: { latitude: number; longitude: number } },
+        { data: { latitude: number; longitude: number; locationPrecision: string } },
       ]
     )[0];
-    expect(candidateArg.data.latitude).toBeCloseTo(33.749, 1);
-    expect(candidateArg.data.longitude).toBeCloseTo(-84.388, 1);
+    expect(candidateArg.data.latitude).toBe(33.749);
+    expect(candidateArg.data.longitude).toBe(-84.388);
+    expect(candidateArg.data.locationPrecision).toBe('approximate');
     expect(out.candidatesStored).toBe(1);
   });
 

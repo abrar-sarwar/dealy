@@ -112,6 +112,8 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     isTrending: false,
     latitude: doc.latitude,
     longitude: doc.longitude,
+    // Search results carry 'approximate' by default; geocoding is not indexed.
+    locationPrecision: 'approximate',
     locationTags: doc.locationTags,
     visualSeed: doc.visualSeed,
     publishedAt: new Date(doc.createdAtTs * 1000).toISOString(),
@@ -119,5 +121,7 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     expiresAt: new Date(doc.expiresAtTs * 1000).toISOString(),
     trustLevel: doc.trustLevel,
     confidenceScore: doc.confidenceScore,
+    // Search results don't carry OG images (not indexed in the search doc).
+    imageUrl: null,
   };
 }

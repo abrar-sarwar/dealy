@@ -15,7 +15,7 @@ struct SwipeCardView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            CategoryArtwork(category: deal.category, seed: deal.visualSeed, symbolScale: 1.8)
+            DealImage(deal: deal, symbolScale: 1.8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
 

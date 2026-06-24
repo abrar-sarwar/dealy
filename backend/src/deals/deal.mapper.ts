@@ -53,6 +53,7 @@ interface NormalizedDeal {
   redemptionBrand: string | null;
   latitude: number | null;
   longitude: number | null;
+  locationPrecision: string;
   locationTags: string[];
   visualSeed: number;
   verificationStatus: string;
@@ -64,6 +65,7 @@ interface NormalizedDeal {
   moderationStatus: string;
   status: string;
   confidenceScore: number | null;
+  imageUrl: string | null;
 }
 
 function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
@@ -97,8 +99,10 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     redemptionBrand: n.redemptionBrand,
     latitude: n.latitude,
     longitude: n.longitude,
+    locationPrecision: n.locationPrecision,
     locationTags: n.locationTags,
     visualSeed: n.visualSeed,
+    imageUrl: n.imageUrl,
     publishedAt: n.createdAt.toISOString(),
     startAt: n.startAt ? n.startAt.toISOString() : null,
     expiresAt: n.expiresAt.toISOString(),
@@ -141,6 +145,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       redemptionBrand: deal.redemptionBrand,
       latitude: deal.latitude,
       longitude: deal.longitude,
+      locationPrecision: deal.locationPrecision,
       locationTags: deal.locationTags,
       visualSeed: deal.visualSeed,
       verificationStatus: deal.verificationStatus,
@@ -152,6 +157,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       moderationStatus: deal.moderationStatus,
       status: deal.status,
       confidenceScore: deal.confidenceScore,
+      imageUrl: deal.imageUrl ?? null,
     },
     distanceMiles,
   );
@@ -177,6 +183,7 @@ export interface NearbyRow {
   redemption_brand: string | null;
   latitude: number | null;
   longitude: number | null;
+  location_precision: string;
   location_tags: string[];
   visual_seed: number;
   verification_status: string;
@@ -191,6 +198,7 @@ export interface NearbyRow {
   moderation_status: string;
   status: string;
   confidence_score: number | null;
+  image_url: string | null;
   /** Tier rank (0=verified, 1=curated, 2=online, 3=community). Ordering only. */
   tier_rank: number;
   /** Human-readable tier label derived from tier_rank. */
@@ -221,6 +229,7 @@ export function mapNearbyRow(row: NearbyRow) {
       redemptionBrand: row.redemption_brand,
       latitude: row.latitude,
       longitude: row.longitude,
+      locationPrecision: row.location_precision,
       locationTags: row.location_tags,
       visualSeed: row.visual_seed,
       verificationStatus: row.verification_status,
@@ -232,6 +241,7 @@ export function mapNearbyRow(row: NearbyRow) {
       moderationStatus: row.moderation_status,
       status: row.status,
       confidenceScore: row.confidence_score,
+      imageUrl: row.image_url,
     },
     Number(row.distance_meters) / METERS_PER_MILE,
   );

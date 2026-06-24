@@ -9,7 +9,7 @@ struct DealTile: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
-                    CategoryArtwork(category: deal.category, seed: deal.visualSeed)
+                    DealImage(deal: deal)
                         .frame(height: 132)
                     SavingsPill(deal: deal)
                         .padding(Spacing.xs)

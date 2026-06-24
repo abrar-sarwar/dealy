@@ -80,7 +80,7 @@ struct DealDetailView: View {
     // MARK: Sections
 
     private var hero: some View {
-        CategoryArtwork(category: deal.category, seed: deal.visualSeed, symbolScale: 1.1)
+        DealImage(deal: deal, symbolScale: 1.1)
             .frame(height: 200)
             .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
             .overlay(alignment: .topLeading) {

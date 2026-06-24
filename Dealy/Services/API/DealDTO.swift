@@ -41,10 +41,13 @@ struct DealDTO: Decodable {
     let latitude: Double?
     let longitude: Double?
     let locationTags: [String]
+    let locationPrecision: String?
     let visualSeed: Int
     let publishedAt: Date
     let startAt: Date?
     let expiresAt: Date
+    /// OG image from the deal's source page; nil when not available.
+    let imageUrl: String?
 
     /// Map to the app's domain model. Unknown category slugs fall back to `.food`.
     func toDeal() -> Deal {
@@ -72,7 +75,9 @@ struct DealDTO: Decodable {
             verified: verified ?? false,
             isStudentOnly: isStudentOnly,
             isTrending: isTrending ?? false,
-            redemptionBrand: redemptionBrand
+            imageURL: imageUrl,
+            redemptionBrand: redemptionBrand,
+            locationPrecision: locationPrecision ?? "approximate"
         )
     }
 }

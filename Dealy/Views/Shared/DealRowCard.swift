@@ -10,7 +10,7 @@ struct DealRowCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: Spacing.sm) {
-                CategoryArtwork(category: deal.category, seed: deal.visualSeed)
+                DealImage(deal: deal)
                     .frame(width: 92, height: 92)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
 
@@ -37,7 +37,7 @@ struct DealRowCard: View {
                     }
                     HStack(spacing: Spacing.xs) {
                         InfoChip(symbol: deal.isOnline ? "globe" : "location.fill",
-                                 text: Format.distance(deal.distanceMiles, isOnline: deal.isOnline),
+                                 text: Format.locationLabel(for: deal),
                                  tint: Theme.mutedText)
                         if deal.isEndingSoon() {
                             InfoChip(symbol: "clock", text: Format.expiryShort(deal.expirationDate),
