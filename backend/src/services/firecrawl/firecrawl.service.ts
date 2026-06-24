@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { FirecrawlClient } from './firecrawl.client';
+import { FirecrawlClient } from './firecrawl.client';
 import type {
   FirecrawlCrawlRequest,
   FirecrawlDocument,
