@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import type { Env } from '../config/env.schema';
 import { discoveryConfig } from '../config/discovery';
 import { firecrawlConfig } from '../config/firecrawl';
@@ -21,7 +20,7 @@ import { CandidatePromotionService } from './candidate-promotion.service';
 import { DiscoverySchedulerService } from './discovery.scheduler';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), PrismaModule, SearchModule, FirecrawlModule, GeminiModule],
+  imports: [PrismaModule, SearchModule, FirecrawlModule, GeminiModule],
   providers: [
     DiscoveryService,
     {

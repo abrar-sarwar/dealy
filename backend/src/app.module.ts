@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from './config/config.module';
 import type { Env } from './config/env.schema';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,6 +23,7 @@ import { DiscoveryModule } from './discovery/discovery.module';
 @Module({
   imports: [
     ConfigModule,
+    ScheduleModule.forRoot(),
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => {

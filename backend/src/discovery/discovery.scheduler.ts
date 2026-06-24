@@ -33,9 +33,13 @@ export class DiscoverySchedulerService {
     const regions = await this.prisma.regionalInventory.findMany({ select: { regionSlug: true } });
     const out: RegionOutcome[] = [];
     for (const r of regions) {
-      const summary = await this.runner.runRegion(r.regionSlug);
-      const { promoted } = await this.promotion.promoteRegion(r.regionSlug);
-      out.push({ ...summary, promoted });
+      try {
+        const summary = await this.runner.runRegion(r.regionSlug);
+        const { promoted } = await this.promotion.promoteRegion(r.regionSlug);
+        out.push({ ...summary, promoted });
+      } catch (err) {
+        this.logger.error({ regionSlug: r.regionSlug, err: (err as Error).message }, 'discovery.region.failed');
+      }
     }
     return out;
   }

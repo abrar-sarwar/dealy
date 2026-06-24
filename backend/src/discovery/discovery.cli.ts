@@ -12,7 +12,7 @@ async function main(): Promise<void> {
     const summary = await app.get(DiscoveryRunnerService).runRegion(regionSlug);
     const promotion = await app.get(CandidatePromotionService).promoteRegion(regionSlug);
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ ...summary, ...promotion }, null, 2));
+    console.log(JSON.stringify({ summary, promotion }, null, 2));
   } finally {
     await app.close();
   }
