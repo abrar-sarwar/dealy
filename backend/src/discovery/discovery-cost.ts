@@ -2,7 +2,6 @@ import { createHash } from 'crypto';
 
 export type DiscoveryTriggerReason =
   | 'crawler_disabled'
-  | 'daily_run_limit'
   | 'below_minimum_deals'
   | 'inventory_never_refreshed'
   | 'inventory_stale'
@@ -14,8 +13,6 @@ export interface DiscoveryTriggerInput {
   minLocalDeals: number;
   lastRefresh: Date | null;
   refreshHours: number;
-  runsToday: number;
-  maxRunsPerDay: number;
   now?: Date;
 }
 
@@ -54,7 +51,6 @@ export function aiCacheKey(input: {
 
 export function shouldTriggerDiscovery(input: DiscoveryTriggerInput): DiscoveryTriggerDecision {
   if (!input.enabled) return { trigger: false, reason: 'crawler_disabled' };
-  if (input.runsToday >= input.maxRunsPerDay) return { trigger: false, reason: 'daily_run_limit' };
   if (input.dealCount < input.minLocalDeals)
     return { trigger: true, reason: 'below_minimum_deals' };
   if (!input.lastRefresh) return { trigger: true, reason: 'inventory_never_refreshed' };

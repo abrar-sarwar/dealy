@@ -57,7 +57,6 @@ describe('discovery env', () => {
     expect(env.AI_CACHE_TTL_HOURS).toBe(24);
     expect(env.MIN_LOCAL_DEALS).toBe(25);
     expect(env.LOCAL_DEAL_REFRESH_HOURS).toBe(12);
-    expect(env.MAX_DISCOVERY_RUNS_PER_DAY).toBe(4);
     expect(env.CRAWLER_ENABLED).toBe(true);
     expect(env.AI_ENABLED).toBe(true);
   });
@@ -104,7 +103,6 @@ describe('discovery cost env defaults', () => {
     const env = envSchema.parse({ DATABASE_URL: 'postgres://x' });
     expect(env.FIRECRAWL_MAX_PAGES_PER_DAY).toBe(100);
     expect(env.FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY).toBe(10);
-    expect(env.FIRECRAWL_MAX_RUNS_PER_DAY).toBe(4);
     expect(env.FIRECRAWL_MAX_RECRAWLS_PER_DAY).toBe(2);
     expect(env.GEMINI_ESCALATION_MAX_CONFIDENCE).toBe(60);
     expect(env.GEMINI_ESCALATION_MIN_RELIABILITY).toBe(80);

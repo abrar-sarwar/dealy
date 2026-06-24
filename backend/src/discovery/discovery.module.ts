@@ -33,7 +33,7 @@ import { DiscoverySchedulerService } from './discovery.scheduler';
       inject: [PrismaService, ConfigService],
       useFactory: (prisma: PrismaService, config: ConfigService<Env, true>) => {
         const fc = firecrawlConfig(config);
-        return new FirecrawlBudgetService(prisma, { maxPagesPerDay: fc.maxPagesPerDay, maxPagesPerSourcePerDay: fc.maxPagesPerSourcePerDay, maxRunsPerDay: fc.maxRunsPerDay, maxRecrawlsPerDay: fc.maxRecrawlsPerDay });
+        return new FirecrawlBudgetService(prisma, { maxPagesPerDay: fc.maxPagesPerDay, maxPagesPerSourcePerDay: fc.maxPagesPerSourcePerDay, maxRecrawlsPerDay: fc.maxRecrawlsPerDay });
       },
     },
     {

@@ -26,16 +26,14 @@ export class FirecrawlBudgetService {
 
   async usageToday(sourceId: string, now = new Date()): Promise<FirecrawlBudgetUsage> {
     const since = startOfUtcDay(now);
-    const [globalPages, sourcePages, runs, recrawls] = await Promise.all([
+    const [globalPages, sourcePages, recrawls] = await Promise.all([
       this.prisma.crawlRun.aggregate({ _sum: { firecrawlPages: true }, where: { startedAt: { gte: since } } }),
       this.prisma.crawlRun.aggregate({ _sum: { firecrawlPages: true }, where: { startedAt: { gte: since }, source: { id: sourceId } } }),
-      this.prisma.crawlRun.count({ where: { startedAt: { gte: since } } }),
       this.prisma.crawlRun.count({ where: { startedAt: { gte: since }, source: { id: sourceId }, unchanged: true } }),
     ]);
     return {
       pagesToday: globalPages._sum.firecrawlPages ?? 0,
       pagesForSourceToday: sourcePages._sum.firecrawlPages ?? 0,
-      runsToday: runs,
       recrawlsForSourceToday: recrawls,
     };
   }

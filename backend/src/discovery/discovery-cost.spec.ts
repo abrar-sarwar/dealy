@@ -36,8 +36,6 @@ describe('shouldTriggerDiscovery', () => {
         minLocalDeals: 25,
         lastRefresh: null,
         refreshHours: 12,
-        runsToday: 0,
-        maxRunsPerDay: 4,
         now,
       }),
     ).toEqual({ trigger: false, reason: 'crawler_disabled' });
@@ -51,8 +49,6 @@ describe('shouldTriggerDiscovery', () => {
         minLocalDeals: 25,
         lastRefresh: now,
         refreshHours: 12,
-        runsToday: 0,
-        maxRunsPerDay: 4,
         now,
       }),
     ).toEqual({ trigger: true, reason: 'below_minimum_deals' });
@@ -66,26 +62,9 @@ describe('shouldTriggerDiscovery', () => {
         minLocalDeals: 25,
         lastRefresh: new Date('2026-06-23T20:00:00Z'),
         refreshHours: 12,
-        runsToday: 0,
-        maxRunsPerDay: 4,
         now,
       }),
     ).toEqual({ trigger: true, reason: 'inventory_stale' });
-  });
-
-  it('respects daily run caps before healthy inventory checks', () => {
-    expect(
-      shouldTriggerDiscovery({
-        enabled: true,
-        dealCount: 1,
-        minLocalDeals: 25,
-        lastRefresh: null,
-        refreshHours: 12,
-        runsToday: 4,
-        maxRunsPerDay: 4,
-        now,
-      }),
-    ).toEqual({ trigger: false, reason: 'daily_run_limit' });
   });
 });
 

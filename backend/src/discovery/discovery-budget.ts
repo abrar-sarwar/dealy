@@ -1,20 +1,17 @@
 export interface FirecrawlBudgetLimits {
   maxPagesPerDay: number;
   maxPagesPerSourcePerDay: number;
-  maxRunsPerDay: number;
   maxRecrawlsPerDay: number;
 }
 
 export interface FirecrawlBudgetUsage {
   pagesToday: number;
   pagesForSourceToday: number;
-  runsToday: number;
   /** Today's runs for THIS source whose fetch returned unchanged content. */
   recrawlsForSourceToday: number;
 }
 
 export type BudgetDenyReason =
-  | 'daily_run_cap'
   | 'daily_page_cap'
   | 'source_page_cap'
   | 'recrawl_cap';
@@ -38,8 +35,6 @@ export function evaluateFirecrawlBudget(
   limits: FirecrawlBudgetLimits,
   opts: { sourceMayBeUnchanged: boolean },
 ): BudgetDecision {
-  if (usage.runsToday >= limits.maxRunsPerDay)
-    return { allowed: false, reason: 'daily_run_cap', remainingPages: 0 };
   if (usage.pagesToday >= limits.maxPagesPerDay)
     return { allowed: false, reason: 'daily_page_cap', remainingPages: 0 };
   if (usage.pagesForSourceToday >= limits.maxPagesPerSourcePerDay)

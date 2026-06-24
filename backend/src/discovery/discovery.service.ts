@@ -15,22 +15,12 @@ export class DiscoveryService {
   async evaluateRegion(regionSlug: string, now = new Date()): Promise<DiscoveryTriggerDecision> {
     const cfg = discoveryConfig(this.config);
     const inventory = await this.prisma.regionalInventory.findUnique({ where: { regionSlug } });
-    const today = new Date(now);
-    today.setUTCHours(0, 0, 0, 0);
-    const runsToday = await this.prisma.crawlRun.count({
-      where: {
-        startedAt: { gte: today },
-        source: { zoneSlug: regionSlug },
-      },
-    });
     return shouldTriggerDiscovery({
       enabled: cfg.crawlerEnabled,
       dealCount: inventory?.dealCount ?? 0,
       minLocalDeals: cfg.minLocalDeals,
       lastRefresh: inventory?.lastRefresh ?? null,
       refreshHours: cfg.localDealRefreshHours,
-      runsToday,
-      maxRunsPerDay: cfg.maxDiscoveryRunsPerDay,
       now,
     });
   }
