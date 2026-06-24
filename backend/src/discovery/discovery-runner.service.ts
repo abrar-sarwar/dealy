@@ -9,6 +9,7 @@ import { contentHash } from './discovery-cost';
 import { resolveCrawlTargets } from './url-targeting';
 import { shouldConsiderSource, shouldEscalateToPro } from './escalation';
 import { dealFingerprint } from '../ingestion/normalized-deal';
+import { validImageUrl } from './deal-image';
 
 export interface DiscoveryRunnerConfig {
   gemini: {
@@ -158,6 +159,10 @@ export class DiscoveryRunnerService {
         pages++;
         summary.pagesFetched++;
         const text = doc.markdown ?? '';
+        // Capture OG image from Firecrawl metadata. Different Firecrawl versions
+        // use `ogImage` (camelCase) or `og:image` (colon-separated key).
+        const meta = doc.metadata as Record<string, unknown> | undefined;
+        const imageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
         const hash = contentHash(text);
 
         const prior = await this.prisma.contentHash.findUnique({
@@ -260,6 +265,7 @@ export class DiscoveryRunnerService {
                 verificationStatus: dl.verification_status,
                 fingerprint,
                 raw: dl as object,
+                imageUrl,
               },
             });
             queued++;

@@ -9,6 +9,8 @@ import { CandidatePromotionService } from '../src/discovery/candidate-promotion.
 const GSU = { lat: 33.7531, lng: -84.3857 };
 const REGION = 'e2e-promo';
 const FINGERPRINT = 'e2e-promo-fingerprint';
+const FINGERPRINT_IMG = 'e2e-promo-fingerprint-img';
+const OG_IMAGE_URL = 'https://cdn.example.com/og-deal-hero.jpg';
 
 /**
  * Regression guard for the discovery contract that unit tests alone missed: a
@@ -40,8 +42,12 @@ describe('Discovery promotion → local feed (e2e)', () => {
   });
 
   async function cleanup() {
-    await prisma.deal.deleteMany({ where: { fingerprint: FINGERPRINT } });
-    await prisma.dealCandidate.deleteMany({ where: { fingerprint: FINGERPRINT } });
+    await prisma.deal.deleteMany({
+      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG] } },
+    });
+    await prisma.dealCandidate.deleteMany({
+      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG] } },
+    });
     await prisma.regionalInventory.deleteMany({ where: { regionSlug: REGION } });
   }
 
@@ -90,6 +96,7 @@ describe('Discovery promotion → local feed (e2e)', () => {
       isOnline: boolean;
       locationPrecision: string;
       distanceMiles: number | null;
+      imageUrl: string | null;
     }>;
     const promoted = items.find((d) => d.title === 'E2E Promoted Local Deal');
     expect(promoted).toBeTruthy();
@@ -99,5 +106,50 @@ describe('Discovery promotion → local feed (e2e)', () => {
     expect(promoted!.locationPrecision).toBe('approximate');
     // Distance is the true ST_Distance from query point to centroid (not scattered).
     expect(promoted!.distanceMiles).not.toBeNull();
+    // imageUrl is null when no OG image was set on the candidate.
+    expect(promoted!.imageUrl).toBeNull();
+  });
+
+  it('carries imageUrl from candidate through promotion to the /v1/feeds/local response', async () => {
+    const category = await prisma.category.findFirst({ select: { slug: true } });
+    expect(category).toBeTruthy();
+
+    // Reuse the inventory created in the prior test (cleanup runs in afterAll).
+    const inventory = await prisma.regionalInventory.findFirst({ where: { regionSlug: REGION } });
+    expect(inventory).toBeTruthy();
+
+    await prisma.dealCandidate.create({
+      data: {
+        sourceUrl: 'https://example.test/e2e-promo-img',
+        title: 'E2E Promoted Local Deal With Image',
+        merchant: 'E2E Merchant',
+        categorySlug: category!.slug,
+        locationText: 'Near GSU',
+        latitude: GSU.lat + 0.01,
+        longitude: GSU.lng,
+        summary: 'A promoted deal with a real OG image.',
+        confidence: 95,
+        verificationStatus: 'pending',
+        fingerprint: FINGERPRINT_IMG,
+        regionalInventoryId: inventory!.id,
+        imageUrl: OG_IMAGE_URL,
+      },
+    });
+
+    const result = await promotion.promoteRegion(REGION);
+    expect(result.promoted).toBe(1);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/feeds/local?lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=15&limit=50`,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{
+      title: string;
+      imageUrl: string | null;
+    }>;
+    const promoted = items.find((d) => d.title === 'E2E Promoted Local Deal With Image');
+    expect(promoted).toBeTruthy();
+    expect(promoted!.imageUrl).toBe(OG_IMAGE_URL);
   });
 });

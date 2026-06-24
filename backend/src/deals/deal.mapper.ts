@@ -65,6 +65,7 @@ interface NormalizedDeal {
   moderationStatus: string;
   status: string;
   confidenceScore: number | null;
+  imageUrl: string | null;
 }
 
 function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
@@ -101,6 +102,7 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     locationPrecision: n.locationPrecision,
     locationTags: n.locationTags,
     visualSeed: n.visualSeed,
+    imageUrl: n.imageUrl,
     publishedAt: n.createdAt.toISOString(),
     startAt: n.startAt ? n.startAt.toISOString() : null,
     expiresAt: n.expiresAt.toISOString(),
@@ -155,6 +157,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       moderationStatus: deal.moderationStatus,
       status: deal.status,
       confidenceScore: deal.confidenceScore,
+      imageUrl: deal.imageUrl ?? null,
     },
     distanceMiles,
   );
@@ -195,6 +198,7 @@ export interface NearbyRow {
   moderation_status: string;
   status: string;
   confidence_score: number | null;
+  image_url: string | null;
   /** Tier rank (0=verified, 1=curated, 2=online, 3=community). Ordering only. */
   tier_rank: number;
   /** Human-readable tier label derived from tier_rank. */
@@ -237,6 +241,7 @@ export function mapNearbyRow(row: NearbyRow) {
       moderationStatus: row.moderation_status,
       status: row.status,
       confidenceScore: row.confidence_score,
+      imageUrl: row.image_url,
     },
     Number(row.distance_meters) / METERS_PER_MILE,
   );

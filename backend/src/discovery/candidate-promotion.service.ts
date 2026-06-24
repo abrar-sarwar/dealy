@@ -113,6 +113,7 @@ export class CandidatePromotionService {
           providerAttribution: null,
           verificationStatus: c.verificationStatus,
           confidenceScore: Math.round(c.confidence),
+          imageUrl: c.imageUrl,
           crawlSourceId: c.sourceId,
           fingerprint: c.fingerprint,
           startAt: null,

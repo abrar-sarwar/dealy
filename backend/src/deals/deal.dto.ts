@@ -40,6 +40,9 @@ export interface DealDto {
   locationPrecision: string;
   locationTags: string[];
   visualSeed: number;
+  /** Hero image URL scraped from the deal page's Open Graph metadata. Null if
+   * no valid image was captured at crawl time. */
+  imageUrl: string | null;
   publishedAt: string;
   startAt: string | null;
   expiresAt: string;

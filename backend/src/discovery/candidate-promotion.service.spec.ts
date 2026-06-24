@@ -19,6 +19,7 @@ type Candidate = {
   latitude: number | null;
   longitude: number | null;
   locationPrecision: string;
+  imageUrl: string | null;
 };
 
 function deps(
@@ -45,6 +46,7 @@ function deps(
     latitude: 33.749,
     longitude: -84.388,
     locationPrecision: 'approximate',
+    imageUrl: null,
     ...over.candidate,
   };
   return {
@@ -95,6 +97,8 @@ describe('CandidatePromotionService.promoteRegion', () => {
         isOnline: false,
         // Precision flows candidate → deal (no geocoding yet; approximate is the default).
         locationPrecision: 'approximate',
+        // imageUrl flows candidate → deal (null when no OG image was scraped).
+        imageUrl: null,
       }),
     );
     expect(d.prisma.dealCandidate.update).toHaveBeenCalledWith(
@@ -105,6 +109,16 @@ describe('CandidatePromotionService.promoteRegion', () => {
     );
     expect(d.search.upsertDeals).toHaveBeenCalledWith(['deal1']);
     expect(out.promoted).toBe(1);
+  });
+
+  it('carries a non-null imageUrl from the candidate to the created deal', async () => {
+    const imageUrl = 'https://cdn.example.com/og-deal.jpg';
+    const d = deps({ candidate: { imageUrl } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(expect.objectContaining({ imageUrl }));
   });
 
   it('does not create a duplicate deal when one with the fingerprint exists; marks candidate promoted', async () => {
