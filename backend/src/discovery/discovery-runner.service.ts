@@ -222,6 +222,11 @@ export class DiscoveryRunnerService {
                 categorySlug: dl.category || source.defaultCategorySlug || 'food',
                 expiration: dl.expiration ? new Date(dl.expiration) : null,
                 locationText: dl.location,
+                // Region-centroid coordinates so promoted deals carry a geog and
+                // surface in the geographic local feed. Street-level geocoding of
+                // locationText is a follow-up refinement.
+                latitude: inventory?.latitude ?? null,
+                longitude: inventory?.longitude ?? null,
                 summary: dl.summary,
                 confidence: dl.confidence,
                 verificationStatus: dl.verification_status,

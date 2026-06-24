@@ -64,7 +64,14 @@ function deps(
         findUnique: jest.fn(async () => over.priorHash ?? null),
         upsert: jest.fn(async () => ({ id: 'h1' })),
       },
-      regionalInventory: { findUnique: jest.fn(async () => ({ id: 'r1', regionSlug: 'atlanta' })) },
+      regionalInventory: {
+        findUnique: jest.fn(async () => ({
+          id: 'r1',
+          regionSlug: 'atlanta',
+          latitude: 33.749,
+          longitude: -84.388,
+        })),
+      },
       dealCandidate: {
         findFirst: jest.fn(async () => null),
         create: jest.fn(async () => ({ id: 'c1' })),
@@ -140,6 +147,13 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
     expect(d.gemini.extractDeals).toHaveBeenCalledTimes(1);
     expect(d.prisma.dealCandidate.create).toHaveBeenCalledTimes(1);
+    // Candidate carries the region centroid so the promoted deal gets a geog.
+    const candidateArg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: Record<string, unknown> }]
+    )[0];
+    expect(candidateArg.data).toEqual(
+      expect.objectContaining({ latitude: 33.749, longitude: -84.388 }),
+    );
     expect(out.candidatesStored).toBe(1);
   });
 

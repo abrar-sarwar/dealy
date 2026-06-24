@@ -1,4 +1,4 @@
-import { crawlSources } from '../../prisma/seed';
+import { crawlSources, regionalInventories } from '../../prisma/seed';
 import { resolveCrawlTargets } from './url-targeting';
 
 const allowed = [
@@ -61,5 +61,32 @@ describe('curated crawlSources seed', () => {
         allowedPaths: allowed,
       }),
     ).toEqual(['https://www.publix.com/savings/weekly-ad']);
+  });
+});
+
+describe('regionalInventories seed', () => {
+  it('seeds an inventory for every pilot zone so promotion has a region to attach to', () => {
+    const slugs = new Set(regionalInventories.map((r) => r.regionSlug));
+    for (const z of [
+      'atlanta',
+      'midtown',
+      'buckhead',
+      'downtown',
+      'gsu',
+      'gt',
+      'ksu',
+      'uga',
+      'cartersville',
+    ]) {
+      expect(slugs.has(z)).toBe(true);
+    }
+  });
+
+  it('gives every region a centroid (promoted deals derive coordinates from it)', () => {
+    for (const r of regionalInventories) {
+      expect(typeof r.latitude).toBe('number');
+      expect(typeof r.longitude).toBe('number');
+      expect(r.radiusMiles).toBeGreaterThan(0);
+    }
   });
 });

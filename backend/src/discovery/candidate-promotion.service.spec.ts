@@ -16,6 +16,8 @@ type Candidate = {
   fingerprint: string;
   expiration: null;
   locationText: null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 function deps(
@@ -39,6 +41,8 @@ function deps(
     fingerprint: 'fp1',
     expiration: null,
     locationText: null,
+    latitude: 33.749,
+    longitude: -84.388,
     ...over.candidate,
   };
   return {
@@ -82,6 +86,11 @@ describe('CandidatePromotionService.promoteRegion', () => {
         source: 'crawler',
         sourceTrust: 'editorial',
         categoryId: 'cat-groceries',
+        // Coordinates flow candidate → deal so geog populates and the deal is
+        // returned by the geographic local feed; with coords it is not online.
+        latitude: 33.749,
+        longitude: -84.388,
+        isOnline: false,
       }),
     );
     expect(d.prisma.dealCandidate.update).toHaveBeenCalledWith(
