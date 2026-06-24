@@ -1,4 +1,7 @@
 import { crawlSources } from '../../prisma/seed';
+import { resolveCrawlTargets } from './url-targeting';
+
+const allowed = ['/deals', '/coupons', '/promotions', '/offers', '/weekly-ad', '/student-discounts', '/events'];
 
 describe('curated crawlSources seed', () => {
   it('covers all pilot zones', () => {
@@ -11,5 +14,19 @@ describe('curated crawlSources seed', () => {
   it('uses known source types', () => {
     const ok = new Set(['merchant_site', 'weekly_ad', 'coupon_page', 'student_platform']);
     for (const s of crawlSources) expect(ok.has(s.sourceType)).toBe(true);
+  });
+
+  it('every source resolves to at least one targeted (non-bare) URL', () => {
+    for (const s of crawlSources) {
+      const targets = resolveCrawlTargets({ websiteUrl: s.url, dealUrl: s.dealUrl, targetPaths: s.targetPaths, allowedPaths: allowed });
+      expect(targets.length).toBeGreaterThan(0);
+      for (const t of targets) expect(t).not.toMatch(/^https?:\/\/[^/]+\/?$/);
+    }
+  });
+
+  it('does not synthesize a path for a URL that is already a deal page', () => {
+    const publix = crawlSources.find((s) => s.merchantHint === 'Publix')!;
+    expect(resolveCrawlTargets({ websiteUrl: publix.url, dealUrl: publix.dealUrl, targetPaths: publix.targetPaths, allowedPaths: allowed }))
+      .toEqual(['https://www.publix.com/savings/weekly-ad']);
   });
 });
