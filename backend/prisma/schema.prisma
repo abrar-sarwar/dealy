@@ -706,6 +706,12 @@ model CrawlSource {
   enabled             Boolean    @default(true)
   crawlIntervalHours  Int        @default(24) @map("crawl_interval_hours")
   lastCrawledAt       DateTime?  @map("last_crawled_at")
+  sourceType          String     @default("merchant_site") @map("source_type")
+  dealUrl             String?    @map("deal_url")
+  targetPaths         String[]   @default([]) @map("target_paths")
+  reliabilityScore    Int        @default(50) @map("reliability_score")
+  lastSuccessAt       DateTime?  @map("last_success_at")
+  averageDealsFound   Float      @default(0) @map("average_deals_found")
   createdAt           DateTime   @default(now()) @map("created_at")
 
   deals         Deal[]
@@ -725,6 +731,8 @@ model CrawlRun {
   queued     Int             @default(0)
   deduped    Int             @default(0)
   failed     Int             @default(0)
+  firecrawlPages Int     @default(0) @map("firecrawl_pages")
+  unchanged      Boolean @default(false)
   error      String?
   startedAt  DateTime        @default(now()) @map("started_at")
   finishedAt DateTime?       @map("finished_at")
@@ -813,6 +821,7 @@ model DealCandidate {
   raw                Json?
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
+  promotedAt         DateTime? @map("promoted_at")
 
   source            CrawlSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   contentHash       ContentHash?       @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
@@ -824,6 +833,7 @@ model DealCandidate {
   @@index([regionalInventoryId])
   @@index([fingerprint])
   @@index([verificationStatus])
+  @@index([promotedAt])
   @@map("deal_candidates")
 }
 

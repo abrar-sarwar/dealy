@@ -31,29 +31,39 @@ const campuses = [
   { slug: 'atlanta', schoolSlug: null, name: 'Metro Atlanta', shortName: 'Atlanta', cityContext: 'Metro Atlanta', latitude: 33.749, longitude: -84.388, defaultRadius: 15, locationTags: ['atlanta', 'metro'] },
 ];
 
-// Real Atlanta crawl sources for the curated pipeline. Seeded DISABLED: each URL
-// must be verified live + crawlable + permitted by the operator before enabling
-// (the crawler hits the real page on `pnpm crawl`). `zoneSlug: 'atlanta'` makes
-// crawled physical deals carry locationTags ['atlanta'], matching the ingestion
-// providers so cross-source dedup (dealFingerprint) lines up. Replace/extend this
-// list freely — upsert keys on `url`, so re-seeding is idempotent.
-const crawlSources = [
-  // Restaurants (food)
-  { url: 'https://thevarsity.com/menu/', kind: 'restaurant' as const, merchantHint: 'The Varsity', defaultCategorySlug: 'food', crawlIntervalHours: 168 },
-  { url: 'https://www.marymacs.com/menus/', kind: 'restaurant' as const, merchantHint: "Mary Mac's Tea Room", defaultCategorySlug: 'food', crawlIntervalHours: 168 },
-  { url: 'https://www.foxbrosbarbq.com/menu', kind: 'restaurant' as const, merchantHint: 'Fox Bros Bar-B-Q', defaultCategorySlug: 'food', crawlIntervalHours: 168 },
-  // Happy hour (food)
-  { url: 'https://poncecitymarket.com/restaurants/', kind: 'happy_hour' as const, merchantHint: 'Ponce City Market', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
-  { url: 'https://batteryatl.com/dining/', kind: 'happy_hour' as const, merchantHint: 'The Battery Atlanta', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
-  // Student discounts (food)
-  { url: 'https://dining.gsu.edu/specials/', kind: 'student_discount' as const, merchantHint: 'Georgia State Dining', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
-  { url: 'https://techdining.gatech.edu/specials/', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', crawlIntervalHours: 72 },
-  // Grocery circulars (groceries) — weekly cadence
-  { url: 'https://www.publix.com/savings/weekly-ad', kind: 'grocery_circular' as const, merchantHint: 'Publix', defaultCategorySlug: 'groceries', crawlIntervalHours: 168 },
-  { url: 'https://www.kroger.com/weeklyad', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', crawlIntervalHours: 168 },
-  // Local promos (entertainment)
-  { url: 'https://beltline.org/events/', kind: 'local_promo' as const, merchantHint: 'Atlanta BeltLine', defaultCategorySlug: 'entertainment', crawlIntervalHours: 72 },
-  { url: 'https://discoveratlanta.com/things-to-do/deals/', kind: 'local_promo' as const, merchantHint: 'Discover Atlanta', defaultCategorySlug: 'entertainment', crawlIntervalHours: 72 },
+// Real curated sources for the cost-efficient discovery engine. Seeded DISABLED:
+// the operator verifies each URL is live, crawlable, and permitted before
+// enabling. `zoneSlug` is the region bucket. CRAWL TARGET RULES:
+//   - If the seeded `url` is itself a deal page (its path already matches an
+//     allowed target path), leave `targetPaths: []` — the resolver crawls the
+//     seeded URL as-is.
+//   - If the seeded `url` is a homepage, set `dealUrl` to the verified deals
+//     page (preferred) OR `targetPaths` so the resolver builds origin+path.
+//     Operators MUST confirm a homepage source's dealUrl before enabling it.
+// reliabilityScore seeds at 50 and is updated by the runner from outcomes.
+export const crawlSources = [
+  // Grocery — weekly ads / coupons (groceries). Seeded URLs are already deal pages.
+  { url: 'https://www.publix.com/savings/weekly-ad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Publix', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.kroger.com/weeklyad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.kroger.com/coupons', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.aldi.us/weekly-specials/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Aldi', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.foodcity.com/coupons/', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.foodcity.com/weekly-ad/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'cartersville', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  // Walmart homepage-ish — needs a targeted path (operator should confirm dealUrl).
+  { url: 'https://www.walmart.com/', sourceType: 'merchant_site', kind: 'grocery_circular' as const, merchantHint: 'Walmart', defaultCategorySlug: 'groceries', zoneSlug: 'cartersville', dealUrl: null, targetPaths: ['/deals', '/offers'], crawlIntervalHours: 168 },
+  // Student platforms — homepages; targetPaths build the deal path (confirm dealUrl before enabling).
+  { url: 'https://www.studentbeans.com/us', sourceType: 'student_platform', kind: 'student_discount' as const, merchantHint: 'Student Beans', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gsu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://www.myunidays.com/US/en-US', sourceType: 'student_platform', kind: 'student_discount' as const, merchantHint: 'UNiDAYS', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  // Campus dining — seeded URLs already point at /specials.
+  { url: 'https://dining.gsu.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia State Dining', defaultCategorySlug: 'food', zoneSlug: 'gsu', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://techdining.gatech.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://dining.kennesaw.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'KSU Dining', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/specials', '/deals'], crawlIntervalHours: 72 },
+  { url: 'https://dining.uga.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'UGA Dining', defaultCategorySlug: 'food', zoneSlug: 'uga', dealUrl: null, targetPaths: ['/specials'], crawlIntervalHours: 72 },
+  // Restaurants / local promos — seeded URLs already point at /restaurants, /deals, /events.
+  { url: 'https://poncecitymarket.com/restaurants/', sourceType: 'merchant_site', kind: 'happy_hour' as const, merchantHint: 'Ponce City Market', defaultCategorySlug: 'food', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://buckhead.com/explore/deals/', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Buckhead ATL', defaultCategorySlug: 'entertainment', zoneSlug: 'buckhead', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://discoveratlanta.com/things-to-do/deals/', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Discover Atlanta', defaultCategorySlug: 'entertainment', zoneSlug: 'downtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://beltline.org/events/', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Atlanta BeltLine', defaultCategorySlug: 'entertainment', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
 ];
 
 async function seedCrawlSources(): Promise<void> {
@@ -61,19 +71,26 @@ async function seedCrawlSources(): Promise<void> {
     await prisma.crawlSource.upsert({
       where: { url: s.url },
       // Update curatable metadata only — never silently re-enable a source the
-      // operator has turned on/off, and don't reset crawl bookkeeping.
+      // operator turned on/off, and never reset reliability/bookkeeping.
       update: {
         kind: s.kind,
+        sourceType: s.sourceType,
         merchantHint: s.merchantHint,
         defaultCategorySlug: s.defaultCategorySlug,
+        zoneSlug: s.zoneSlug,
+        dealUrl: s.dealUrl,
+        targetPaths: s.targetPaths,
         crawlIntervalHours: s.crawlIntervalHours,
       },
       create: {
         url: s.url,
         kind: s.kind,
+        sourceType: s.sourceType,
         merchantHint: s.merchantHint,
         defaultCategorySlug: s.defaultCategorySlug,
-        zoneSlug: 'atlanta',
+        zoneSlug: s.zoneSlug,
+        dealUrl: s.dealUrl,
+        targetPaths: s.targetPaths,
         crawlIntervalHours: s.crawlIntervalHours,
         enabled: false, // operator verifies the URL, then flips this on
       },
@@ -219,10 +236,12 @@ async function seedDeals(): Promise<void> {
   }
 }
 
-main()
-  .then(() => prisma.$disconnect())
-  .catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
-    return prisma.$disconnect().finally(() => process.exit(1));
-  });
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
