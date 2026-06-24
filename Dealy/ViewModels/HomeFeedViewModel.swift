@@ -10,11 +10,30 @@ final class HomeFeedViewModel {
     var filters = DealFeedFilters()
     private(set) var deck: [Deal] = []
 
+    /// Merge `allDeals` (authoritative nearby/verified feed) with `localDeals`
+    /// (curated editorial deals), deduplicating by `Deal.id`. When both arrays
+    /// contain a deal with the same id the copy from `primary` wins — preserving
+    /// server-controlled fields like `verified`.
+    static func deduped(_ primary: [Deal], _ secondary: [Deal]) -> [Deal] {
+        var seen = Set<String>()
+        var result = [Deal]()
+        result.reserveCapacity(primary.count + secondary.count)
+        for deal in primary + secondary {
+            if seen.insert(deal.id).inserted {
+                result.append(deal)
+            }
+        }
+        return result
+    }
+
     /// Recompute the deck from current app state, excluding already-swiped deals.
     /// The deal service already returns discovery-eligible inventory, so we do
     /// NOT re-apply location filtering here — only active/category/advanced/unseen.
+    /// `localDeals` (curated editorial) are blended in so they appear in the swipe
+    /// deck; duplicates are resolved in favour of the authoritative `allDeals` copy.
     func rebuild(using app: AppState) {
-        let active = DealFilter.active(app.allDeals)
+        let merged = Self.deduped(app.allDeals, app.localDeals)
+        let active = DealFilter.active(merged)
         let scoped = filters.includeOnline ? active : active.filter { !$0.isOnline }
         let categorized = DealFilter.byCategory(scoped, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)
@@ -45,7 +64,8 @@ final class HomeFeedViewModel {
 
     /// Whether the deck is empty because filters hid everything vs. fully swiped.
     func emptyReason(using app: AppState) -> EmptyReason {
-        let active = DealFilter.active(app.allDeals)
+        let merged = Self.deduped(app.allDeals, app.localDeals)
+        let active = DealFilter.active(merged)
         let scoped = filters.includeOnline ? active : active.filter { !$0.isOnline }
         let categorized = DealFilter.byCategory(scoped, category: selectedCategory)
         let refined = DealFilter.advanced(categorized, filters: filters)

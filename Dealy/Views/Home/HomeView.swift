@@ -36,7 +36,9 @@ struct HomeView: View {
         .background(Theme.background.ignoresSafeArea())
         .onChange(of: app.loadState) { _, _ in rebuild() }
         .onChange(of: app.discovery) { _, _ in rebuild() }
+        .onChange(of: app.localDeals) { _, _ in rebuild() }
         .onAppear { if viewModel.deck.isEmpty { rebuild() } }
+        .task { await app.loadLocalDeals() }
         .onDisappear { demoTask?.cancel() }
         .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
         .sheet(item: $getDeal) { GetDealSheet(deal: $0) }
