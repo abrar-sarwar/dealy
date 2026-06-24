@@ -91,6 +91,18 @@ describe('mapPrismaDeal redemptionBrand', () => {
     expect(dto.trustLevel).toBe('curated');
     expect(dto.verified).toBe(false);
   });
+
+  it('editorial deal with a (Gemini-supplied) verified status is NEVER shown verified', () => {
+    const dto = mapPrismaDeal(
+      fakeDeal({
+        sourceTrust: 'editorial',
+        verificationStatus: 'verified', // a model self-report must not grant trust
+      }) as unknown as Deal & { category: Category },
+      null,
+    );
+    expect(dto.verified).toBe(false);
+    expect(dto.trustLevel).toBe('curated');
+  });
 });
 
 describe('mapPrismaDeal imageUrl', () => {
