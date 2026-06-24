@@ -27,6 +27,13 @@ type Source = {
   enabled: boolean;
 };
 
+type ResolvedLocation = {
+  latitude: number | null;
+  longitude: number | null;
+  locationPrecision: 'exact' | 'approximate';
+  locationText: string | null;
+};
+
 function deps(
   over: {
     source?: Partial<Source>;
@@ -34,6 +41,7 @@ function deps(
     priorHash?: { id: string; processedAt: Date } | null;
     budget?: { allowed: boolean; reason?: string; remainingPages: number };
     plan?: { crawl: boolean; reason: string; priority: number };
+    resolverResult?: ResolvedLocation;
   } = {},
 ) {
   const source = {
@@ -54,6 +62,14 @@ function deps(
     ...over.source,
   };
   const sources = over.sources ?? [source];
+
+  const defaultResolverResult: ResolvedLocation = over.resolverResult ?? {
+    latitude: 33.749,
+    longitude: -84.388,
+    locationPrecision: 'approximate',
+    locationText: null,
+  };
+
   return {
     source,
     prisma: {
@@ -72,6 +88,7 @@ function deps(
           regionSlug: 'atlanta',
           latitude: 33.749,
           longitude: -84.388,
+          radiusMiles: 10,
         })),
       },
       dealCandidate: {
@@ -109,6 +126,9 @@ function deps(
         cacheHit: false,
       })),
     },
+    resolver: {
+      resolve: jest.fn(async () => defaultResolverResult),
+    },
   };
 }
 
@@ -120,6 +140,7 @@ function build(d: ReturnType<typeof deps>) {
     d.firecrawl as never,
     d.gemini as never,
     d.aiCache as never,
+    d.resolver as never,
     cfg as never,
   );
 }
@@ -137,7 +158,7 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.gemini.planCrawl).not.toHaveBeenCalled();
   });
 
-  it('runs the full pipeline and persists a candidate', async () => {
+  it('runs the full pipeline and persists a candidate with approximate centroid by default', async () => {
     const d = deps();
     const out = await build(d).runRegion('atlanta');
     expect(d.budget.check).toHaveBeenCalledWith(
@@ -160,6 +181,48 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(candidateArg.data.longitude).toBe(-84.388);
     expect(candidateArg.data.locationPrecision).toBe('approximate');
     expect(out.candidatesStored).toBe(1);
+  });
+
+  it('stores exact coords when resolver returns exact precision', async () => {
+    const d = deps({
+      resolverResult: {
+        latitude: 33.771,
+        longitude: -84.39,
+        locationPrecision: 'exact',
+        locationText: '100 Peachtree St, Atlanta, GA',
+      },
+    });
+    await build(d).runRegion('atlanta');
+
+    expect(d.resolver.resolve).toHaveBeenCalledTimes(1);
+    const candidateArg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        {
+          data: {
+            latitude: number;
+            longitude: number;
+            locationPrecision: string;
+            locationText: string;
+          };
+        },
+      ]
+    )[0];
+    expect(candidateArg.data.latitude).toBe(33.771);
+    expect(candidateArg.data.longitude).toBe(-84.39);
+    expect(candidateArg.data.locationPrecision).toBe('exact');
+    expect(candidateArg.data.locationText).toBe('100 Peachtree St, Atlanta, GA');
+  });
+
+  it('resolver is called with merchant, locationText, centroid, and radiusMiles', async () => {
+    const d = deps();
+    await build(d).runRegion('atlanta');
+
+    expect(d.resolver.resolve).toHaveBeenCalledWith({
+      merchant: 'Shop',
+      locationText: null,
+      centroid: { latitude: 33.749, longitude: -84.388 },
+      radiusMiles: 10,
+    });
   });
 
   it('skips Gemini and marks the run unchanged when content hash is unchanged', async () => {

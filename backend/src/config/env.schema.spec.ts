@@ -44,6 +44,22 @@ describe('validateEnv', () => {
     const env = validateEnv({ DATABASE_URL: 'postgresql://localhost/dealy', SENTRY_DSN: '' });
     expect(env.SENTRY_DSN).toBeUndefined();
   });
+
+  it('accepts GOOGLE_PLACES_API_KEY as an optional string', () => {
+    const env = validateEnv({
+      DATABASE_URL: 'postgresql://localhost/dealy',
+      GOOGLE_PLACES_API_KEY: 'AIza-test-key',
+    });
+    expect(env.GOOGLE_PLACES_API_KEY).toBe('AIza-test-key');
+  });
+
+  it('treats empty GOOGLE_PLACES_API_KEY as undefined', () => {
+    const env = validateEnv({
+      DATABASE_URL: 'postgresql://localhost/dealy',
+      GOOGLE_PLACES_API_KEY: '',
+    });
+    expect(env.GOOGLE_PLACES_API_KEY).toBeUndefined();
+  });
 });
 
 describe('discovery env', () => {

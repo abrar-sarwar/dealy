@@ -43,6 +43,7 @@ export const envSchema = z
 
     // Optional integrations — presence-gated, never required.
     GOOGLE_MAPS_SERVER_API_KEY: optionalString,
+    GOOGLE_PLACES_API_KEY: optionalString,
     FIREBASE_PROJECT_ID: optionalString,
     FIREBASE_SERVICE_ACCOUNT_BASE64: optionalString,
     APPLE_BUNDLE_ID: z.string().default('com.dealy.app'),
