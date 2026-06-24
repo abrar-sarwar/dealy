@@ -5,6 +5,7 @@ import type { FirecrawlBudgetService } from './firecrawl-budget.service';
 import type { FirecrawlService } from '../services/firecrawl/firecrawl.service';
 import type { GeminiService } from '../services/gemini/gemini.service';
 import type { AiCacheService } from './ai-cache.service';
+import type { MerchantLocationResolver } from './merchant-location.resolver';
 import { contentHash } from './discovery-cost';
 import { resolveCrawlTargets } from './url-targeting';
 import { shouldConsiderSource, shouldEscalateToPro } from './escalation';
@@ -73,6 +74,7 @@ export class DiscoveryRunnerService {
     private readonly firecrawl: FirecrawlService,
     private readonly gemini: GeminiService,
     private readonly aiCache: AiCacheService,
+    private readonly resolver: MerchantLocationResolver,
     private readonly config: DiscoveryRunnerConfig,
   ) {}
 
@@ -245,6 +247,17 @@ export class DiscoveryRunnerService {
               categorySlug: dl.category || source.defaultCategorySlug || 'food',
             });
             if (await this.prisma.dealCandidate.findFirst({ where: { fingerprint } })) continue;
+
+            const loc = await this.resolver.resolve({
+              merchant: dl.merchant || source.merchantHint || null,
+              locationText: dl.location ?? null,
+              centroid:
+                inventory?.latitude != null && inventory?.longitude != null
+                  ? { latitude: inventory.latitude, longitude: inventory.longitude }
+                  : null,
+              radiusMiles: inventory?.radiusMiles ?? 10,
+            });
+
             await this.prisma.dealCandidate.create({
               data: {
                 sourceId: source.id,
@@ -256,10 +269,10 @@ export class DiscoveryRunnerService {
                 discount: dl.discount,
                 categorySlug: dl.category || source.defaultCategorySlug || 'food',
                 expiration: dl.expiration ? new Date(dl.expiration) : null,
-                locationText: dl.location,
-                latitude: inventory?.latitude ?? null,
-                longitude: inventory?.longitude ?? null,
-                locationPrecision: 'approximate',
+                locationText: loc.locationText,
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                locationPrecision: loc.locationPrecision,
                 summary: dl.summary,
                 confidence: dl.confidence,
                 verificationStatus: dl.verification_status,
