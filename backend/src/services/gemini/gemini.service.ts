@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { GeminiConfig } from '../../config/gemini';
 import type { GeminiClient } from './gemini.client';
-import type { GeminiCrawlPlan, GeminiDealExtraction, GeminiVerificationReasoning } from './gemini.types';
+import type {
+  GeminiCrawlPlan,
+  GeminiDealExtraction,
+  GeminiVerificationReasoning,
+} from './gemini.types';
 
 const dealExtractionSchema = {
   type: 'object',
@@ -90,7 +94,11 @@ export class GeminiService {
       model: this.config.model,
       schema: {
         type: 'object',
-        properties: { crawl: { type: 'boolean' }, reason: { type: 'string' }, priority: { type: 'number' } },
+        properties: {
+          crawl: { type: 'boolean' },
+          reason: { type: 'string' },
+          priority: { type: 'number' },
+        },
         required: ['crawl', 'reason', 'priority'],
       },
       prompt:

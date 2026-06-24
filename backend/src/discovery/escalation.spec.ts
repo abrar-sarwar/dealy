@@ -16,15 +16,33 @@ describe('shouldEscalateToPro', () => {
 describe('shouldConsiderSource', () => {
   const now = new Date('2026-06-24T12:00:00Z');
   it('skips disabled sources', () => {
-    expect(shouldConsiderSource({ enabled: false, lastCrawledAt: null, crawlIntervalHours: 24, now })).toBe(false);
+    expect(
+      shouldConsiderSource({ enabled: false, lastCrawledAt: null, crawlIntervalHours: 24, now }),
+    ).toBe(false);
   });
   it('considers an enabled, never-crawled source', () => {
-    expect(shouldConsiderSource({ enabled: true, lastCrawledAt: null, crawlIntervalHours: 24, now })).toBe(true);
+    expect(
+      shouldConsiderSource({ enabled: true, lastCrawledAt: null, crawlIntervalHours: 24, now }),
+    ).toBe(true);
   });
   it('skips a source crawled within its interval', () => {
-    expect(shouldConsiderSource({ enabled: true, lastCrawledAt: new Date('2026-06-24T06:00:00Z'), crawlIntervalHours: 24, now })).toBe(false);
+    expect(
+      shouldConsiderSource({
+        enabled: true,
+        lastCrawledAt: new Date('2026-06-24T06:00:00Z'),
+        crawlIntervalHours: 24,
+        now,
+      }),
+    ).toBe(false);
   });
   it('considers a source past its interval', () => {
-    expect(shouldConsiderSource({ enabled: true, lastCrawledAt: new Date('2026-06-22T06:00:00Z'), crawlIntervalHours: 24, now })).toBe(true);
+    expect(
+      shouldConsiderSource({
+        enabled: true,
+        lastCrawledAt: new Date('2026-06-22T06:00:00Z'),
+        crawlIntervalHours: 24,
+        now,
+      }),
+    ).toBe(true);
   });
 });

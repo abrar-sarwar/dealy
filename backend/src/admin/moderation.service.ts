@@ -5,8 +5,13 @@ import { SearchIndexer } from '../search/search-indexer.service';
 import { AuditService } from './audit.service';
 
 export interface ModerationEdit {
-  title?: string; merchant?: string; categoryId?: string;
-  latitude?: number; longitude?: number; startAt?: string; expiresAt?: string;
+  title?: string;
+  merchant?: string;
+  categoryId?: string;
+  latitude?: number;
+  longitude?: number;
+  startAt?: string;
+  expiresAt?: string;
 }
 
 @Injectable()
@@ -28,24 +33,33 @@ export class ModerationService {
       },
       orderBy: [{ confidenceScore: 'desc' }, { createdAt: 'desc' }],
       take: opts.limit ?? 50,
-      include: { category: { select: { slug: true } }, crawlSource: { select: { url: true, kind: true } } },
+      include: {
+        category: { select: { slug: true } },
+        crawlSource: { select: { url: true, kind: true } },
+      },
     });
   }
 
   async approve(actorId: string, dealId: string): Promise<{ id: string; status: 'published' }> {
     await this.requireDeal(dealId);
     await this.prisma.deal.update({
-      where: { id: dealId }, data: { status: 'published', moderationStatus: 'approved' },
+      where: { id: dealId },
+      data: { status: 'published', moderationStatus: 'approved' },
     });
     await this.search.upsertDeals([dealId]);
     await this.audit.log(actorId, 'deal.moderate.approve', { type: 'deal', id: dealId }, {});
     return { id: dealId, status: 'published' };
   }
 
-  async reject(actorId: string, dealId: string, reason: string): Promise<{ id: string; status: 'archived' }> {
+  async reject(
+    actorId: string,
+    dealId: string,
+    reason: string,
+  ): Promise<{ id: string; status: 'archived' }> {
     await this.requireDeal(dealId);
     await this.prisma.deal.update({
-      where: { id: dealId }, data: { status: 'archived', moderationStatus: 'rejected' },
+      where: { id: dealId },
+      data: { status: 'archived', moderationStatus: 'rejected' },
     });
     await this.search.removeDeal(dealId);
     await this.audit.log(actorId, 'deal.moderate.reject', { type: 'deal', id: dealId }, { reason });
@@ -63,8 +77,12 @@ export class ModerationService {
     if (patch.startAt !== undefined) data.startAt = new Date(patch.startAt);
     if (patch.expiresAt !== undefined) data.expiresAt = new Date(patch.expiresAt);
     await this.prisma.deal.update({ where: { id: dealId }, data });
-    await this.audit.log(actorId, 'deal.moderate.edit', { type: 'deal', id: dealId },
-      { before: { title: before.title, latitude: before.latitude }, patch });
+    await this.audit.log(
+      actorId,
+      'deal.moderate.edit',
+      { type: 'deal', id: dealId },
+      { before: { title: before.title, latitude: before.latitude }, patch },
+    );
     return { id: dealId };
   }
 

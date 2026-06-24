@@ -1,19 +1,37 @@
 // src/admin/moderation.service.spec.ts
 import { ModerationService } from './moderation.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { SearchIndexer } from '../search/search-indexer.service';
+import type { AuditService } from './audit.service';
 
 function make() {
-  const updates: any[] = [];
-  const audits: any[] = [];
+  const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+  const audits: unknown[][] = [];
   const prisma = {
     deal: {
       findMany: async () => [{ id: 'd1', confidenceScore: 90 }],
       findUnique: async () => ({ id: 'd1', title: 'old', latitude: 1, status: 'draft' }),
-      update: async ({ where, data }: any) => { updates.push({ id: where.id, data }); return { id: where.id, ...data }; },
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        updates.push({ id: where.id, data });
+        return { id: where.id, ...data };
+      },
     },
   };
   const search = { upsertDeals: async () => {}, removeDeal: async () => {} };
-  const audit = { log: async (...a: any[]) => { audits.push(a); } };
-  return { svc: new ModerationService(prisma as any, search as any, audit as any), updates, audits };
+  const audit = {
+    log: async (...a: unknown[]) => {
+      audits.push(a);
+    },
+  };
+  return {
+    svc: new ModerationService(
+      prisma as unknown as PrismaService,
+      search as unknown as SearchIndexer,
+      audit as unknown as AuditService,
+    ),
+    updates,
+    audits,
+  };
 }
 
 describe('ModerationService', () => {

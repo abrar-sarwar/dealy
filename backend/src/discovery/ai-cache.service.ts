@@ -18,12 +18,18 @@ export class AiCacheService {
     private readonly ttlHours: number,
   ) {}
 
-  async getOrGenerate<T>(params: AiCacheParams, generate: () => Promise<T>): Promise<{ value: T; cacheHit: boolean }> {
+  async getOrGenerate<T>(
+    params: AiCacheParams,
+    generate: () => Promise<T>,
+  ): Promise<{ value: T; cacheHit: boolean }> {
     const cacheKey = aiCacheKey(params);
     const now = new Date();
     const existing = await this.prisma.aiCache.findUnique({ where: { cacheKey } });
     if (existing && existing.expiresAt > now) {
-      await this.prisma.aiCache.update({ where: { cacheKey }, data: { hitCount: { increment: 1 }, lastHitAt: now } });
+      await this.prisma.aiCache.update({
+        where: { cacheKey },
+        data: { hitCount: { increment: 1 }, lastHitAt: now },
+      });
       return { value: existing.output as T, cacheHit: true };
     }
     const value = await generate();
@@ -31,7 +37,15 @@ export class AiCacheService {
     const promptHash = sha256(params.prompt);
     await this.prisma.aiCache.upsert({
       where: { cacheKey },
-      create: { cacheKey, task: params.task, model: params.model, schemaVersion: params.schemaVersion, promptHash, output: value as object, expiresAt },
+      create: {
+        cacheKey,
+        task: params.task,
+        model: params.model,
+        schemaVersion: params.schemaVersion,
+        promptHash,
+        output: value as object,
+        expiresAt,
+      },
       update: { output: value as object, expiresAt, promptHash },
     });
     return { value, cacheHit: false };

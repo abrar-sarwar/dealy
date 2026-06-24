@@ -76,15 +76,34 @@ describe('GeminiService', () => {
   });
 });
 
-const cfg = { apiKey: 'k', model: 'gemini-2.5-flash', reasoningModel: 'gemini-2.5-pro', cacheTtlHours: 24, enabled: true, escalationMaxConfidence: 60, escalationMinReliability: 80 };
+const cfg = {
+  apiKey: 'k',
+  model: 'gemini-2.5-flash',
+  reasoningModel: 'gemini-2.5-pro',
+  cacheTtlHours: 24,
+  enabled: true,
+  escalationMaxConfidence: 60,
+  escalationMinReliability: 80,
+};
 
 describe('GeminiService.planCrawl', () => {
   it('returns the structured crawl plan from Flash', async () => {
-    const generateJson = jest.fn().mockResolvedValue({ crawl: true, reason: 'fresh weekly ad', priority: 8 });
+    const generateJson = jest
+      .fn()
+      .mockResolvedValue({ crawl: true, reason: 'fresh weekly ad', priority: 8 });
     const svc = new GeminiService({ generateJson }, cfg as never);
-    const plan = await svc.planCrawl({ sourceType: 'weekly_ad', url: 'https://shop.com/weekly-ad', category: 'groceries', reliabilityScore: 70, averageDealsFound: 4, lastSuccessAt: null });
+    const plan = await svc.planCrawl({
+      sourceType: 'weekly_ad',
+      url: 'https://shop.com/weekly-ad',
+      category: 'groceries',
+      reliabilityScore: 70,
+      averageDealsFound: 4,
+      lastSuccessAt: null,
+    });
     expect(plan).toEqual({ crawl: true, reason: 'fresh weekly ad', priority: 8 });
-    expect(generateJson).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini-2.5-flash' }));
+    expect(generateJson).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gemini-2.5-flash' }),
+    );
   });
 });
 
@@ -92,7 +111,11 @@ describe('GeminiService.extractDeals model override', () => {
   it('uses the provided model when escalating to Pro', async () => {
     const generateJson = jest.fn().mockResolvedValue({ deals: [] });
     const svc = new GeminiService({ generateJson }, cfg as never);
-    await svc.extractDeals({ content: 'x', sourceUrl: 'https://shop.com/deals', model: 'gemini-2.5-pro' });
+    await svc.extractDeals({
+      content: 'x',
+      sourceUrl: 'https://shop.com/deals',
+      model: 'gemini-2.5-pro',
+    });
     expect(generateJson).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini-2.5-pro' }));
   });
 });

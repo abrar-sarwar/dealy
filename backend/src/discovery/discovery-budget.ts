@@ -11,10 +11,7 @@ export interface FirecrawlBudgetUsage {
   recrawlsForSourceToday: number;
 }
 
-export type BudgetDenyReason =
-  | 'daily_page_cap'
-  | 'source_page_cap'
-  | 'recrawl_cap';
+export type BudgetDenyReason = 'daily_page_cap' | 'source_page_cap' | 'recrawl_cap';
 
 export interface BudgetDecision {
   allowed: boolean;

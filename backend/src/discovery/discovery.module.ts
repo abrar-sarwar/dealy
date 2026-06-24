@@ -26,32 +26,71 @@ import { DiscoverySchedulerService } from './discovery.scheduler';
     {
       provide: AiCacheService,
       inject: [PrismaService, ConfigService],
-      useFactory: (prisma: PrismaService, config: ConfigService<Env, true>) => new AiCacheService(prisma, geminiConfig(config).cacheTtlHours),
+      useFactory: (prisma: PrismaService, config: ConfigService<Env, true>) =>
+        new AiCacheService(prisma, geminiConfig(config).cacheTtlHours),
     },
     {
       provide: FirecrawlBudgetService,
       inject: [PrismaService, ConfigService],
       useFactory: (prisma: PrismaService, config: ConfigService<Env, true>) => {
         const fc = firecrawlConfig(config);
-        return new FirecrawlBudgetService(prisma, { maxPagesPerDay: fc.maxPagesPerDay, maxPagesPerSourcePerDay: fc.maxPagesPerSourcePerDay, maxRecrawlsPerDay: fc.maxRecrawlsPerDay });
+        return new FirecrawlBudgetService(prisma, {
+          maxPagesPerDay: fc.maxPagesPerDay,
+          maxPagesPerSourcePerDay: fc.maxPagesPerSourcePerDay,
+          maxRecrawlsPerDay: fc.maxRecrawlsPerDay,
+        });
       },
     },
     {
       provide: CandidatePromotionService,
       inject: [PrismaService, SearchIndexer, ConfigService],
-      useFactory: (prisma: PrismaService, search: SearchIndexer, config: ConfigService<Env, true>) => new CandidatePromotionService(prisma, search, discoveryConfig(config).publishMinConfidence),
+      useFactory: (
+        prisma: PrismaService,
+        search: SearchIndexer,
+        config: ConfigService<Env, true>,
+      ) =>
+        new CandidatePromotionService(prisma, search, discoveryConfig(config).publishMinConfidence),
     },
     {
       provide: DiscoveryRunnerService,
-      inject: [PrismaService, DiscoveryService, FirecrawlBudgetService, FirecrawlService, GeminiService, AiCacheService, ConfigService],
-      useFactory: (prisma: PrismaService, discovery: DiscoveryService, budget: FirecrawlBudgetService, firecrawl: FirecrawlService, gemini: GeminiService, aiCache: AiCacheService, config: ConfigService<Env, true>) => {
+      inject: [
+        PrismaService,
+        DiscoveryService,
+        FirecrawlBudgetService,
+        FirecrawlService,
+        GeminiService,
+        AiCacheService,
+        ConfigService,
+      ],
+      useFactory: (
+        prisma: PrismaService,
+        discovery: DiscoveryService,
+        budget: FirecrawlBudgetService,
+        firecrawl: FirecrawlService,
+        gemini: GeminiService,
+        aiCache: AiCacheService,
+        config: ConfigService<Env, true>,
+      ) => {
         const gc = geminiConfig(config);
         const dc = discoveryConfig(config);
         const runnerConfig: DiscoveryRunnerConfig = {
-          gemini: { model: gc.model, reasoningModel: gc.reasoningModel, escalationMaxConfidence: gc.escalationMaxConfidence, escalationMinReliability: gc.escalationMinReliability },
+          gemini: {
+            model: gc.model,
+            reasoningModel: gc.reasoningModel,
+            escalationMaxConfidence: gc.escalationMaxConfidence,
+            escalationMinReliability: gc.escalationMinReliability,
+          },
           targetPaths: dc.targetPaths,
         };
-        return new DiscoveryRunnerService(prisma, discovery, budget, firecrawl, gemini, aiCache, runnerConfig);
+        return new DiscoveryRunnerService(
+          prisma,
+          discovery,
+          budget,
+          firecrawl,
+          gemini,
+          aiCache,
+          runnerConfig,
+        );
       },
     },
     DiscoverySchedulerService,

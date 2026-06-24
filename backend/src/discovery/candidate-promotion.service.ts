@@ -23,7 +23,10 @@ export class CandidatePromotionService {
     private readonly minConfidence: number,
   ) {}
 
-  async promoteRegion(regionSlug: string, now = new Date()): Promise<{ promoted: number; skipped: number }> {
+  async promoteRegion(
+    regionSlug: string,
+    now = new Date(),
+  ): Promise<{ promoted: number; skipped: number }> {
     const inventory = await this.prisma.regionalInventory.findUnique({ where: { regionSlug } });
     if (!inventory) {
       this.logger.warn({ regionSlug }, 'candidate-promotion.no-inventory');
@@ -37,7 +40,12 @@ export class CandidatePromotionService {
         verificationStatus: { notIn: ['invalid', 'expired'] },
       },
     });
-    const categories = new Map((await this.prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [c.slug, c.id]));
+    const categories = new Map(
+      (await this.prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [
+        c.slug,
+        c.id,
+      ]),
+    );
 
     const publishedIds: string[] = [];
     let promoted = 0;
@@ -46,28 +54,66 @@ export class CandidatePromotionService {
     for (const c of candidates) {
       const categoryId = categories.get(c.categorySlug);
       // Leave promotedAt null: retry once the category becomes mappable.
-      if (!categoryId) { skipped++; continue; }
+      if (!categoryId) {
+        skipped++;
+        continue;
+      }
 
       if (c.fingerprint) {
-        const existing = await this.prisma.deal.findFirst({ where: { fingerprint: c.fingerprint }, select: { id: true } });
-        if (existing) { await this.prisma.dealCandidate.update({ where: { id: c.id }, data: { promotedAt: now } }); skipped++; continue; }
+        const existing = await this.prisma.deal.findFirst({
+          where: { fingerprint: c.fingerprint },
+          select: { id: true },
+        });
+        if (existing) {
+          await this.prisma.dealCandidate.update({
+            where: { id: c.id },
+            data: { promotedAt: now },
+          });
+          skipped++;
+          continue;
+        }
       }
 
       const externalId = `discovery-${c.id}`;
-      const expiresAt = c.expiration && c.expiration.getTime() > now.getTime() ? c.expiration : new Date(now.getTime() + 14 * 86_400_000);
+      const expiresAt =
+        c.expiration && c.expiration.getTime() > now.getTime()
+          ? c.expiration
+          : new Date(now.getTime() + 14 * 86_400_000);
       const deal = await this.prisma.deal.upsert({
         where: { externalId },
         update: { confidenceScore: Math.round(c.confidence) },
         create: {
-          externalId, title: c.title, merchant: c.merchant, categoryId,
-          shortDescription: c.summary, detailedDescription: '', terms: '',
-          currentPriceMinor: null, originalPriceMinor: null, currency: 'USD', dealScore: 50,
-          isOnline: !c.locationText, isStudentOnly: false, couponCode: null, destinationUrl: c.sourceUrl,
-          latitude: null, longitude: null, locationTags: regionSlug ? [regionSlug] : [],
-          visualSeed: Math.abs(hash(externalId)) % 1000, status: 'published', moderationStatus: 'approved',
-          source: 'crawler', sourceTrust: 'editorial', sourceUrl: c.sourceUrl, providerAttribution: null,
-          verificationStatus: c.verificationStatus, confidenceScore: Math.round(c.confidence),
-          crawlSourceId: c.sourceId, fingerprint: c.fingerprint, startAt: null, expiresAt,
+          externalId,
+          title: c.title,
+          merchant: c.merchant,
+          categoryId,
+          shortDescription: c.summary,
+          detailedDescription: '',
+          terms: '',
+          currentPriceMinor: null,
+          originalPriceMinor: null,
+          currency: 'USD',
+          dealScore: 50,
+          isOnline: !c.locationText,
+          isStudentOnly: false,
+          couponCode: null,
+          destinationUrl: c.sourceUrl,
+          latitude: null,
+          longitude: null,
+          locationTags: regionSlug ? [regionSlug] : [],
+          visualSeed: Math.abs(hash(externalId)) % 1000,
+          status: 'published',
+          moderationStatus: 'approved',
+          source: 'crawler',
+          sourceTrust: 'editorial',
+          sourceUrl: c.sourceUrl,
+          providerAttribution: null,
+          verificationStatus: c.verificationStatus,
+          confidenceScore: Math.round(c.confidence),
+          crawlSourceId: c.sourceId,
+          fingerprint: c.fingerprint,
+          startAt: null,
+          expiresAt,
         },
         select: { id: true },
       });
@@ -77,8 +123,11 @@ export class CandidatePromotionService {
     }
 
     if (publishedIds.length) {
-      try { await this.search.upsertDeals(publishedIds); }
-      catch (err) { this.logger.warn(`search index: ${(err as Error).message}`); }
+      try {
+        await this.search.upsertDeals(publishedIds);
+      } catch (err) {
+        this.logger.warn(`search index: ${(err as Error).message}`);
+      }
     }
     return { promoted, skipped };
   }

@@ -10,7 +10,10 @@ const JSONLD = `<html><head><script type="application/ld+json">
 describe('StructuredExtractor', () => {
   const ex = new StructuredExtractor();
   it('pulls an Offer from JSON-LD', async () => {
-    const { candidates } = await ex.extract(JSONLD, { url: 'https://x.test', defaultCategorySlug: 'food' });
+    const { candidates } = await ex.extract(JSONLD, {
+      url: 'https://x.test',
+      defaultCategorySlug: 'food',
+    });
     expect(candidates).toHaveLength(1);
     expect(candidates[0].title).toBe('$5 Margaritas');
     expect(candidates[0].merchant).toBe('Taco Spot');
@@ -19,7 +22,9 @@ describe('StructuredExtractor', () => {
     expect(candidates[0].extractionPath).toBe('structured');
   });
   it('returns empty candidates for an unstructured page (triggers LLM fallback)', async () => {
-    const { candidates } = await ex.extract('<html><body>just prose</body></html>', { url: 'https://x.test' });
+    const { candidates } = await ex.extract('<html><body>just prose</body></html>', {
+      url: 'https://x.test',
+    });
     expect(candidates).toHaveLength(0);
   });
 });

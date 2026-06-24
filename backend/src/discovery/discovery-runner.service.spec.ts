@@ -1,45 +1,127 @@
 import { DiscoveryRunnerService } from './discovery-runner.service';
 
 const cfg = {
-  gemini: { model: 'flash', reasoningModel: 'pro', escalationMaxConfidence: 60, escalationMinReliability: 80 },
+  gemini: {
+    model: 'flash',
+    reasoningModel: 'pro',
+    escalationMaxConfidence: 60,
+    escalationMinReliability: 80,
+  },
   targetPaths: ['/deals', '/weekly-ad', '/coupons'],
 };
 
-function deps(over: any = {}) {
+type Source = {
+  id: string;
+  url: string;
+  dealUrl: null;
+  targetPaths: string[];
+  sourceType: string;
+  merchantHint: string;
+  defaultCategorySlug: string;
+  zoneSlug: string;
+  reliabilityScore: number;
+  averageDealsFound: number;
+  lastSuccessAt: Date | null;
+  lastCrawledAt: Date | null;
+  crawlIntervalHours: number;
+  enabled: boolean;
+};
+
+function deps(
+  over: {
+    source?: Partial<Source>;
+    priorHash?: { id: string; processedAt: Date } | null;
+    budget?: { allowed: boolean; reason?: string; remainingPages: number };
+    plan?: { crawl: boolean; reason: string; priority: number };
+  } = {},
+) {
   const source = {
-    id: 's1', url: 'https://shop.com/weekly-ad', dealUrl: null, targetPaths: [],
-    sourceType: 'weekly_ad', merchantHint: 'Shop', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta',
-    reliabilityScore: 70, averageDealsFound: 2, lastSuccessAt: null, lastCrawledAt: null,
-    crawlIntervalHours: 24, enabled: true, ...over.source,
+    id: 's1',
+    url: 'https://shop.com/weekly-ad',
+    dealUrl: null,
+    targetPaths: [],
+    sourceType: 'weekly_ad',
+    merchantHint: 'Shop',
+    defaultCategorySlug: 'groceries',
+    zoneSlug: 'atlanta',
+    reliabilityScore: 70,
+    averageDealsFound: 2,
+    lastSuccessAt: null,
+    lastCrawledAt: null,
+    crawlIntervalHours: 24,
+    enabled: true,
+    ...over.source,
   };
   return {
     source,
     prisma: {
       crawlSource: { findMany: jest.fn(async () => [source]), update: jest.fn(async () => source) },
-      crawlRun: { create: jest.fn(async () => ({ id: 'run1' })), update: jest.fn(async () => ({})) },
-      contentHash: { findUnique: jest.fn(async () => over.priorHash ?? null), upsert: jest.fn(async () => ({ id: 'h1' })) },
+      crawlRun: {
+        create: jest.fn(async () => ({ id: 'run1' })),
+        update: jest.fn(async () => ({})),
+      },
+      contentHash: {
+        findUnique: jest.fn(async () => over.priorHash ?? null),
+        upsert: jest.fn(async () => ({ id: 'h1' })),
+      },
       regionalInventory: { findUnique: jest.fn(async () => ({ id: 'r1', regionSlug: 'atlanta' })) },
-      dealCandidate: { findFirst: jest.fn(async () => null), create: jest.fn(async () => ({ id: 'c1' })) },
+      dealCandidate: {
+        findFirst: jest.fn(async () => null),
+        create: jest.fn(async () => ({ id: 'c1' })),
+      },
     },
-    discovery: { evaluateRegion: jest.fn(async () => ({ trigger: true, reason: 'below_minimum_deals' })) },
-    budget: { check: jest.fn(async () => over.budget ?? ({ allowed: true, remainingPages: 10 })) },
+    discovery: {
+      evaluateRegion: jest.fn(async () => ({ trigger: true, reason: 'below_minimum_deals' })),
+    },
+    budget: { check: jest.fn(async () => over.budget ?? { allowed: true, remainingPages: 10 }) },
     firecrawl: { scrape: jest.fn(async () => ({ markdown: '20% off deli', url: source.url })) },
     gemini: {
-      planCrawl: jest.fn(async () => over.plan ?? ({ crawl: true, reason: 'fresh', priority: 7 })),
-      extractDeals: jest.fn(async () => ({ deals: [{ title: '20% off deli', merchant: 'Shop', category: 'groceries', discount: '20%', expiration: null, location: null, summary: 's', confidence: 90, verification_status: 'pending', verified: false }] })),
+      planCrawl: jest.fn(async () => over.plan ?? { crawl: true, reason: 'fresh', priority: 7 }),
+      extractDeals: jest.fn(async () => ({
+        deals: [
+          {
+            title: '20% off deli',
+            merchant: 'Shop',
+            category: 'groceries',
+            discount: '20%',
+            expiration: null,
+            location: null,
+            summary: 's',
+            confidence: 90,
+            verification_status: 'pending',
+            verified: false,
+          },
+        ],
+      })),
     },
-    aiCache: { getOrGenerate: jest.fn(async (_p: any, gen: any) => ({ value: await gen(), cacheHit: false })) },
+    aiCache: {
+      getOrGenerate: jest.fn(async (_p: unknown, gen: () => Promise<unknown>) => ({
+        value: await gen(),
+        cacheHit: false,
+      })),
+    },
   };
 }
 
-function build(d: any) {
-  return new DiscoveryRunnerService(d.prisma, d.discovery, d.budget, d.firecrawl, d.gemini, d.aiCache, cfg as never);
+function build(d: ReturnType<typeof deps>) {
+  return new DiscoveryRunnerService(
+    d.prisma as never,
+    d.discovery as never,
+    d.budget as never,
+    d.firecrawl as never,
+    d.gemini as never,
+    d.aiCache as never,
+    cfg as never,
+  );
 }
 
 describe('DiscoveryRunnerService.runRegion', () => {
   it('skips entirely when the region does not need a refresh', async () => {
     const d = deps();
-    d.discovery.evaluateRegion = jest.fn(async () => ({ trigger: false, reason: 'inventory_healthy' }));
+    d.discovery.evaluateRegion = jest.fn(async () => ({
+      trigger: false,
+      reason: 'inventory_healthy',
+    }));
     const out = await build(d).runRegion('atlanta');
     expect(out.skipped).toBe(true);
     expect(d.firecrawl.scrape).not.toHaveBeenCalled();
@@ -49,7 +131,11 @@ describe('DiscoveryRunnerService.runRegion', () => {
   it('runs the full pipeline and persists a candidate', async () => {
     const d = deps();
     const out = await build(d).runRegion('atlanta');
-    expect(d.budget.check).toHaveBeenCalledWith('s1', { sourceMayBeUnchanged: false }, expect.any(Date));
+    expect(d.budget.check).toHaveBeenCalledWith(
+      's1',
+      { sourceMayBeUnchanged: false },
+      expect.any(Date),
+    );
     expect(d.gemini.planCrawl).toHaveBeenCalledTimes(1);
     expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
     expect(d.gemini.extractDeals).toHaveBeenCalledTimes(1);
@@ -63,13 +149,19 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.firecrawl.scrape).toHaveBeenCalledTimes(1);
     expect(d.gemini.extractDeals).not.toHaveBeenCalled();
     expect(out.geminiSkips).toBe(1);
-    expect(d.prisma.crawlRun.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ unchanged: true }) }));
+    expect(d.prisma.crawlRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ unchanged: true }) }),
+    );
   });
 
   it('passes sourceMayBeUnchanged=true to the budget when the source has a prior successful crawl', async () => {
     const d = deps({ source: { lastSuccessAt: new Date('2026-06-20T00:00:00Z') } });
     await build(d).runRegion('atlanta');
-    expect(d.budget.check).toHaveBeenCalledWith('s1', { sourceMayBeUnchanged: true }, expect.any(Date));
+    expect(d.budget.check).toHaveBeenCalledWith(
+      's1',
+      { sourceMayBeUnchanged: true },
+      expect.any(Date),
+    );
   });
 
   it('does not scrape when Gemini declines the crawl', async () => {
@@ -87,11 +179,44 @@ describe('DiscoveryRunnerService.runRegion', () => {
 
   it('escalates to Pro for low-confidence deals from reliable sources', async () => {
     const d = deps({ source: { reliabilityScore: 85 } });
-    d.gemini.extractDeals = jest.fn()
-      .mockResolvedValueOnce({ deals: [{ title: 't', merchant: 'Shop', category: 'groceries', discount: null, expiration: null, location: null, summary: 's', confidence: 40, verification_status: 'pending', verified: false }] })
-      .mockResolvedValueOnce({ deals: [{ title: 't', merchant: 'Shop', category: 'groceries', discount: null, expiration: null, location: null, summary: 's', confidence: 88, verification_status: 'pending', verified: false }] });
+    d.gemini.extractDeals = jest
+      .fn()
+      .mockResolvedValueOnce({
+        deals: [
+          {
+            title: 't',
+            merchant: 'Shop',
+            category: 'groceries',
+            discount: null,
+            expiration: null,
+            location: null,
+            summary: 's',
+            confidence: 40,
+            verification_status: 'pending',
+            verified: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        deals: [
+          {
+            title: 't',
+            merchant: 'Shop',
+            category: 'groceries',
+            discount: null,
+            expiration: null,
+            location: null,
+            summary: 's',
+            confidence: 88,
+            verification_status: 'pending',
+            verified: false,
+          },
+        ],
+      });
     await build(d).runRegion('atlanta');
     expect(d.gemini.extractDeals).toHaveBeenCalledTimes(2);
-    expect(d.gemini.extractDeals).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'pro' }));
+    expect(d.gemini.extractDeals).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: 'pro' }),
+    );
   });
 });

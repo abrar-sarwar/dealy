@@ -18,7 +18,11 @@ export function discoveryConfig(config: ConfigService<Env, true>): DiscoveryConf
     crawlerEnabled: config.get('CRAWLER_ENABLED', { infer: true }),
     aiEnabled: config.get('AI_ENABLED', { infer: true }),
     cron: config.get('DISCOVERY_CRON', { infer: true }),
-    targetPaths: config.get('DISCOVERY_TARGET_PATHS', { infer: true }).split(',').map((p) => p.trim()).filter(Boolean),
+    targetPaths: config
+      .get('DISCOVERY_TARGET_PATHS', { infer: true })
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean),
     publishMinConfidence: config.get('DISCOVERY_PUBLISH_MIN_CONFIDENCE', { infer: true }),
   };
 }

@@ -27,9 +27,17 @@ export class FirecrawlBudgetService {
   async usageToday(sourceId: string, now = new Date()): Promise<FirecrawlBudgetUsage> {
     const since = startOfUtcDay(now);
     const [globalPages, sourcePages, recrawls] = await Promise.all([
-      this.prisma.crawlRun.aggregate({ _sum: { firecrawlPages: true }, where: { startedAt: { gte: since } } }),
-      this.prisma.crawlRun.aggregate({ _sum: { firecrawlPages: true }, where: { startedAt: { gte: since }, source: { id: sourceId } } }),
-      this.prisma.crawlRun.count({ where: { startedAt: { gte: since }, source: { id: sourceId }, unchanged: true } }),
+      this.prisma.crawlRun.aggregate({
+        _sum: { firecrawlPages: true },
+        where: { startedAt: { gte: since } },
+      }),
+      this.prisma.crawlRun.aggregate({
+        _sum: { firecrawlPages: true },
+        where: { startedAt: { gte: since }, source: { id: sourceId } },
+      }),
+      this.prisma.crawlRun.count({
+        where: { startedAt: { gte: since }, source: { id: sourceId }, unchanged: true },
+      }),
     ]);
     return {
       pagesToday: globalPages._sum.firecrawlPages ?? 0,
@@ -38,7 +46,11 @@ export class FirecrawlBudgetService {
     };
   }
 
-  async check(sourceId: string, opts: { sourceMayBeUnchanged: boolean }, now = new Date()): Promise<BudgetDecision> {
+  async check(
+    sourceId: string,
+    opts: { sourceMayBeUnchanged: boolean },
+    now = new Date(),
+  ): Promise<BudgetDecision> {
     const usage = await this.usageToday(sourceId, now);
     return evaluateFirecrawlBudget(usage, this.limits, opts);
   }

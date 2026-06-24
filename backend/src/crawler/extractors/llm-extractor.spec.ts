@@ -2,11 +2,19 @@
 import { LlmExtractor } from './llm-extractor';
 
 const fakeJson = JSON.stringify({
-  deals: [{
-    title: 'Student Tuesday', merchant: 'Campus Cafe', categorySlug: 'food',
-    address: '50 Decatur St, Atlanta, GA', price: '7.50',
-    startDate: null, endDate: '2030-01-01', isStudentOnly: true, couponCode: null,
-  }],
+  deals: [
+    {
+      title: 'Student Tuesday',
+      merchant: 'Campus Cafe',
+      categorySlug: 'food',
+      address: '50 Decatur St, Atlanta, GA',
+      price: '7.50',
+      startDate: null,
+      endDate: '2030-01-01',
+      isStudentOnly: true,
+      couponCode: null,
+    },
+  ],
 });
 
 describe('LlmExtractor', () => {

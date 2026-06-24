@@ -25,7 +25,8 @@ export function deriveTrending(input: {
   expiresAt: Date;
   now?: Date;
 }): boolean {
-  if (input.sourceTrust !== 'authoritative' || input.verificationStatus !== 'verified') return false;
+  if (input.sourceTrust !== 'authoritative' || input.verificationStatus !== 'verified')
+    return false;
   const now = input.now ?? new Date();
   const msToExpiry = input.expiresAt.getTime() - now.getTime();
   const endingSoon = msToExpiry > 0 && msToExpiry <= TRENDING_URGENCY_HOURS * 3600 * 1000;

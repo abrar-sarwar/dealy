@@ -26,7 +26,10 @@ export class DiscoverySchedulerService {
   async scheduled(): Promise<void> {
     if (!discoveryConfig(this.config).crawlerEnabled) return;
     const out = await this.tick();
-    this.logger.log({ regions: out.length, promoted: out.reduce((n, r) => n + r.promoted, 0) }, 'discovery.cron.tick');
+    this.logger.log(
+      { regions: out.length, promoted: out.reduce((n, r) => n + r.promoted, 0) },
+      'discovery.cron.tick',
+    );
   }
 
   async tick(): Promise<RegionOutcome[]> {
@@ -38,7 +41,10 @@ export class DiscoverySchedulerService {
         const { promoted } = await this.promotion.promoteRegion(r.regionSlug);
         out.push({ ...summary, promoted });
       } catch (err) {
-        this.logger.error({ regionSlug: r.regionSlug, err: (err as Error).message }, 'discovery.region.failed');
+        this.logger.error(
+          { regionSlug: r.regionSlug, err: (err as Error).message },
+          'discovery.region.failed',
+        );
       }
     }
     return out;

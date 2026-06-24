@@ -11,21 +11,34 @@ describe('evaluateFirecrawlBudget', () => {
   });
 
   it('blocks on daily page cap', () => {
-    expect(evaluateFirecrawlBudget({ ...fresh, pagesToday: 100 }, limits, { sourceMayBeUnchanged: false }))
-      .toEqual({ allowed: false, reason: 'daily_page_cap', remainingPages: 0 });
+    expect(
+      evaluateFirecrawlBudget({ ...fresh, pagesToday: 100 }, limits, {
+        sourceMayBeUnchanged: false,
+      }),
+    ).toEqual({ allowed: false, reason: 'daily_page_cap', remainingPages: 0 });
   });
 
   it('blocks on per-source page cap', () => {
-    expect(evaluateFirecrawlBudget({ ...fresh, pagesForSourceToday: 10 }, limits, { sourceMayBeUnchanged: false }))
-      .toEqual({ allowed: false, reason: 'source_page_cap', remainingPages: 0 });
+    expect(
+      evaluateFirecrawlBudget({ ...fresh, pagesForSourceToday: 10 }, limits, {
+        sourceMayBeUnchanged: false,
+      }),
+    ).toEqual({ allowed: false, reason: 'source_page_cap', remainingPages: 0 });
   });
 
   it('blocks recrawls once a maybe-unchanged source hit the recrawl cap', () => {
-    expect(evaluateFirecrawlBudget({ ...fresh, recrawlsForSourceToday: 2 }, limits, { sourceMayBeUnchanged: true }))
-      .toEqual({ allowed: false, reason: 'recrawl_cap', remainingPages: 0 });
+    expect(
+      evaluateFirecrawlBudget({ ...fresh, recrawlsForSourceToday: 2 }, limits, {
+        sourceMayBeUnchanged: true,
+      }),
+    ).toEqual({ allowed: false, reason: 'recrawl_cap', remainingPages: 0 });
   });
 
   it('ignores the recrawl cap for sources we have no prior hash for', () => {
-    expect(evaluateFirecrawlBudget({ ...fresh, recrawlsForSourceToday: 2 }, limits, { sourceMayBeUnchanged: false }).allowed).toBe(true);
+    expect(
+      evaluateFirecrawlBudget({ ...fresh, recrawlsForSourceToday: 2 }, limits, {
+        sourceMayBeUnchanged: false,
+      }).allowed,
+    ).toBe(true);
   });
 });

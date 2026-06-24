@@ -101,7 +101,13 @@ export class FeedsService {
       : Prisma.empty;
 
     // Respect the requested radius exactly — no expansion ladder.
-    const rows = await this.queryBlended(center, baseRadius * METERS_PER_MILE, limit, categoryFilter, cursor);
+    const rows = await this.queryBlended(
+      center,
+      baseRadius * METERS_PER_MILE,
+      limit,
+      categoryFilter,
+      cursor,
+    );
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
