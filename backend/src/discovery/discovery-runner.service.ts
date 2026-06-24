@@ -93,37 +93,42 @@ export class DiscoveryRunnerService {
       // source, arming the recrawl cap.
       const sourceMayBeUnchanged = !!source.lastSuccessAt;
 
-      const gate = await this.budget.check(source.id, { sourceMayBeUnchanged }, now);
-      if (!gate.allowed) {
-        this.logger.warn({ source: source.id, reason: gate.reason }, 'discovery.budget.block');
-        continue;
-      }
-
-      // Gemini plans whether the source is worth a paid fetch (cached per source/day).
-      const plan = await this.aiCache.getOrGenerate(
-        {
-          task: 'crawl_plan',
-          model: this.config.gemini.model,
-          schemaVersion: 'v1',
-          prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
-        },
-        () =>
-          this.gemini.planCrawl({
-            sourceType: source.sourceType,
-            url: source.url,
-            category: source.defaultCategorySlug ?? undefined,
-            reliabilityScore: source.reliabilityScore,
-            averageDealsFound: source.averageDealsFound,
-            lastSuccessAt: source.lastSuccessAt,
-          }),
-      );
-      if (!plan.value.crawl) continue;
-
-      const run = await this.prisma.crawlRun.create({ data: { sourceId: source.id } });
+      // Per-source isolation: a failure in the budget read, Gemini planning, the
+      // scrape, or persistence must never abort the whole region run. `run` is
+      // assigned only once a crawl is actually started, so the failure path below
+      // only updates it when it exists.
+      let run: { id: string } | undefined;
       let pages = 0,
         queued = 0,
         unchanged = false;
       try {
+        const gate = await this.budget.check(source.id, { sourceMayBeUnchanged }, now);
+        if (!gate.allowed) {
+          this.logger.warn({ source: source.id, reason: gate.reason }, 'discovery.budget.block');
+          continue;
+        }
+
+        // Gemini plans whether the source is worth a paid fetch (cached per source/day).
+        const plan = await this.aiCache.getOrGenerate(
+          {
+            task: 'crawl_plan',
+            model: this.config.gemini.model,
+            schemaVersion: 'v1',
+            prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
+          },
+          () =>
+            this.gemini.planCrawl({
+              sourceType: source.sourceType,
+              url: source.url,
+              category: source.defaultCategorySlug ?? undefined,
+              reliabilityScore: source.reliabilityScore,
+              averageDealsFound: source.averageDealsFound,
+              lastSuccessAt: source.lastSuccessAt,
+            }),
+        );
+        if (!plan.value.crawl) continue;
+
+        run = await this.prisma.crawlRun.create({ data: { sourceId: source.id } });
         const doc = await this.firecrawl.scrape({ url });
         pages++;
         summary.pagesFetched++;
@@ -263,19 +268,24 @@ export class DiscoveryRunnerService {
           },
         });
       } catch (err) {
-        await this.prisma.crawlRun.update({
-          where: { id: run.id },
-          data: {
-            status: 'failed',
-            error: (err as Error).message,
-            firecrawlPages: pages,
-            finishedAt: now,
-          },
-        });
-        await this.prisma.crawlSource.update({
-          where: { id: source.id },
-          data: { lastCrawledAt: now, reliabilityScore: Math.max(0, source.reliabilityScore - 5) },
-        });
+        if (run) {
+          await this.prisma.crawlRun.update({
+            where: { id: run.id },
+            data: {
+              status: 'failed',
+              error: (err as Error).message,
+              firecrawlPages: pages,
+              finishedAt: now,
+            },
+          });
+          await this.prisma.crawlSource.update({
+            where: { id: source.id },
+            data: {
+              lastCrawledAt: now,
+              reliabilityScore: Math.max(0, source.reliabilityScore - 5),
+            },
+          });
+        }
         this.logger.warn(
           { source: source.id, err: (err as Error).message },
           'discovery.source.failed',

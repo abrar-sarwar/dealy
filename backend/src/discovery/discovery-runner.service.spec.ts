@@ -233,4 +233,16 @@ describe('DiscoveryRunnerService.runRegion', () => {
       expect.objectContaining({ model: 'pro' }),
     );
   });
+
+  it('isolates a source failure — a throwing planCrawl does not abort the region', async () => {
+    const d = deps();
+    d.gemini.planCrawl = jest.fn(async () => {
+      throw new Error('gemini boom');
+    });
+    // Must resolve (not reject): one bad source cannot abort the whole region.
+    const out = await build(d).runRegion('atlanta');
+    expect(out.skipped).toBe(false);
+    expect(out.candidatesStored).toBe(0);
+    expect(d.firecrawl.scrape).not.toHaveBeenCalled();
+  });
 });
