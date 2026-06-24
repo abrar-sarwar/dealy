@@ -1,7 +1,7 @@
 import { crawlSources } from '../../prisma/seed';
 import { resolveCrawlTargets } from './url-targeting';
 
-const allowed = ['/deals', '/coupons', '/promotions', '/offers', '/weekly-ad', '/student-discounts', '/events'];
+const allowed = ['/deals', '/coupons', '/promotions', '/offers', '/weekly-ad', '/weeklyad', '/weekly-specials', '/specials', '/student-discounts', '/events', '/restaurants'];
 
 describe('curated crawlSources seed', () => {
   it('covers all pilot zones', () => {

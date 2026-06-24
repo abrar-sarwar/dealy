@@ -81,7 +81,7 @@ export const envSchema = z
     DISCOVERY_CRON: z.string().default('0 */6 * * *'),
     DISCOVERY_TARGET_PATHS: z
       .string()
-      .default('/deals,/coupons,/promotions,/offers,/weekly-ad,/student-discounts,/events'),
+      .default('/deals,/coupons,/promotions,/offers,/weekly-ad,/weeklyad,/weekly-specials,/specials,/student-discounts,/events,/restaurants'),
     DISCOVERY_PUBLISH_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(80),
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
