@@ -87,7 +87,10 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     savingsPercentage,
     distanceMiles: distanceMiles === null ? null : Math.round(distanceMiles * 10) / 10,
     dealScore: n.dealScore,
-    verified: n.verificationStatus === 'verified',
+    // The Verified badge is a Dealy-side trust signal: only authoritative sources
+    // that Dealy confirmed may carry it. Editorial/curated inventory (incl. any
+    // Gemini-supplied verification_status) is NEVER shown as verified.
+    verified: n.sourceTrust === 'authoritative' && n.verificationStatus === 'verified',
     verifiedAt: n.lastVerifiedAt ? n.lastVerifiedAt.toISOString() : null,
     isOnline: n.isOnline,
     isStudentOnly: n.isStudentOnly,
