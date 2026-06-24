@@ -1,0 +1,152 @@
+import { Injectable, Logger } from '@nestjs/common';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { DiscoveryService } from './discovery.service';
+import type { FirecrawlBudgetService } from './firecrawl-budget.service';
+import type { FirecrawlService } from '../services/firecrawl/firecrawl.service';
+import type { GeminiService } from '../services/gemini/gemini.service';
+import type { AiCacheService } from './ai-cache.service';
+import { contentHash } from './discovery-cost';
+import { resolveCrawlTargets } from './url-targeting';
+import { shouldConsiderSource, shouldEscalateToPro } from './escalation';
+import { dealFingerprint } from '../ingestion/normalized-deal';
+
+export interface DiscoveryRunnerConfig {
+  gemini: { model: string; reasoningModel: string; escalationMaxConfidence: number; escalationMinReliability: number };
+  targetPaths: string[];
+}
+
+export interface DiscoveryRunSummary {
+  regionSlug: string;
+  skipped: boolean;
+  reason?: string;
+  sourcesConsidered: number;
+  pagesFetched: number;
+  geminiSkips: number;
+  candidatesStored: number;
+}
+
+function startOfUtcDay(now = new Date()): Date {
+  const d = new Date(now);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+@Injectable()
+export class DiscoveryRunnerService {
+  private readonly logger = new Logger(DiscoveryRunnerService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly discovery: DiscoveryService,
+    private readonly budget: FirecrawlBudgetService,
+    private readonly firecrawl: FirecrawlService,
+    private readonly gemini: GeminiService,
+    private readonly aiCache: AiCacheService,
+    private readonly config: DiscoveryRunnerConfig,
+  ) {}
+
+  async runRegion(regionSlug: string, now = new Date()): Promise<DiscoveryRunSummary> {
+    const summary: DiscoveryRunSummary = { regionSlug, skipped: false, sourcesConsidered: 0, pagesFetched: 0, geminiSkips: 0, candidatesStored: 0 };
+
+    const decision = await this.discovery.evaluateRegion(regionSlug, now);
+    if (!decision.trigger) return { ...summary, skipped: true, reason: decision.reason };
+
+    const inventory = await this.prisma.regionalInventory.findUnique({ where: { regionSlug } });
+    const sources = await this.prisma.crawlSource.findMany({ where: { zoneSlug: regionSlug, enabled: true } });
+
+    for (const source of sources) {
+      if (!shouldConsiderSource({ enabled: source.enabled, lastCrawledAt: source.lastCrawledAt, crawlIntervalHours: source.crawlIntervalHours, now })) continue;
+      summary.sourcesConsidered++;
+
+      const targets = resolveCrawlTargets({ websiteUrl: source.url, dealUrl: source.dealUrl, targetPaths: source.targetPaths, allowedPaths: this.config.targetPaths });
+      if (targets.length === 0) continue;
+      const url = targets[0];
+
+      // A prior successful crawl means we already hold a processed hash for this
+      // source, arming the recrawl cap.
+      const sourceMayBeUnchanged = !!source.lastSuccessAt;
+
+      const gate = await this.budget.check(source.id, { sourceMayBeUnchanged }, now);
+      if (!gate.allowed) { this.logger.warn({ source: source.id, reason: gate.reason }, 'discovery.budget.block'); continue; }
+
+      // Gemini plans whether the source is worth a paid fetch (cached per source/day).
+      const plan = await this.aiCache.getOrGenerate(
+        { task: 'crawl_plan', model: this.config.gemini.model, schemaVersion: 'v1', prompt: `${source.id}:${startOfUtcDay(now).toISOString()}` },
+        () => this.gemini.planCrawl({ sourceType: source.sourceType, url: source.url, category: source.defaultCategorySlug ?? undefined, reliabilityScore: source.reliabilityScore, averageDealsFound: source.averageDealsFound, lastSuccessAt: source.lastSuccessAt }),
+      );
+      if (!plan.value.crawl) continue;
+
+      const run = await this.prisma.crawlRun.create({ data: { sourceId: source.id } });
+      let pages = 0, queued = 0, unchanged = false;
+      try {
+        const doc = await this.firecrawl.scrape({ url });
+        pages++; summary.pagesFetched++;
+        const text = doc.markdown ?? '';
+        const hash = contentHash(text);
+
+        const prior = await this.prisma.contentHash.findUnique({ where: { sourceUrl_hash: { sourceUrl: url, hash } } });
+        if (prior?.processedAt) {
+          // Unchanged → reuse prior classification, skip Gemini entirely (P4).
+          unchanged = true;
+          summary.geminiSkips++;
+          await this.prisma.contentHash.upsert({
+            where: { sourceUrl_hash: { sourceUrl: url, hash } },
+            create: { sourceUrl: url, sourceId: source.id, hash, processedAt: now },
+            update: { processedAt: now },
+          });
+        } else {
+          const extraction = await this.aiCache.getOrGenerate(
+            { task: 'deal_extraction', model: this.config.gemini.model, schemaVersion: 'v1', prompt: `${url}:${hash}` },
+            () => this.gemini.extractDeals({ content: text, sourceUrl: url, merchantHint: source.merchantHint ?? undefined }),
+          );
+          let deals = extraction.value.deals;
+
+          const needsPro = deals.some((dl) => shouldEscalateToPro({ confidence: dl.confidence, reliabilityScore: source.reliabilityScore, maxConfidence: this.config.gemini.escalationMaxConfidence, minReliability: this.config.gemini.escalationMinReliability }));
+          if (needsPro) {
+            const pro = await this.aiCache.getOrGenerate(
+              { task: 'deal_extraction_pro', model: this.config.gemini.reasoningModel, schemaVersion: 'v1', prompt: `${url}:${hash}` },
+              () => this.gemini.extractDeals({ content: text, sourceUrl: url, merchantHint: source.merchantHint ?? undefined, model: this.config.gemini.reasoningModel }),
+            );
+            deals = pro.value.deals;
+          }
+
+          const contentHashRow = await this.prisma.contentHash.upsert({
+            where: { sourceUrl_hash: { sourceUrl: url, hash } },
+            create: { sourceUrl: url, sourceId: source.id, hash, processedAt: now, contentPreview: text.slice(0, 280) },
+            update: { processedAt: now },
+          });
+
+          for (const dl of deals) {
+            const fingerprint = dealFingerprint({ merchant: dl.merchant || source.merchantHint || 'Unknown', title: dl.title, isOnline: !dl.location, locationTags: source.zoneSlug ? [source.zoneSlug] : [], latitude: null, longitude: null, currentPriceMinor: null, categorySlug: dl.category || source.defaultCategorySlug || 'food' });
+            if (await this.prisma.dealCandidate.findFirst({ where: { fingerprint } })) continue;
+            await this.prisma.dealCandidate.create({
+              data: {
+                sourceId: source.id, sourceUrl: url, contentHashId: contentHashRow.id, regionalInventoryId: inventory?.id ?? null,
+                title: dl.title, merchant: dl.merchant || source.merchantHint || 'Unknown', discount: dl.discount,
+                categorySlug: dl.category || source.defaultCategorySlug || 'food', expiration: dl.expiration ? new Date(dl.expiration) : null,
+                locationText: dl.location, summary: dl.summary, confidence: dl.confidence, verificationStatus: dl.verification_status, fingerprint, raw: dl as object,
+              },
+            });
+            queued++; summary.candidatesStored++;
+          }
+        }
+
+        await this.prisma.crawlRun.update({ where: { id: run.id }, data: { status: 'succeeded', fetched: pages, firecrawlPages: pages, queued, unchanged, finishedAt: now } });
+        await this.prisma.crawlSource.update({
+          where: { id: source.id },
+          data: {
+            lastCrawledAt: now, lastSuccessAt: now,
+            averageDealsFound: source.averageDealsFound === 0 ? queued : source.averageDealsFound * 0.7 + queued * 0.3,
+            reliabilityScore: Math.min(100, source.reliabilityScore + (queued > 0 ? 2 : 0)),
+          },
+        });
+      } catch (err) {
+        await this.prisma.crawlRun.update({ where: { id: run.id }, data: { status: 'failed', error: (err as Error).message, firecrawlPages: pages, finishedAt: now } });
+        await this.prisma.crawlSource.update({ where: { id: source.id }, data: { lastCrawledAt: now, reliabilityScore: Math.max(0, source.reliabilityScore - 5) } });
+        this.logger.warn({ source: source.id, err: (err as Error).message }, 'discovery.source.failed');
+      }
+    }
+
+    return summary;
+  }
+}
