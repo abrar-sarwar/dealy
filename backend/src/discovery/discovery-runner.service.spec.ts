@@ -30,6 +30,7 @@ type Source = {
 function deps(
   over: {
     source?: Partial<Source>;
+    sources?: Source[];
     priorHash?: { id: string; processedAt: Date } | null;
     budget?: { allowed: boolean; reason?: string; remainingPages: number };
     plan?: { crawl: boolean; reason: string; priority: number };
@@ -52,10 +53,11 @@ function deps(
     enabled: true,
     ...over.source,
   };
+  const sources = over.sources ?? [source];
   return {
     source,
     prisma: {
-      crawlSource: { findMany: jest.fn(async () => [source]), update: jest.fn(async () => source) },
+      crawlSource: { findMany: jest.fn(async () => sources), update: jest.fn(async () => source) },
       crawlRun: {
         create: jest.fn(async () => ({ id: 'run1' })),
         update: jest.fn(async () => ({})),
@@ -147,13 +149,15 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
     expect(d.gemini.extractDeals).toHaveBeenCalledTimes(1);
     expect(d.prisma.dealCandidate.create).toHaveBeenCalledTimes(1);
-    // Candidate carries the region centroid so the promoted deal gets a geog.
+    // Candidate carries coordinates scattered near the region centroid so the
+    // promoted deal gets a geog and spreads on the map (within ~2mi of centroid).
     const candidateArg = (
-      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: Record<string, unknown> }]
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { latitude: number; longitude: number } },
+      ]
     )[0];
-    expect(candidateArg.data).toEqual(
-      expect.objectContaining({ latitude: 33.749, longitude: -84.388 }),
-    );
+    expect(candidateArg.data.latitude).toBeCloseTo(33.749, 1);
+    expect(candidateArg.data.longitude).toBeCloseTo(-84.388, 1);
     expect(out.candidatesStored).toBe(1);
   });
 
@@ -244,5 +248,31 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(out.skipped).toBe(false);
     expect(out.candidatesStored).toBe(0);
     expect(d.firecrawl.scrape).not.toHaveBeenCalled();
+  });
+
+  it('stops the region after Gemini daily quota is exhausted to avoid more Firecrawl spend', async () => {
+    const first: Source = {
+      ...deps().source,
+      id: 's1',
+      url: 'https://shop.com/weekly-ad',
+    };
+    const second: Source = {
+      ...deps().source,
+      id: 's2',
+      url: 'https://shop.com/coupons',
+    };
+    const d = deps({ sources: [first, second] });
+    d.gemini.extractDeals = jest.fn(async () => {
+      throw new Error(
+        'Gemini request failed: 429 {"error":{"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests"}}',
+      );
+    });
+
+    const out = await build(d).runRegion('atlanta');
+
+    expect(out.sourcesConsidered).toBe(1);
+    expect(d.firecrawl.scrape).toHaveBeenCalledTimes(1);
+    expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
+    expect(d.gemini.planCrawl).toHaveBeenCalledTimes(1);
   });
 });

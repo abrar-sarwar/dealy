@@ -36,6 +36,51 @@ function startOfUtcDay(now = new Date()): Date {
   return d;
 }
 
+/**
+ * Deterministically scatter a coordinate within ~2 miles of a centroid, keyed by
+ * a stable seed, so multiple promoted deals from one region spread across the map
+ * instead of stacking on the exact centroid. Interim presentation aid until
+ * per-deal street geocoding of `locationText` lands.
+ */
+function scatterCoord(
+  lat: number | null | undefined,
+  lng: number | null | undefined,
+  seed: string,
+): { latitude: number | null; longitude: number | null } {
+  if (lat == null || lng == null) return { latitude: lat ?? null, longitude: lng ?? null };
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  const a = Math.abs(h);
+  const dLat = ((a % 1000) / 1000 - 0.5) * 0.05; // ±~1.7mi
+  const dLng = ((Math.floor(a / 1000) % 1000) / 1000 - 0.5) * 0.06; // ±~2mi
+  return { latitude: lat + dLat, longitude: lng + dLng };
+}
+
+/**
+ * Normalize a deal's confidence to a 0–100 scale. Some models (e.g.
+ * gemini-3.1-flash-lite) return a 0–1 probability; the publish threshold and
+ * Pro-escalation logic both work in 0–100, so coerce fractions up.
+ */
+function normalizeConfidence<T extends { confidence: number }>(deals: T[]): T[] {
+  return deals.map((d) => ({
+    ...d,
+    confidence:
+      d.confidence > 0 && d.confidence <= 1
+        ? Math.round(d.confidence * 100)
+        : Math.round(d.confidence),
+  }));
+}
+
+function isGeminiQuotaExhausted(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes('Gemini request failed: 429') &&
+    (message.includes('RESOURCE_EXHAUSTED') ||
+      message.includes('generate_content_free_tier_requests') ||
+      message.includes('Quota exceeded'))
+  );
+}
+
 @Injectable()
 export class DiscoveryRunnerService {
   private readonly logger = new Logger(DiscoveryRunnerService.name);
@@ -162,7 +207,7 @@ export class DiscoveryRunnerService {
                 merchantHint: source.merchantHint ?? undefined,
               }),
           );
-          let deals = extraction.value.deals;
+          let deals = normalizeConfidence(extraction.value.deals);
 
           const needsPro = deals.some((dl) =>
             shouldEscalateToPro({
@@ -188,7 +233,7 @@ export class DiscoveryRunnerService {
                   model: this.config.gemini.reasoningModel,
                 }),
             );
-            deals = pro.value.deals;
+            deals = normalizeConfidence(pro.value.deals);
           }
 
           const contentHashRow = await this.prisma.contentHash.upsert({
@@ -215,6 +260,9 @@ export class DiscoveryRunnerService {
               categorySlug: dl.category || source.defaultCategorySlug || 'food',
             });
             if (await this.prisma.dealCandidate.findFirst({ where: { fingerprint } })) continue;
+            // Scatter around the region centroid so promoted deals spread across
+            // the map (and the range circle) rather than stacking on one point.
+            const geo = scatterCoord(inventory?.latitude, inventory?.longitude, fingerprint);
             await this.prisma.dealCandidate.create({
               data: {
                 sourceId: source.id,
@@ -227,11 +275,8 @@ export class DiscoveryRunnerService {
                 categorySlug: dl.category || source.defaultCategorySlug || 'food',
                 expiration: dl.expiration ? new Date(dl.expiration) : null,
                 locationText: dl.location,
-                // Region-centroid coordinates so promoted deals carry a geog and
-                // surface in the geographic local feed. Street-level geocoding of
-                // locationText is a follow-up refinement.
-                latitude: inventory?.latitude ?? null,
-                longitude: inventory?.longitude ?? null,
+                latitude: geo.latitude,
+                longitude: geo.longitude,
                 summary: dl.summary,
                 confidence: dl.confidence,
                 verificationStatus: dl.verification_status,
@@ -290,6 +335,10 @@ export class DiscoveryRunnerService {
           { source: source.id, err: (err as Error).message },
           'discovery.source.failed',
         );
+        if (isGeminiQuotaExhausted(err)) {
+          this.logger.warn({ source: source.id }, 'discovery.ai_quota_exhausted.stop_region');
+          break;
+        }
       }
     }
 
