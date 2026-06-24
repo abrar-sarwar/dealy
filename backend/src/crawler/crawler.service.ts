@@ -15,9 +15,14 @@ import type { RawCandidate } from './extractors/deal-extractor';
 import { dealFingerprint } from '../ingestion/normalized-deal';
 
 export interface CrawlRunSummary {
-  runId: string; sourceId: string;
+  runId: string;
+  sourceId: string;
   status: 'succeeded' | 'failed';
-  fetched: number; queued: number; deduped: number; failed: number; autoPublished: number;
+  fetched: number;
+  queued: number;
+  deduped: number;
+  failed: number;
+  autoPublished: number;
 }
 
 @Injectable()
@@ -43,12 +48,20 @@ export class CrawlerService {
   async runSource(sourceId: string): Promise<CrawlRunSummary> {
     const source = await this.prisma.crawlSource.findUniqueOrThrow({ where: { id: sourceId } });
     const run = await this.prisma.crawlRun.create({ data: { sourceId } });
-    let fetched = 0, queued = 0, deduped = 0, failed = 0, autoPublished = 0;
+    let fetched = 0,
+      queued = 0,
+      deduped = 0,
+      failed = 0,
+      autoPublished = 0;
     const publishedIds: string[] = [];
 
     try {
       const html = await this.fetcher.fetchPage(source.url);
-      const ctx = { url: source.url, merchantHint: source.merchantHint ?? undefined, defaultCategorySlug: source.defaultCategorySlug ?? undefined };
+      const ctx = {
+        url: source.url,
+        merchantHint: source.merchantHint ?? undefined,
+        defaultCategorySlug: source.defaultCategorySlug ?? undefined,
+      };
 
       // Hybrid: structured first, LLM only if structured found nothing.
       let raws: RawCandidate[] = (await this.structured.extract(html, ctx)).candidates;
@@ -56,10 +69,16 @@ export class CrawlerService {
       fetched = raws.length;
 
       const categories = new Map(
-        (await this.prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [c.slug, c.id]),
+        (await this.prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [
+          c.slug,
+          c.id,
+        ]),
       );
       const threshold = this.config.get('CRAWLER_AUTOPUBLISH_THRESHOLD', { infer: true });
-      const kinds = autoPublishKinds({ CRAWLER_AUTOPUBLISH_KINDS: this.config.get('CRAWLER_AUTOPUBLISH_KINDS', { infer: true }) ?? '' });
+      const kinds = autoPublishKinds({
+        CRAWLER_AUTOPUBLISH_KINDS:
+          this.config.get('CRAWLER_AUTOPUBLISH_KINDS', { infer: true }) ?? '',
+      });
 
       for (const raw of raws) {
         try {
@@ -92,13 +111,20 @@ export class CrawlerService {
           });
 
           const dupe = await this.prisma.deal.findFirst({
-            where: { fingerprint, externalId: { not: externalId } }, select: { id: true },
+            where: { fingerprint, externalId: { not: externalId } },
+            select: { id: true },
           });
-          if (dupe) { deduped++; continue; }
+          if (dupe) {
+            deduped++;
+            continue;
+          }
 
           const goodGeocode = candidate.geocodeConfidence >= LOW_GEOCODE_CONFIDENCE;
           const autoOk =
-            threshold !== undefined && score >= threshold && goodGeocode && kinds.includes(source.kind);
+            threshold !== undefined &&
+            score >= threshold &&
+            goodGeocode &&
+            kinds.includes(source.kind);
 
           const data: Prisma.DealUncheckedCreateInput = {
             externalId,
@@ -136,12 +162,19 @@ export class CrawlerService {
 
           const deal = await this.prisma.deal.upsert({
             where: { externalId },
-            update: { confidenceScore: score, latitude: candidate.latitude, longitude: candidate.longitude },
+            update: {
+              confidenceScore: score,
+              latitude: candidate.latitude,
+              longitude: candidate.longitude,
+            },
             create: data,
             select: { id: true },
           });
           queued++;
-          if (autoOk) { autoPublished++; publishedIds.push(deal.id); }
+          if (autoOk) {
+            autoPublished++;
+            publishedIds.push(deal.id);
+          }
         } catch (err) {
           failed++;
           await this.prisma.crawlFailure.create({
@@ -150,25 +183,58 @@ export class CrawlerService {
         }
       }
 
-      try { await this.search.upsertDeals(publishedIds); }
-      catch (err) { this.logger.warn(`search index: ${(err as Error).message}`); }
+      try {
+        await this.search.upsertDeals(publishedIds);
+      } catch (err) {
+        this.logger.warn(`search index: ${(err as Error).message}`);
+      }
 
       await this.prisma.crawlRun.update({
         where: { id: run.id },
         data: { status: 'succeeded', fetched, queued, deduped, failed, finishedAt: new Date() },
       });
-      await this.prisma.crawlSource.update({ where: { id: source.id }, data: { lastCrawledAt: new Date() } });
-      return { runId: run.id, sourceId, status: 'succeeded', fetched, queued, deduped, failed, autoPublished };
+      await this.prisma.crawlSource.update({
+        where: { id: source.id },
+        data: { lastCrawledAt: new Date() },
+      });
+      return {
+        runId: run.id,
+        sourceId,
+        status: 'succeeded',
+        fetched,
+        queued,
+        deduped,
+        failed,
+        autoPublished,
+      };
     } catch (err) {
       await this.prisma.crawlRun.update({
-        where: { id: run.id }, data: { status: 'failed', error: (err as Error).message, finishedAt: new Date() },
+        where: { id: run.id },
+        data: { status: 'failed', error: (err as Error).message, finishedAt: new Date() },
       });
-      return { runId: run.id, sourceId, status: 'failed', fetched, queued, deduped, failed, autoPublished };
+      return {
+        runId: run.id,
+        sourceId,
+        status: 'failed',
+        fetched,
+        queued,
+        deduped,
+        failed,
+        autoPublished,
+      };
     }
   }
 
   private slug(s: string): string {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+    return s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60);
   }
-  private hash(s: string): number { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+  private hash(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return h;
+  }
 }

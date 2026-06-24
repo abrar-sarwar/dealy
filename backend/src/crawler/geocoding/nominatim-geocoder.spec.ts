@@ -16,7 +16,9 @@ describe('NominatimGeocoder', () => {
     expect(await new NominatimGeocoder(fetchFn).geocode('nowhere')).toBeNull();
   });
   it('returns null (never throws) on a transport error', async () => {
-    const fetchFn = (async () => { throw new Error('net'); }) as unknown as typeof fetch;
+    const fetchFn = (async () => {
+      throw new Error('net');
+    }) as unknown as typeof fetch;
     expect(await new NominatimGeocoder(fetchFn).geocode('x')).toBeNull();
   });
 });

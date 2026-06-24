@@ -1,4 +1,9 @@
-import type { DealExtractor, ExtractContext, ExtractionResult, RawCandidate } from './deal-extractor';
+import type {
+  DealExtractor,
+  ExtractContext,
+  ExtractionResult,
+  RawCandidate,
+} from './deal-extractor';
 
 function priceToMinor(price?: string | number | null): bigint | null {
   if (price == null) return null;
@@ -15,18 +20,44 @@ export class StructuredExtractor implements DealExtractor {
 
   private fromJsonLd(html: string, ctx: ExtractContext): RawCandidate[] {
     const out: RawCandidate[] = [];
-    const blocks = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)];
+    const blocks = [
+      ...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi),
+    ];
     for (const [, json] of blocks) {
-      let data: any;
-      try { data = JSON.parse(json.trim()); } catch { continue; }
+      type JsonLdNode = {
+        name?: string;
+        address?:
+          | string
+          | { streetAddress?: string; addressLocality?: string; addressRegion?: string };
+        makesOffer?: JsonLdOffer | JsonLdOffer[];
+        offers?: JsonLdOffer | JsonLdOffer[];
+      };
+      type JsonLdOffer = {
+        name?: string;
+        price?: string | number;
+        validFrom?: string;
+        validThrough?: string;
+      };
+      let data: JsonLdNode | JsonLdNode[];
+      try {
+        data = JSON.parse(json.trim()) as JsonLdNode | JsonLdNode[];
+      } catch {
+        continue;
+      }
       for (const node of Array.isArray(data) ? data : [data]) {
         const merchant = node.name ?? ctx.merchantHint ?? '';
-        const address = typeof node.address === 'string'
-          ? node.address
-          : [node.address?.streetAddress, node.address?.addressLocality, node.address?.addressRegion]
-              .filter(Boolean).join(', ');
+        const address =
+          typeof node.address === 'string'
+            ? node.address
+            : [
+                node.address?.streetAddress,
+                node.address?.addressLocality,
+                node.address?.addressRegion,
+              ]
+                .filter(Boolean)
+                .join(', ');
         const offers = node.makesOffer ?? node.offers;
-        for (const offer of (Array.isArray(offers) ? offers : offers ? [offers] : [])) {
+        for (const offer of Array.isArray(offers) ? offers : offers ? [offers] : []) {
           if (!offer?.name) continue;
           out.push({
             title: String(offer.name),
@@ -54,18 +85,20 @@ export class StructuredExtractor implements DealExtractor {
     if (!/happy hour/i.test(text)) return [];
     const price = text.match(/\$\s?(\d+(?:\.\d{2})?)/);
     if (!price) return [];
-    return [{
-      title: 'Happy Hour',
-      merchant: ctx.merchantHint ?? '',
-      categorySlug: ctx.defaultCategorySlug ?? 'food',
-      address: '',
-      startAt: null,
-      expiresAt: null,
-      sourceUrl: ctx.url,
-      currentPriceMinor: priceToMinor(price[1]),
-      couponCode: null,
-      isStudentOnly: false,
-      extractionPath: 'structured',
-    }];
+    return [
+      {
+        title: 'Happy Hour',
+        merchant: ctx.merchantHint ?? '',
+        categorySlug: ctx.defaultCategorySlug ?? 'food',
+        address: '',
+        startAt: null,
+        expiresAt: null,
+        sourceUrl: ctx.url,
+        currentPriceMinor: priceToMinor(price[1]),
+        couponCode: null,
+        isStudentOnly: false,
+        extractionPath: 'structured',
+      },
+    ];
   }
 }

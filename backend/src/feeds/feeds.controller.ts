@@ -53,7 +53,9 @@ export class FeedsController {
 
   @Public()
   @Get('trending')
-  @ApiOperation({ summary: 'Cross-campus trending deals (high-value/urgent, location-independent)' })
+  @ApiOperation({
+    summary: 'Cross-campus trending deals (high-value/urgent, location-independent)',
+  })
   trending(@Query() query: OnlineFeedQuery) {
     return this.feeds.trending(query);
   }

@@ -58,6 +58,31 @@ export const envSchema = z
     TICKETMASTER_API_KEY: optionalString,
     EVENTBRITE_TOKEN: optionalString,
     ANTHROPIC_API_KEY: optionalString,
+    FIRECRAWL_API_KEY: optionalString,
+    GOOGLE_GEMINI_API_KEY: optionalString,
+    FIRECRAWL_API_URL: z.string().url().default('https://api.firecrawl.dev'),
+    FIRECRAWL_MAX_PAGES_PER_RUN: z.coerce.number().int().positive().default(100),
+    FIRECRAWL_MAX_CONCURRENCY: z.coerce.number().int().positive().max(25).default(5),
+    FIRECRAWL_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+    GEMINI_REASONING_MODEL: z.string().default('gemini-2.5-pro'),
+    AI_CACHE_TTL_HOURS: z.coerce.number().int().positive().default(24),
+    MIN_LOCAL_DEALS: z.coerce.number().int().positive().default(25),
+    LOCAL_DEAL_REFRESH_HOURS: z.coerce.number().int().positive().default(12),
+    CRAWLER_ENABLED: z.coerce.boolean().default(true),
+    AI_ENABLED: z.coerce.boolean().default(true),
+    FIRECRAWL_MAX_PAGES_PER_DAY: z.coerce.number().int().positive().default(100),
+    FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY: z.coerce.number().int().positive().default(10),
+    FIRECRAWL_MAX_RECRAWLS_PER_DAY: z.coerce.number().int().positive().default(2),
+    GEMINI_ESCALATION_MAX_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(60),
+    GEMINI_ESCALATION_MIN_RELIABILITY: z.coerce.number().int().min(0).max(100).default(80),
+    DISCOVERY_CRON: z.string().default('0 */6 * * *'),
+    DISCOVERY_TARGET_PATHS: z
+      .string()
+      .default(
+        '/deals,/coupons,/promotions,/offers,/weekly-ad,/weeklyad,/weekly-specials,/specials,/student-discounts,/events,/restaurants',
+      ),
+    DISCOVERY_PUBLISH_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(80),
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
     CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),
@@ -76,6 +101,8 @@ export const envSchema = z
       'REDIS_URL',
       'MEILISEARCH_HOST',
       'MEILISEARCH_MASTER_KEY',
+      'FIRECRAWL_API_KEY',
+      'GOOGLE_GEMINI_API_KEY',
     ];
     for (const key of requiredInProd) {
       if (!env[key]) {

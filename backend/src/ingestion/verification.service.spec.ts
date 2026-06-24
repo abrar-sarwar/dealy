@@ -147,19 +147,19 @@ describe('VerificationService.verifyProvider — run finalization on failure', (
 
 describe('checkCuratedLinks (link liveness — flag, never archive)', () => {
   function makeService(deal: { id: string; destinationUrl: string }) {
-    const updates: Array<{ where: any; data: any }> = [];
-    const prisma: any = {
+    const updates: Array<{ where: { id: string }; data: Record<string, unknown> }> = [];
+    const prisma = {
       deal: {
         findMany: async () => [deal],
-        update: async (args: any) => {
+        update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
           updates.push(args);
           return {};
         },
       },
     };
-    const registry: any = { get: () => ({ trust: 'editorial', name: 'student-programs' }) };
-    const search: any = { index: async () => {} };
-    const service = new VerificationService(prisma, registry, search);
+    const registry = { get: () => ({ trust: 'editorial', name: 'student-programs' }) };
+    const search = { index: async () => {} };
+    const service = new VerificationService(prisma as never, registry as never, search as never);
     return { service, updates };
   }
 

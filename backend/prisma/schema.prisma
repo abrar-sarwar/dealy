@@ -706,10 +706,18 @@ model CrawlSource {
   enabled             Boolean    @default(true)
   crawlIntervalHours  Int        @default(24) @map("crawl_interval_hours")
   lastCrawledAt       DateTime?  @map("last_crawled_at")
+  sourceType          String     @default("merchant_site") @map("source_type")
+  dealUrl             String?    @map("deal_url")
+  targetPaths         String[]   @default([]) @map("target_paths")
+  reliabilityScore    Int        @default(50) @map("reliability_score")
+  lastSuccessAt       DateTime?  @map("last_success_at")
+  averageDealsFound   Float      @default(0) @map("average_deals_found")
   createdAt           DateTime   @default(now()) @map("created_at")
 
-  deals Deal[]
-  runs  CrawlRun[]
+  deals         Deal[]
+  runs          CrawlRun[]
+  contentHashes ContentHash[]
+  candidates    DealCandidate[]
 
   @@index([enabled])
   @@map("crawl_sources")
@@ -723,6 +731,8 @@ model CrawlRun {
   queued     Int             @default(0)
   deduped    Int             @default(0)
   failed     Int             @default(0)
+  firecrawlPages Int     @default(0) @map("firecrawl_pages")
+  unchanged      Boolean @default(false)
   error      String?
   startedAt  DateTime        @default(now()) @map("started_at")
   finishedAt DateTime?       @map("finished_at")
@@ -731,6 +741,7 @@ model CrawlRun {
   failures CrawlFailure[]
 
   @@index([sourceId, startedAt])
+  @@index([sourceId, unchanged, startedAt])
   @@map("crawl_runs")
 }
 
@@ -745,4 +756,124 @@ model CrawlFailure {
 
   @@index([runId])
   @@map("crawl_failures")
+}
+
+// ===========================================================================
+// Phase 10 — intelligent discovery foundation (Firecrawl + Gemini).
+// ===========================================================================
+
+model RegionalInventory {
+  id               String    @id @default(uuid()) @db.Uuid
+  regionSlug       String    @unique @map("region_slug")
+  regionName       String    @map("region_name")
+  regionType       String    @default("metro") @map("region_type")
+  latitude         Float?
+  longitude        Float?
+  radiusMiles      Int       @default(10) @map("radius_miles")
+  dealCount        Int       @default(0) @map("deal_count")
+  lastRefresh      DateTime? @map("last_refresh")
+  crawlHealth      String    @default("unknown") @map("crawl_health")
+  verificationRate Float     @default(0) @map("verification_rate")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  candidates DealCandidate[]
+
+  @@index([regionType])
+  @@index([dealCount, lastRefresh])
+  @@map("regional_inventories")
+}
+
+model ContentHash {
+  id             String    @id @default(uuid()) @db.Uuid
+  sourceUrl      String    @map("source_url")
+  sourceId       String?   @map("source_id") @db.Uuid
+  hash           String
+  contentPreview String?   @map("content_preview")
+  processedAt    DateTime? @map("processed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  source         CrawlSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  candidates     DealCandidate[]
+  classifications AiClassification[]
+
+  @@unique([sourceUrl, hash])
+  @@index([hash])
+  @@index([sourceId])
+  @@map("content_hashes")
+}
+
+model DealCandidate {
+  id                 String    @id @default(uuid()) @db.Uuid
+  sourceId           String?   @map("source_id") @db.Uuid
+  sourceUrl          String    @map("source_url")
+  contentHashId      String?   @map("content_hash_id") @db.Uuid
+  regionalInventoryId String?  @map("regional_inventory_id") @db.Uuid
+  title              String
+  merchant           String
+  discount           String?
+  categorySlug       String    @map("category_slug")
+  expiration         DateTime?
+  locationText       String?   @map("location_text")
+  summary            String
+  confidence         Float     @default(0)
+  verificationStatus VerificationStatus @default(pending) @map("verification_status")
+  fingerprint        String?
+  raw                Json?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  promotedAt         DateTime? @map("promoted_at")
+
+  source            CrawlSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  contentHash       ContentHash?       @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
+  regionalInventory RegionalInventory? @relation(fields: [regionalInventoryId], references: [id], onDelete: SetNull)
+  classifications   AiClassification[]
+
+  @@index([sourceId])
+  @@index([contentHashId])
+  @@index([regionalInventoryId])
+  @@index([fingerprint])
+  @@index([verificationStatus])
+  @@index([promotedAt])
+  @@map("deal_candidates")
+}
+
+model AiClassification {
+  id             String   @id @default(uuid()) @db.Uuid
+  candidateId    String?  @map("candidate_id") @db.Uuid
+  contentHashId  String?  @map("content_hash_id") @db.Uuid
+  task           String
+  model          String
+  promptHash     String   @map("prompt_hash")
+  schemaVersion  String   @default("v1") @map("schema_version")
+  output         Json
+  confidence     Float    @default(0)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  candidate   DealCandidate? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  contentHash ContentHash?   @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
+
+  @@index([candidateId])
+  @@index([contentHashId])
+  @@index([task, model])
+  @@index([promptHash])
+  @@map("ai_classifications")
+}
+
+model AiCache {
+  id            String   @id @default(uuid()) @db.Uuid
+  cacheKey      String   @unique @map("cache_key")
+  task          String
+  model         String
+  schemaVersion String  @default("v1") @map("schema_version")
+  promptHash    String  @map("prompt_hash")
+  output        Json
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  lastHitAt     DateTime? @map("last_hit_at")
+  hitCount      Int      @default(0) @map("hit_count")
+
+  @@index([task, model])
+  @@index([expiresAt])
+  @@map("ai_cache")
 }

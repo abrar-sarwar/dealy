@@ -84,12 +84,20 @@ export class AdminController {
   }
 
   @Post('moderation/:id/reject')
-  reject(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RejectDto) {
+  reject(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectDto,
+  ) {
     return this.moderation.reject(actor.id, id, dto.reason);
   }
 
   @Post('moderation/:id/edit')
-  edit(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ModerationEditDto) {
+  edit(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ModerationEditDto,
+  ) {
     return this.moderation.edit(actor.id, id, dto);
   }
 }

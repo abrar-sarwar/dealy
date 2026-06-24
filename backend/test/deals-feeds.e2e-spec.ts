@@ -194,32 +194,49 @@ describe('Deals + Feeds (e2e, public)', () => {
   it('GET /v1/feeds/trending returns high-value verified deals regardless of location', async () => {
     const far = new Date(Date.now() + 30 * 24 * 3600 * 1000); // beyond the 48h urgency window
     const trendingId = await makeDeal({
-      currentPriceMinor: 2000n, originalPriceMinor: 5000n, // 60% off
-      latitude: 34.0, longitude: -84.58, locationTags: ['Kennesaw'], expiresAt: far,
+      currentPriceMinor: 2000n,
+      originalPriceMinor: 5000n, // 60% off
+      latitude: 34.0,
+      longitude: -84.58,
+      locationTags: ['Kennesaw'],
+      expiresAt: far,
     });
     const dullId = await makeDeal({
-      currentPriceMinor: 4500n, originalPriceMinor: 5000n, // 10% off, not urgent
-      latitude: 33.7531, longitude: -84.3857, expiresAt: far,
+      currentPriceMinor: 4500n,
+      originalPriceMinor: 5000n, // 10% off, not urgent
+      latitude: 33.7531,
+      longitude: -84.3857,
+      expiresAt: far,
     });
     const res = await app.inject({ method: 'GET', url: '/v1/feeds/trending?limit=50' });
     expect(res.statusCode).toBe(200);
     const items = res.json().items as Array<{ id: string; isTrending: boolean }>;
     expect(items.every((d) => d.isTrending)).toBe(true);
-    expect(items.some((d) => d.id === trendingId)).toBe(true);  // far, high-value → featured
-    expect(items.some((d) => d.id === dullId)).toBe(false);     // low-value → excluded
+    expect(items.some((d) => d.id === trendingId)).toBe(true); // far, high-value → featured
+    expect(items.some((d) => d.id === dullId)).toBe(false); // low-value → excluded
   });
 
   it('GET /v1/feeds/local returns curated physical deals within radius, nearest first', async () => {
     const near = await makeDeal({
-      title: 'Curated Taco Near', sourceTrust: 'editorial', moderationStatus: 'approved',
-      verificationStatus: 'pending', latitude: GSU.lat + 0.01, longitude: GSU.lng, // ~0.7mi
+      title: 'Curated Taco Near',
+      sourceTrust: 'editorial',
+      moderationStatus: 'approved',
+      verificationStatus: 'pending',
+      latitude: GSU.lat + 0.01,
+      longitude: GSU.lng, // ~0.7mi
     });
     const far = await makeDeal({
-      title: 'Curated Taco Far', sourceTrust: 'editorial', moderationStatus: 'approved',
-      verificationStatus: 'pending', latitude: GSU.lat + 0.5, longitude: GSU.lng, // ~34mi
+      title: 'Curated Taco Far',
+      sourceTrust: 'editorial',
+      moderationStatus: 'approved',
+      verificationStatus: 'pending',
+      latitude: GSU.lat + 0.5,
+      longitude: GSU.lng, // ~34mi
     });
     const authoritative = await makeDeal({
-      title: 'Authoritative Event', latitude: GSU.lat + 0.01, longitude: GSU.lng, // verified, not curated
+      title: 'Authoritative Event',
+      latitude: GSU.lat + 0.01,
+      longitude: GSU.lng, // verified, not curated
     });
     const res = await app.inject({
       method: 'GET',

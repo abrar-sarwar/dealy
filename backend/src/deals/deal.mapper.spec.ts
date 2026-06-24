@@ -1,7 +1,10 @@
 // src/deals/deal.mapper.spec.ts
 import { mapPrismaDeal, deriveTrending } from './deal.mapper';
+import type { Deal, Category } from '@prisma/client';
 
-function fakeDeal(over: Partial<any> = {}) {
+type FakeDeal = Omit<Deal, 'categoryId'> & { category: Pick<Category, 'slug'> };
+
+function fakeDeal(over: Partial<FakeDeal> = {}): FakeDeal {
   return {
     id: 'd1',
     title: 't',
@@ -32,12 +35,14 @@ function fakeDeal(over: Partial<any> = {}) {
     status: 'published',
     confidenceScore: null,
     ...over,
-  };
+  } as FakeDeal;
 }
 
 describe('mapPrismaDeal trust fields', () => {
   it('authoritative verified physical → trustLevel verified', () => {
-    expect(mapPrismaDeal(fakeDeal() as any, null).trustLevel).toBe('verified');
+    expect(
+      mapPrismaDeal(fakeDeal() as unknown as Deal & { category: Category }, null).trustLevel,
+    ).toBe('verified');
   });
   it('editorial approved published → curated, carries confidenceScore', () => {
     const dto = mapPrismaDeal(
@@ -45,7 +50,7 @@ describe('mapPrismaDeal trust fields', () => {
         sourceTrust: 'editorial',
         verificationStatus: 'pending',
         confidenceScore: 77,
-      }) as any,
+      }) as unknown as Deal & { category: Category },
       null,
     );
     expect(dto.trustLevel).toBe('curated');
@@ -55,12 +60,18 @@ describe('mapPrismaDeal trust fields', () => {
 
 describe('mapPrismaDeal redemptionBrand', () => {
   it('passes a physical-redemption brand through', () => {
-    const dto = mapPrismaDeal(fakeDeal({ redemptionBrand: 'Apple Store' }) as any, null);
+    const dto = mapPrismaDeal(
+      fakeDeal({ redemptionBrand: 'Apple Store' }) as unknown as Deal & { category: Category },
+      null,
+    );
     expect(dto.redemptionBrand).toBe('Apple Store');
   });
 
   it('keeps a null brand null', () => {
-    const dto = mapPrismaDeal(fakeDeal({ redemptionBrand: null }) as any, null);
+    const dto = mapPrismaDeal(
+      fakeDeal({ redemptionBrand: null }) as unknown as Deal & { category: Category },
+      null,
+    );
     expect(dto.redemptionBrand).toBeNull();
   });
 
@@ -72,7 +83,7 @@ describe('mapPrismaDeal redemptionBrand', () => {
         isOnline: true,
         isStudentOnly: true,
         redemptionBrand: 'Apple Store',
-      }) as any,
+      }) as unknown as Deal & { category: Category },
       null,
     );
     expect(dto.trustLevel).toBe('curated');
@@ -85,45 +96,100 @@ describe('deriveTrending', () => {
   const later = new Date(Date.now() + 30 * 24 * 3600 * 1000);
 
   it('high-discount verified authoritative deal trends', () => {
-    expect(deriveTrending({ sourceTrust: 'authoritative', verificationStatus: 'verified',
-      savingsPercentage: 55, expiresAt: later })).toBe(true);
+    expect(
+      deriveTrending({
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        savingsPercentage: 55,
+        expiresAt: later,
+      }),
+    ).toBe(true);
   });
   it('urgent verified authoritative deal trends even at low discount', () => {
-    expect(deriveTrending({ sourceTrust: 'authoritative', verificationStatus: 'verified',
-      savingsPercentage: 10, expiresAt: soon })).toBe(true);
+    expect(
+      deriveTrending({
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        savingsPercentage: 10,
+        expiresAt: soon,
+      }),
+    ).toBe(true);
   });
   it('unexceptional verified deal does not trend', () => {
-    expect(deriveTrending({ sourceTrust: 'authoritative', verificationStatus: 'verified',
-      savingsPercentage: 10, expiresAt: later })).toBe(false);
+    expect(
+      deriveTrending({
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        savingsPercentage: 10,
+        expiresAt: later,
+      }),
+    ).toBe(false);
   });
   it('editorial/unverified never trends regardless of savings', () => {
-    expect(deriveTrending({ sourceTrust: 'editorial', verificationStatus: 'pending',
-      savingsPercentage: 80, expiresAt: soon })).toBe(false);
-    expect(deriveTrending({ sourceTrust: 'authoritative', verificationStatus: 'pending',
-      savingsPercentage: 80, expiresAt: soon })).toBe(false);
+    expect(
+      deriveTrending({
+        sourceTrust: 'editorial',
+        verificationStatus: 'pending',
+        savingsPercentage: 80,
+        expiresAt: soon,
+      }),
+    ).toBe(false);
+    expect(
+      deriveTrending({
+        sourceTrust: 'authoritative',
+        verificationStatus: 'pending',
+        savingsPercentage: 80,
+        expiresAt: soon,
+      }),
+    ).toBe(false);
   });
 });
 
 describe('mapPrismaDeal isTrending', () => {
-  function highValueVerified(over: Partial<any> = {}) {
+  function highValueVerified(over: Partial<FakeDeal> = {}) {
     return {
-      id: 'd', title: 't', merchant: 'm', category: { slug: 'entertainment' },
-      shortDescription: '', detailedDescription: '', terms: '',
-      currentPriceMinor: 2000n, originalPriceMinor: 5000n, currency: 'USD', // 60% off
-      dealScore: 50, isOnline: false, isStudentOnly: false,
-      couponCode: null, destinationUrl: null, redemptionBrand: null,
-      latitude: 34.0, longitude: -84.5, locationTags: ['Kennesaw'], visualSeed: 0,
-      verificationStatus: 'verified', lastVerifiedAt: new Date(), createdAt: new Date(),
-      startAt: null, expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      sourceTrust: 'authoritative', moderationStatus: 'approved', status: 'published',
-      confidenceScore: null, ...over,
+      id: 'd',
+      title: 't',
+      merchant: 'm',
+      category: { slug: 'entertainment' },
+      shortDescription: '',
+      detailedDescription: '',
+      terms: '',
+      currentPriceMinor: 2000n,
+      originalPriceMinor: 5000n,
+      currency: 'USD', // 60% off
+      dealScore: 50,
+      isOnline: false,
+      isStudentOnly: false,
+      couponCode: null,
+      destinationUrl: null,
+      redemptionBrand: null,
+      latitude: 34.0,
+      longitude: -84.5,
+      locationTags: ['Kennesaw'],
+      visualSeed: 0,
+      verificationStatus: 'verified',
+      lastVerifiedAt: new Date(),
+      createdAt: new Date(),
+      startAt: null,
+      expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      sourceTrust: 'authoritative',
+      moderationStatus: 'approved',
+      status: 'published',
+      confidenceScore: null,
+      ...over,
     };
   }
   it('emits isTrending true for a high-value verified deal', () => {
-    expect(mapPrismaDeal(highValueVerified() as any, null).isTrending).toBe(true);
+    expect(
+      mapPrismaDeal(highValueVerified() as unknown as Deal & { category: Category }, null)
+        .isTrending,
+    ).toBe(true);
   });
   it('emits isTrending false for a low-value verified deal', () => {
     const lowValue = highValueVerified({ currentPriceMinor: 4500n, originalPriceMinor: 5000n }); // 10% off
-    expect(mapPrismaDeal(lowValue as any, null).isTrending).toBe(false);
+    expect(
+      mapPrismaDeal(lowValue as unknown as Deal & { category: Category }, null).isTrending,
+    ).toBe(false);
   });
 });
