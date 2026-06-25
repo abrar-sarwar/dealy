@@ -24,6 +24,9 @@ import { CandidatePromotionService } from './candidate-promotion.service';
 import { DiscoverySchedulerService } from './discovery.scheduler';
 import { PlaceDiscoveryService } from './place-discovery.service';
 import { PlaceCrawlEnrollmentService } from './place-crawl-enrollment.service';
+import { PlaceEnrichmentService, type EnrichmentConfig } from './place-enrichment.service';
+import { PlaceFeedService } from './place-feed.service';
+import { GeminiClient } from '../services/gemini/gemini.client';
 
 @Module({
   imports: [PrismaModule, SearchModule, FirecrawlModule, GeminiModule],
@@ -131,6 +134,31 @@ import { PlaceCrawlEnrollmentService } from './place-crawl-enrollment.service';
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) => new PlaceCrawlEnrollmentService(prisma),
     },
+    {
+      provide: PlaceEnrichmentService,
+      inject: [PrismaService, GeminiClient, AiCacheService, ConfigService],
+      useFactory: (
+        prisma: PrismaService,
+        client: GeminiClient,
+        aiCache: AiCacheService,
+        config: ConfigService<Env, true>,
+      ) => {
+        const gc = geminiConfig(config);
+        const cfg: EnrichmentConfig = {
+          model: gc.model,
+          ratePerMin: gc.enrichRatePerMin,
+          batchSize: gc.enrichBatchSize,
+          maxRetries: gc.enrichMaxRetries,
+          enabled: gc.enabled,
+        };
+        return new PlaceEnrichmentService(prisma, client, aiCache, cfg);
+      },
+    },
+    {
+      provide: PlaceFeedService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PlaceFeedService(prisma),
+    },
   ],
   exports: [
     DiscoveryService,
@@ -138,6 +166,8 @@ import { PlaceCrawlEnrollmentService } from './place-crawl-enrollment.service';
     CandidatePromotionService,
     PlaceDiscoveryService,
     PlaceCrawlEnrollmentService,
+    PlaceEnrichmentService,
+    PlaceFeedService,
   ],
 })
 export class DiscoveryModule {}

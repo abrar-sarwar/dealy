@@ -27,6 +27,9 @@ describe('GeminiService', () => {
       cacheTtlHours: 24,
       escalationMaxConfidence: 60,
       escalationMinReliability: 80,
+      enrichRatePerMin: 15,
+      enrichBatchSize: 8,
+      enrichMaxRetries: 3,
     });
 
     const result = await service.extractDeals({
@@ -62,6 +65,9 @@ describe('GeminiService', () => {
       cacheTtlHours: 24,
       escalationMaxConfidence: 60,
       escalationMinReliability: 80,
+      enrichRatePerMin: 15,
+      enrichBatchSize: 8,
+      enrichMaxRetries: 3,
     });
 
     await service.reasonAboutVerification({
@@ -84,6 +90,9 @@ const cfg = {
   enabled: true,
   escalationMaxConfidence: 60,
   escalationMinReliability: 80,
+  enrichRatePerMin: 15,
+  enrichBatchSize: 8,
+  enrichMaxRetries: 3,
 };
 
 describe('GeminiService.planCrawl', () => {
@@ -136,6 +145,9 @@ describe('GeminiService.extractDeals — schema includes campus_slug + requires_
       cacheTtlHours: 24,
       escalationMaxConfidence: 60,
       escalationMinReliability: 80,
+      enrichRatePerMin: 15,
+      enrichBatchSize: 8,
+      enrichMaxRetries: 3,
     });
     return svc
       .extractDeals({ content: 'x', sourceUrl: 'https://t.test/s', merchantHint: 'M' })
@@ -173,6 +185,9 @@ describe('GeminiService.extractDeals — schema includes campus_slug + requires_
       cacheTtlHours: 24,
       escalationMaxConfidence: 60,
       escalationMinReliability: 80,
+      enrichRatePerMin: 15,
+      enrichBatchSize: 8,
+      enrichMaxRetries: 3,
     });
     await svc.extractDeals({ content: 'x', sourceUrl: 'https://t.test/s' });
     expect(capturedPrompt).toContain('requires_student_id');

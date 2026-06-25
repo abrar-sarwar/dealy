@@ -77,6 +77,10 @@ export const envSchema = z
     FIRECRAWL_MAX_RECRAWLS_PER_DAY: z.coerce.number().int().positive().default(2),
     GEMINI_ESCALATION_MAX_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(60),
     GEMINI_ESCALATION_MIN_RELIABILITY: z.coerce.number().int().min(0).max(100).default(80),
+    // P3 place-enrichment pacing — env-configurable for a future paid Gemini key.
+    GEMINI_ENRICH_RATE_PER_MIN: z.coerce.number().int().positive().default(15),
+    GEMINI_ENRICH_BATCH_SIZE: z.coerce.number().int().positive().default(8),
+    GEMINI_ENRICH_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
     DISCOVERY_CRON: z.string().default('0 */6 * * *'),
     DISCOVERY_TARGET_PATHS: z
       .string()

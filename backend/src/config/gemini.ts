@@ -9,6 +9,10 @@ export interface GeminiConfig {
   enabled: boolean;
   escalationMaxConfidence: number;
   escalationMinReliability: number;
+  /** P3 place-enrichment pacing (free-tier safe; tune up for a paid key). */
+  enrichRatePerMin: number;
+  enrichBatchSize: number;
+  enrichMaxRetries: number;
 }
 
 export function geminiConfig(config: ConfigService<Env, true>): GeminiConfig {
@@ -20,5 +24,8 @@ export function geminiConfig(config: ConfigService<Env, true>): GeminiConfig {
     enabled: config.get('AI_ENABLED', { infer: true }),
     escalationMaxConfidence: config.get('GEMINI_ESCALATION_MAX_CONFIDENCE', { infer: true }),
     escalationMinReliability: config.get('GEMINI_ESCALATION_MIN_RELIABILITY', { infer: true }),
+    enrichRatePerMin: config.get('GEMINI_ENRICH_RATE_PER_MIN', { infer: true }),
+    enrichBatchSize: config.get('GEMINI_ENRICH_BATCH_SIZE', { infer: true }),
+    enrichMaxRetries: config.get('GEMINI_ENRICH_MAX_RETRIES', { infer: true }),
   };
 }
