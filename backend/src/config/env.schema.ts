@@ -81,7 +81,7 @@ export const envSchema = z
     DISCOVERY_TARGET_PATHS: z
       .string()
       .default(
-        '/deals,/coupons,/promotions,/offers,/weekly-ad,/weeklyad,/weekly-specials,/specials,/student-discounts,/events,/restaurants',
+        '/deals,/specials,/coupons,/offers,/menu,/happy-hour,/student-discount,/promotions,/events,/locations,/weekly-ad,/weeklyad,/weekly-specials,/student-discounts,/restaurants',
       ),
     DISCOVERY_PUBLISH_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(80),
     // Quality floor: candidates below this 0–100 deal-quality score are never

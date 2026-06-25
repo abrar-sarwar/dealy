@@ -315,6 +315,9 @@ export class DiscoveryRunnerService {
                 sourceUrl: url,
                 contentHashId: contentHashRow.id,
                 regionalInventoryId: inventory?.id ?? null,
+                // P2: a place-sourced crawl links its candidates back to the Place
+                // so the promoted deal can carry the local-business relation.
+                placeId: source.placeId ?? null,
                 title: dl.title,
                 merchant: dl.merchant || source.merchantHint || 'Unknown',
                 discount: dl.discount,

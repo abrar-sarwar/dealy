@@ -23,6 +23,7 @@ import { MerchantLocationResolver } from './merchant-location.resolver';
 import { CandidatePromotionService } from './candidate-promotion.service';
 import { DiscoverySchedulerService } from './discovery.scheduler';
 import { PlaceDiscoveryService } from './place-discovery.service';
+import { PlaceCrawlEnrollmentService } from './place-crawl-enrollment.service';
 
 @Module({
   imports: [PrismaModule, SearchModule, FirecrawlModule, GeminiModule],
@@ -125,12 +126,18 @@ import { PlaceDiscoveryService } from './place-discovery.service';
       useFactory: (prisma: PrismaService, places: GooglePlacesService) =>
         new PlaceDiscoveryService(prisma, places),
     },
+    {
+      provide: PlaceCrawlEnrollmentService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PlaceCrawlEnrollmentService(prisma),
+    },
   ],
   exports: [
     DiscoveryService,
     DiscoveryRunnerService,
     CandidatePromotionService,
     PlaceDiscoveryService,
+    PlaceCrawlEnrollmentService,
   ],
 })
 export class DiscoveryModule {}

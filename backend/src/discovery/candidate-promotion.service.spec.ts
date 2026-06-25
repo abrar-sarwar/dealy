@@ -25,6 +25,7 @@ type Candidate = {
   requiresStudentId: boolean;
   audience: string;
   campusDealType: string | null;
+  placeId: string | null;
 };
 
 function deps(
@@ -57,6 +58,7 @@ function deps(
     requiresStudentId: false,
     audience: 'general',
     campusDealType: null,
+    placeId: null,
     ...over.candidate,
   };
   return {
@@ -87,6 +89,15 @@ function build(d: ReturnType<typeof deps>, minQuality = 15) {
 }
 
 describe('CandidatePromotionService.promoteRegion', () => {
+  it('copies placeId from a place-linked candidate onto the promoted deal', async () => {
+    const d = deps({ candidate: { placeId: 'place-123' } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(expect.objectContaining({ placeId: 'place-123' }));
+  });
+
   it('promotes a high-confidence candidate to a published deal and marks it promoted', async () => {
     const d = deps();
     const out = await build(d).promoteRegion('atlanta');

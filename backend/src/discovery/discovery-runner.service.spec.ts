@@ -27,6 +27,7 @@ type Source = {
   lastCrawledAt: Date | null;
   crawlIntervalHours: number;
   enabled: boolean;
+  placeId?: string | null;
 };
 
 type ResolvedLocation = {
@@ -62,6 +63,7 @@ function deps(
     lastCrawledAt: null,
     crawlIntervalHours: 24,
     enabled: true,
+    placeId: null,
     ...over.source,
   };
   const sources = over.sources ?? [source];
@@ -693,6 +695,30 @@ describe('DiscoveryRunnerService.runRegion', () => {
     )[0];
     expect(arg.data.audience).toBe('campus_community');
     expect(arg.data.campusDealType).toBe('dining');
+  });
+
+  // --- P2: place linkage ---
+
+  it('sets dealCandidate.placeId from a place-sourced source', async () => {
+    const d = deps({ source: { placeId: 'place-123' } });
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { placeId: string | null } },
+      ]
+    )[0];
+    expect(arg.data.placeId).toBe('place-123');
+  });
+
+  it('leaves dealCandidate.placeId null for a non-place (curated) source', async () => {
+    const d = deps();
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { placeId: string | null } },
+      ]
+    )[0];
+    expect(arg.data.placeId).toBeNull();
   });
 
   // --- area-aware quality score ---
