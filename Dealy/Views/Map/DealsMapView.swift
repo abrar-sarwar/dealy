@@ -119,7 +119,10 @@ struct DealsMapView: View {
     // MARK: Map
 
     private var mapArea: some View {
-        Map(position: $position, bounds: cameraBounds) {
+        // interactionModes [] LOCKS the camera to the user's location: no manual
+        // pan/zoom, so the centered spotlight bubble always stays on you. The radius
+        // slider is the only thing that changes the view.
+        Map(position: $position, bounds: cameraBounds, interactionModes: []) {
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
