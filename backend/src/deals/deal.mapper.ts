@@ -66,6 +66,8 @@ interface NormalizedDeal {
   status: string;
   confidenceScore: number | null;
   imageUrl: string | null;
+  campusSlug: string | null;
+  requiresStudentId: boolean;
 }
 
 function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
@@ -106,6 +108,8 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
     locationTags: n.locationTags,
     visualSeed: n.visualSeed,
     imageUrl: n.imageUrl,
+    campusSlug: n.campusSlug,
+    requiresStudentId: n.requiresStudentId,
     publishedAt: n.createdAt.toISOString(),
     startAt: n.startAt ? n.startAt.toISOString() : null,
     expiresAt: n.expiresAt.toISOString(),
@@ -161,6 +165,8 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       status: deal.status,
       confidenceScore: deal.confidenceScore,
       imageUrl: deal.imageUrl ?? null,
+      campusSlug: deal.campusSlug ?? null,
+      requiresStudentId: deal.requiresStudentId,
     },
     distanceMiles,
   );
@@ -202,6 +208,8 @@ export interface NearbyRow {
   status: string;
   confidence_score: number | null;
   image_url: string | null;
+  campus_slug: string | null;
+  requires_student_id: boolean;
   /** Tier rank (0=verified, 1=curated, 2=online, 3=community). Ordering only. */
   tier_rank: number;
   /** Human-readable tier label derived from tier_rank. */
@@ -245,6 +253,8 @@ export function mapNearbyRow(row: NearbyRow) {
       status: row.status,
       confidenceScore: row.confidence_score,
       imageUrl: row.image_url,
+      campusSlug: row.campus_slug,
+      requiresStudentId: row.requires_student_id,
     },
     Number(row.distance_meters) / METERS_PER_MILE,
   );

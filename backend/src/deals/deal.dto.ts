@@ -43,6 +43,10 @@ export interface DealDto {
   /** Hero image URL scraped from the deal page's Open Graph metadata. Null if
    * no valid image was captured at crawl time. */
   imageUrl: string | null;
+  /** Campus this deal belongs to, e.g. 'gsu'. Null for non-campus deals. */
+  campusSlug: string | null;
+  /** True when the offer requires a valid student ID at redemption. */
+  requiresStudentId: boolean;
   publishedAt: string;
   startAt: string | null;
   expiresAt: string;

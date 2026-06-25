@@ -324,7 +324,8 @@ export class FeedsService {
              d.redemption_brand,
              d.latitude, d.longitude, d.location_precision, d.location_tags, d.visual_seed,
              d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
-             d.status, d.confidence_score, d.image_url, d.created_at, d.start_at, d.expires_at,
+             d.status, d.confidence_score, d.image_url, d.campus_slug, d.requires_student_id,
+             d.created_at, d.start_at, d.expires_at,
              ST_Distance(d.geog, ${center}) AS distance_meters,
              (${Prisma.raw(FEED_TIER_CASE_SQL)})::int AS tier_rank,
              CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
@@ -370,7 +371,8 @@ export class FeedsService {
              d.redemption_brand,
              d.latitude, d.longitude, d.location_precision, d.location_tags, d.visual_seed,
              d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
-             d.status, d.confidence_score, d.image_url, d.created_at, d.start_at, d.expires_at,
+             d.status, d.confidence_score, d.image_url, d.campus_slug, d.requires_student_id,
+             d.created_at, d.start_at, d.expires_at,
              ST_Distance(d.geog, ${center}) AS distance_meters,
              (${Prisma.raw(FEED_TIER_CASE_SQL)})::int AS tier_rank,
              CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
