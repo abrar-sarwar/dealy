@@ -65,7 +65,12 @@ import { DiscoverySchedulerService } from './discovery.scheduler';
         search: SearchIndexer,
         config: ConfigService<Env, true>,
       ) =>
-        new CandidatePromotionService(prisma, search, discoveryConfig(config).publishMinConfidence),
+        new CandidatePromotionService(
+          prisma,
+          search,
+          discoveryConfig(config).publishMinConfidence,
+          discoveryConfig(config).publishMinQuality,
+        ),
     },
     {
       provide: DiscoveryRunnerService,

@@ -11,6 +11,8 @@ import { resolveCrawlTargets } from './url-targeting';
 import { shouldConsiderSource, shouldEscalateToPro } from './escalation';
 import { dealFingerprint } from '../ingestion/normalized-deal';
 import { validImageUrl } from './deal-image';
+import { buildAreaContext, areaContextHash } from './area-context';
+import { computeQualityScore } from './deal-quality';
 
 export interface DiscoveryRunnerConfig {
   gemini: {
@@ -121,6 +123,17 @@ export class DiscoveryRunnerService {
       if (targets.length === 0) continue;
       const url = targets[0];
 
+      // Area context makes Gemini's planning/extraction/ranking smarter about the
+      // REAL scraped content — it never licenses inventing supply. Built once per
+      // source; its hash is appended to AI cache keys so context changes bust cache.
+      const areaContext = buildAreaContext(inventory, {
+        zoneSlug: source.zoneSlug,
+        kind: source.kind,
+        sourceType: source.sourceType,
+        defaultCategorySlug: source.defaultCategorySlug,
+      });
+      const areaCtxHash = areaContextHash(areaContext);
+
       // A prior successful crawl means we already hold a processed hash for this
       // source, arming the recrawl cap.
       const sourceMayBeUnchanged = !!source.lastSuccessAt;
@@ -151,7 +164,7 @@ export class DiscoveryRunnerService {
               task: 'crawl_plan',
               model: this.config.gemini.model,
               schemaVersion: 'v1',
-              prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
+              prompt: `${source.id}:${startOfUtcDay(now).toISOString()}:${areaCtxHash}`,
             },
             () =>
               this.gemini.planCrawl({
@@ -161,6 +174,8 @@ export class DiscoveryRunnerService {
                 reliabilityScore: source.reliabilityScore,
                 averageDealsFound: source.averageDealsFound,
                 lastSuccessAt: source.lastSuccessAt,
+                operatorVerified: !!source.dealUrl,
+                areaContext,
               }),
           );
           if (!plan.value.crawl) continue;
@@ -195,13 +210,14 @@ export class DiscoveryRunnerService {
               task: 'deal_extraction',
               model: this.config.gemini.model,
               schemaVersion: 'v1',
-              prompt: `${url}:${hash}`,
+              prompt: `${url}:${hash}:${areaCtxHash}`,
             },
             () =>
               this.gemini.extractDeals({
                 content: text,
                 sourceUrl: url,
                 merchantHint: source.merchantHint ?? undefined,
+                areaContext,
               }),
           );
           let deals = normalizeConfidence(extraction.value.deals);
@@ -220,7 +236,7 @@ export class DiscoveryRunnerService {
                 task: 'deal_extraction_pro',
                 model: this.config.gemini.reasoningModel,
                 schemaVersion: 'v1',
-                prompt: `${url}:${hash}`,
+                prompt: `${url}:${hash}:${areaCtxHash}`,
               },
               () =>
                 this.gemini.extractDeals({
@@ -228,6 +244,7 @@ export class DiscoveryRunnerService {
                   sourceUrl: url,
                   merchantHint: source.merchantHint ?? undefined,
                   model: this.config.gemini.reasoningModel,
+                  areaContext,
                 }),
             );
             deals = normalizeConfidence(pro.value.deals);
@@ -275,6 +292,23 @@ export class DiscoveryRunnerService {
               radiusMiles: inventory?.radiusMiles ?? 10,
             });
 
+            // Area-aware quality score (0..100): concreteness dominates, area
+            // relevance/category/locality/image/reliability boost, vagueness
+            // penalised. Drives promotion ranking + the sub-floor junk skip.
+            const finalImageUrl = validImageUrl(dl.image_url) ?? ogImageUrl;
+            const areaRelevance = dl.area_relevance ?? null;
+            const concreteOfferScore = dl.concrete_offer_score ?? null;
+            const qualityScore = computeQualityScore({
+              concreteOfferScore: dl.concrete_offer_score ?? 0,
+              areaRelevance: dl.area_relevance ?? 0,
+              isVague: dl.is_vague ?? false,
+              categorySlug,
+              campusDealType: dl.campus_deal_type ?? null,
+              locationPrecision: loc.locationPrecision,
+              hasImage: finalImageUrl != null,
+              reliabilityScore: source.reliabilityScore,
+            });
+
             await this.prisma.dealCandidate.create({
               data: {
                 sourceId: source.id,
@@ -292,12 +326,15 @@ export class DiscoveryRunnerService {
                 locationPrecision: loc.locationPrecision,
                 summary: dl.summary,
                 confidence: dl.confidence,
+                qualityScore,
+                areaRelevance,
+                concreteOfferScore,
                 verificationStatus: dl.verification_status,
                 fingerprint,
                 raw: dl as object,
                 // Prefer the per-deal product/food image Gemini picked from the page;
                 // fall back to the page-level OG image.
-                imageUrl: validImageUrl(dl.image_url) ?? ogImageUrl,
+                imageUrl: finalImageUrl,
                 // Eligibility guard: only students audience may set requiresStudentId.
                 // Faculty/staff/alumni/general NEVER get requiresStudentId true even if
                 // the model mistakenly returned true.

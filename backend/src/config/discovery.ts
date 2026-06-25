@@ -9,6 +9,7 @@ export interface DiscoveryConfig {
   cron: string;
   targetPaths: string[];
   publishMinConfidence: number;
+  publishMinQuality: number;
 }
 
 export function discoveryConfig(config: ConfigService<Env, true>): DiscoveryConfig {
@@ -24,5 +25,6 @@ export function discoveryConfig(config: ConfigService<Env, true>): DiscoveryConf
       .map((p) => p.trim())
       .filter(Boolean),
     publishMinConfidence: config.get('DISCOVERY_PUBLISH_MIN_CONFIDENCE', { infer: true }),
+    publishMinQuality: config.get('DISCOVERY_PUBLISH_MIN_QUALITY', { infer: true }),
   };
 }

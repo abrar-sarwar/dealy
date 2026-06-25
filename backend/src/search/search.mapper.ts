@@ -121,6 +121,8 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     expiresAt: new Date(doc.expiresAtTs * 1000).toISOString(),
     trustLevel: doc.trustLevel,
     confidenceScore: doc.confidenceScore,
+    // Deal-quality score is not indexed in the search doc yet.
+    qualityScore: 0,
     // Search results don't carry OG images (not indexed in the search doc).
     imageUrl: null,
     // Campus lane fields are not indexed in the search doc yet.

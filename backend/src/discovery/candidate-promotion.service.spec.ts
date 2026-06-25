@@ -12,6 +12,7 @@ type Candidate = {
   summary: string;
   discount: string;
   confidence: number;
+  qualityScore: number;
   verificationStatus: string;
   fingerprint: string;
   expiration: null;
@@ -43,6 +44,7 @@ function deps(
     summary: 's',
     discount: '20%',
     confidence: 90,
+    qualityScore: 80,
     verificationStatus: 'pending',
     fingerprint: 'fp1',
     expiration: null,
@@ -75,11 +77,12 @@ function deps(
   };
 }
 
-function build(d: ReturnType<typeof deps>) {
+function build(d: ReturnType<typeof deps>, minQuality = 15) {
   return new CandidatePromotionService(
     d.prisma as unknown as PrismaService,
     d.search as unknown as SearchIndexer,
     80,
+    minQuality,
   );
 }
 
@@ -202,5 +205,26 @@ describe('CandidatePromotionService.promoteRegion', () => {
         campusDealType: null,
       }),
     );
+  });
+
+  it('copies qualityScore from the candidate onto the created deal', async () => {
+    const d = deps({ candidate: { qualityScore: 73 } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(expect.objectContaining({ qualityScore: 73 }));
+  });
+
+  it('orders the promotion query by qualityScore desc and filters by the quality floor', async () => {
+    const d = deps();
+    await build(d, 20).promoteRegion('atlanta');
+    const findArg = (
+      d.prisma.dealCandidate.findMany.mock.calls[0] as unknown as [
+        { where: { qualityScore: { gte: number } }; orderBy: { qualityScore: string } },
+      ]
+    )[0];
+    expect(findArg.orderBy).toEqual({ qualityScore: 'desc' });
+    expect(findArg.where.qualityScore).toEqual({ gte: 20 });
   });
 });

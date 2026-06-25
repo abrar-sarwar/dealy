@@ -181,4 +181,82 @@ describe('GeminiService.extractDeals — schema includes campus_slug + requires_
     expect(capturedPrompt).toContain('faculty_staff');
     expect(capturedPrompt).toContain('campus_community');
   });
+
+  it('dealExtractionSchema includes area_relevance, concrete_offer_score, is_vague', async () => {
+    let capturedSchema: Record<string, unknown> | undefined;
+    const client = {
+      generateJson: jest.fn(async (req: { schema: Record<string, unknown> }) => {
+        capturedSchema = req.schema;
+        return { deals: [] };
+      }),
+    };
+    const svc = new GeminiService(client as never, cfg as never);
+    await svc.extractDeals({ content: 'x', sourceUrl: 'https://t.test/s' });
+    const items = (
+      capturedSchema as {
+        properties: {
+          deals: { items: { properties: Record<string, unknown>; required: string[] } };
+        };
+      }
+    ).properties.deals.items;
+    for (const f of ['area_relevance', 'concrete_offer_score', 'is_vague']) {
+      expect(Object.keys(items.properties)).toContain(f);
+      expect(items.required).toContain(f);
+    }
+  });
+});
+
+const areaCtx = {
+  regionSlug: 'gsu',
+  regionName: 'Georgia State University',
+  regionType: 'campus' as const,
+  latitude: 33.753,
+  longitude: -84.385,
+  radiusMiles: 5,
+  desiredCategories: ['food', 'student', 'campus'],
+  campusSlug: 'gsu',
+  campusName: 'Georgia State University',
+  audienceFocus: 'campus_community' as const,
+  sourceGoal: 'student discounts',
+};
+
+describe('GeminiService — area context threading', () => {
+  function capturePrompt() {
+    let prompt = '';
+    const client = {
+      generateJson: jest.fn(async (req: { prompt: string }) => {
+        prompt = req.prompt;
+        return { deals: [], crawl: true, reason: 'r', priority: 5 };
+      }),
+    };
+    return { client, get: () => prompt };
+  }
+
+  it('extractDeals prompt includes the target area/campus and desired categories', async () => {
+    const c = capturePrompt();
+    const svc = new GeminiService(c.client as never, cfg as never);
+    await svc.extractDeals({ content: 'x', sourceUrl: 'https://t.test/s', areaContext: areaCtx });
+    expect(c.get()).toContain('Georgia State University');
+    expect(c.get()).toContain('campus');
+    expect(c.get()).toContain('food');
+    expect(c.get()).toContain('NEVER invent');
+  });
+
+  it('planCrawl prompt includes the area name, desiredCategories, and operator-verified flag', async () => {
+    const c = capturePrompt();
+    const svc = new GeminiService(c.client as never, cfg as never);
+    await svc.planCrawl({
+      sourceType: 'student_discount',
+      url: 'https://t.test/deals',
+      reliabilityScore: 70,
+      averageDealsFound: 3,
+      lastSuccessAt: null,
+      operatorVerified: false,
+      areaContext: areaCtx,
+    });
+    expect(c.get()).toContain('Georgia State University');
+    expect(c.get()).toContain('food');
+    expect(c.get()).toContain('Operator-verified source: no');
+    expect(c.get()).toContain('AREA + CATEGORY relevance');
+  });
 });

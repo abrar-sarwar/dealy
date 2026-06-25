@@ -21,6 +21,9 @@ export class CandidatePromotionService {
     private readonly prisma: PrismaService,
     private readonly search: SearchIndexer,
     private readonly minConfidence: number,
+    /** Candidates below this quality floor are dropped (e.g. "Purchase a Gift
+     *  Card"-tier). Injected so the threshold is config, not a magic literal. */
+    private readonly minQualityScore: number = 15,
   ) {}
 
   async promoteRegion(
@@ -37,8 +40,12 @@ export class CandidatePromotionService {
         regionalInventoryId: inventory.id,
         promotedAt: null,
         confidence: { gte: this.minConfidence },
+        // Drop sub-floor junk ("Purchase a Gift Card"-tier) before promotion.
+        qualityScore: { gte: this.minQualityScore },
         verificationStatus: { notIn: ['invalid', 'expired'] },
       },
+      // Highest-quality candidates win promotion first.
+      orderBy: { qualityScore: 'desc' },
     });
     const categories = new Map(
       (await this.prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [
@@ -81,7 +88,7 @@ export class CandidatePromotionService {
           : new Date(now.getTime() + 14 * 86_400_000);
       const deal = await this.prisma.deal.upsert({
         where: { externalId },
-        update: { confidenceScore: Math.round(c.confidence) },
+        update: { confidenceScore: Math.round(c.confidence), qualityScore: c.qualityScore },
         create: {
           externalId,
           title: c.title,
@@ -115,6 +122,7 @@ export class CandidatePromotionService {
           // self-reported verification_status must not grant trust — start pending.
           verificationStatus: 'pending',
           confidenceScore: Math.round(c.confidence),
+          qualityScore: c.qualityScore,
           imageUrl: c.imageUrl,
           campusSlug: c.campusSlug,
           requiresStudentId: c.requiresStudentId,
