@@ -20,6 +20,8 @@ type Candidate = {
   longitude: number | null;
   locationPrecision: string;
   imageUrl: string | null;
+  campusSlug: string | null;
+  requiresStudentId: boolean;
 };
 
 function deps(
@@ -47,6 +49,8 @@ function deps(
     longitude: -84.388,
     locationPrecision: 'approximate',
     imageUrl: null,
+    campusSlug: null,
+    requiresStudentId: false,
     ...over.candidate,
   };
   return {
@@ -136,5 +140,33 @@ describe('CandidatePromotionService.promoteRegion', () => {
     expect(d.prisma.deal.upsert).not.toHaveBeenCalled();
     expect(d.prisma.dealCandidate.update).not.toHaveBeenCalled();
     expect(out.skipped).toBe(1);
+  });
+
+  it('carries campusSlug and requiresStudentId from the candidate to the created deal', async () => {
+    const d = deps({ candidate: { campusSlug: 'gsu', requiresStudentId: true } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        campusSlug: 'gsu',
+        requiresStudentId: true,
+      }),
+    );
+  });
+
+  it('carries null campusSlug and false requiresStudentId when candidate has no campus', async () => {
+    const d = deps({ candidate: { campusSlug: null, requiresStudentId: false } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        campusSlug: null,
+        requiresStudentId: false,
+      }),
+    );
   });
 });

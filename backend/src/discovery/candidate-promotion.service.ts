@@ -116,6 +116,8 @@ export class CandidatePromotionService {
           verificationStatus: 'pending',
           confidenceScore: Math.round(c.confidence),
           imageUrl: c.imageUrl,
+          campusSlug: c.campusSlug,
+          requiresStudentId: c.requiresStudentId,
           crawlSourceId: c.sourceId,
           fingerprint: c.fingerprint,
           startAt: null,
