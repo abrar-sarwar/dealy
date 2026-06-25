@@ -377,8 +377,13 @@ struct DealsMapView: View {
                     guard let id else { return }
                     withAnimation(.easeInOut) { proxy.scrollTo(id, anchor: .center) }
                 }
+                // Pin the strip to one card row — without this the horizontal
+                // ScrollView expands to fill all the leftover vertical space (the
+                // "big empty box"). The map takes everything below.
+                .frame(height: 62)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .background(Theme.background)
     }
 
