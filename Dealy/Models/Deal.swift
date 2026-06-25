@@ -55,6 +55,9 @@ struct Deal: Identifiable, Codable, Hashable {
     var audience: String = "general"
     /// Finer-grained campus deal type (e.g. "student_discount", "campus_perk").
     var campusDealType: String? = nil
+    /// Backend deal-quality score (0–100): concrete offers high, vague/junk low.
+    /// Server-controlled; drives the "Best" ranking. Defaults 0 when unscored.
+    var qualityScore: Double = 0
 
     /// Campus badge label (e.g. "GSU") when this deal is tied to a campus, else nil.
     var campusBadge: String? { campusSlug.map { $0.uppercased() } }

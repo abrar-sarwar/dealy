@@ -2,9 +2,14 @@ import SwiftUI
 import MapKit
 import UIKit
 
-/// Interactive Map tab. A scrollable strip of fresh deals sits above a live map
-/// of your nearby deals. The map centers on your ACTUAL device location (When-In-
-/// Use); pins scatter around it. Tap a pin to preview, tap the preview for detail.
+/// Local-deal browser BOUNDED to the Dealy service zone. By default it frames the
+/// whole zone and shows EVERY mappable deal in the area — no small default radius.
+/// All filtering (category, radius, precision, sort, student/campus/image toggles)
+/// lives behind a single Filter button + sheet, so the map chrome stays minimal:
+/// a Filter button, a recenter button, a deal-count label, and the bottom strip.
+/// Tapping a pin selects it and scrolls the strip to the matching card; the two
+/// stay in sync. Pins are category- and precision-aware (exact = solid, approximate
+/// = faded + dashed). The camera cannot pan/zoom out past the metro.
 struct DealsMapView: View {
     @Environment(AppState.self) private var app
 
@@ -14,6 +19,9 @@ struct DealsMapView: View {
     @State private var detailDeal: Deal?
     @State private var isLocating = false
 
+    @State private var filter = MapFilterState()
+    @State private var showingFilters = false
+
     /// Map center / pin anchor: the real device location once resolved, else the
     /// current discovery center as a fallback.
     private var center: CLLocationCoordinate2D {
@@ -21,39 +29,43 @@ struct DealsMapView: View {
                                          longitude: app.discovery.center.longitude)
     }
 
-    /// Display radius (miles): hugs the nearest deals so the range ring frames the
-    /// closest results, capped at the user's discovery radius.
-    private var displayRadiusMiles: Double {
-        let farthest = mappable.last?.distanceMiles ?? 1
-        return min(Double(app.discovery.radiusMiles), max(farthest * 1.35, 1))
+    /// All physical, active deals from the curated local feed, nearest-first.
+    private var mappableAll: [Deal] { MapCameraModel.mappable(app.localDeals) }
+
+    /// Filter lanes worth offering (only those matching ≥1 mappable deal), plus All.
+    private var availableCategories: [DealCategoryFilter] {
+        DealFilter.availableFilters(in: mappableAll)
     }
 
-    /// Radius (meters) for the on-map range circle.
-    private var radiusMeters: CLLocationDistance { displayRadiusMiles * 1609.34 }
-
-    /// Physical (mappable) deals within the active range, nearest-first. Sourced
-    /// from the curated local feed (the deals shown inside the range circle).
-    private var mappable: [Deal] {
-        DealFilter.active(app.localDeals)
-            .filter { !$0.isOnline }
-            .filter { ($0.distanceMiles ?? 0) <= Double(app.discovery.radiusMiles) }
-            .sorted { ($0.distanceMiles ?? .greatestFiniteMagnitude) < ($1.distanceMiles ?? .greatestFiniteMagnitude) }
+    /// The deals matching the active filter, ordered by the active sort.
+    private var visible: [Deal] {
+        let filtered = filter.apply(to: mappableAll)
+        let ranked = DealRanker.diversified(
+            DealRanker.rank(filtered,
+                            interests: app.interests,
+                            campus: app.currentCampus,
+                            radius: filter.radiusMiles))
+        return filter.sort.ordered(filtered, ranked: ranked)
     }
 
-    /// Closest deals for the strip above the map.
-    private var freshDeals: [Deal] { Array(mappable.prefix(10)) }
+    private var countLabel: MapCameraModel.CountLabel {
+        MapCameraModel.countLabel(shown: visible, totalMappable: mappableAll)
+    }
 
-    private func region() -> MKCoordinateRegion {
-        let delta = max(0.02, displayRadiusMiles * 2.6 / 69.0)
-        return MKCoordinateRegion(center: center,
-                                  span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta))
+    /// Bounds: the camera is locked to the Dealy service-zone box and cannot zoom
+    /// out past the metro.
+    private var cameraBounds: MapCameraBounds {
+        MapCameraBounds(
+            centerCoordinateBounds: MapCameraModel.zoneRegion(center: center),
+            maximumDistance: MapCameraModel.zoneMaxDistanceMeters
+        )
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                freshStrip
                 mapArea
+                dealStrip
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -65,43 +77,222 @@ struct DealsMapView: View {
                     .accessibilityLabel("Center on my location")
                 }
             }
+            .sheet(isPresented: $showingFilters) {
+                MapFilterSheet(state: $filter, availableCategories: availableCategories)
+            }
             .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
             .onAppear { resolveLocation(force: false) }
             .task {
                 await app.loadLocalDeals()
-                withAnimation { position = .region(region()) }
+                reframe()
             }
+            .onChange(of: filter) { _, _ in clampSelection(); reframe() }
         }
     }
 
-    // MARK: Fresh deals strip
+    // MARK: Map
 
-    private var freshStrip: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Fresh deals nearby")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Theme.primaryText)
-                .padding(.horizontal, Spacing.lg)
-                .padding(.top, 6)
+    private var mapArea: some View {
+        Map(position: $position, bounds: cameraBounds) {
+            Annotation("You", coordinate: center) { centerPin }
+                .annotationTitles(.hidden)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Spacing.sm) {
-                    ForEach(freshDeals) { deal in
-                        freshCard(deal)
-                    }
+            ForEach(visible) { deal in
+                Annotation(deal.merchant, coordinate: DealGeo.coordinate(for: deal, around: center)) {
+                    DealMapPin(deal: deal, selected: selectedID == deal.id)
+                        .onTapGesture { select(deal.id) }
                 }
-                .padding(.horizontal, Spacing.lg)
-                .padding(.bottom, 8)
+                .annotationTitles(.hidden)
+            }
+        }
+        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapControls { MapCompass() }
+        .overlay(alignment: .top) { permissionBanner }
+        .overlay(alignment: .topLeading) { filterButton }
+        .overlay(alignment: .topTrailing) { countOverlay }
+        .overlay(alignment: .bottomTrailing) { recenterPill }
+        .overlay { emptyOverlay }
+    }
+
+    @ViewBuilder private var permissionBanner: some View {
+        if app.locationAuthorization == .denied || app.locationAuthorization == .restricted {
+            Button { openSettings() } label: {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "location.slash.fill")
+                    Text("Location is off — tap to share your location")
+                        .font(.caption.weight(.semibold))
+                    Image(systemName: "arrow.up.forward")
+                }
+                .foregroundStyle(.white)
+                .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
+                .background(Theme.primary, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, Spacing.xs)
+        }
+    }
+
+    /// The single Filter entry point. Its label reflects the active filter state
+    /// ("Filters" by default, else a summary like "Food" / "5 mi" / "3 filters").
+    private var filterButton: some View {
+        Button {
+            showingFilters = true
+            Haptics.selection()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: filter.isDefault
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+                    .font(.caption.weight(.bold))
+                Text(filter.summary).font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(filter.isDefault ? Theme.primary : .white)
+            .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
+            .background(
+                Capsule().fill(filter.isDefault
+                               ? AnyShapeStyle(.ultraThinMaterial)
+                               : AnyShapeStyle(Theme.primary))
+            )
+            .overlay(Capsule().stroke(Theme.primary.opacity(0.25), lineWidth: filter.isDefault ? 1 : 0))
+            .dealyShadow(.soft)
+        }
+        .buttonStyle(.plain)
+        .padding(Spacing.sm)
+        .accessibilityLabel("Filters")
+        .accessibilityValue(filter.isDefault ? "None active" : filter.summary)
+    }
+
+    /// Deal-count label over the map, reflecting the active filter.
+    @ViewBuilder private var countOverlay: some View {
+        if !mappableAll.isEmpty {
+            let label = countLabel
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(label.primary)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                if let breakdown = label.breakdown {
+                    Text(breakdown)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                }
+                if let hint = label.hint {
+                    Text(hint)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.primary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
+            .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            .padding(Spacing.sm)
+            .frame(maxWidth: 220, alignment: .trailing)
+        }
+    }
+
+    /// "Back to Dealy zone" recenter pill — reframes to the zone-fit region (the
+    /// whole area showing all current deals). Never fights manual gestures.
+    private var recenterPill: some View {
+        Button { reframe(); Haptics.selection() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "scope").font(.caption2.weight(.bold))
+                Text("Back to Dealy zone").font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(Theme.primary)
+            .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Theme.primary.opacity(0.25), lineWidth: 1))
+            .dealyShadow(.soft)
+        }
+        .buttonStyle(.plain)
+        .padding(Spacing.sm)
+        .accessibilityLabel("Back to Dealy zone")
+    }
+
+    private var centerPin: some View {
+        ZStack {
+            Circle().fill(Theme.primary.opacity(0.25)).frame(width: 30, height: 30)
+            Circle().fill(.white).frame(width: 18, height: 18).dealyShadow(.soft)
+            Circle().fill(Theme.primary).frame(width: 11, height: 11)
+        }
+        .accessibilityLabel("Your location")
+    }
+
+    @ViewBuilder private var emptyOverlay: some View {
+        if visible.isEmpty && !mappableAll.isEmpty {
+            VStack(spacing: Spacing.sm) {
+                Image(systemName: "mappin.slash")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(Theme.mutedText)
+                Text("No deals match these filters")
+                    .font(.headline).foregroundStyle(Theme.primaryText)
+                    .multilineTextAlignment(.center)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { filter = MapFilterState() }
+                    Haptics.selection()
+                } label: {
+                    InfoChip(symbol: "arrow.counterclockwise", text: "Reset filters", filled: true)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(Spacing.lg)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
+            .padding(Spacing.lg)
+        } else if mappableAll.isEmpty {
+            VStack(spacing: Spacing.sm) {
+                Image(systemName: "mappin.slash")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(Theme.mutedText)
+                Text("No deals to map here")
+                    .font(.headline).foregroundStyle(Theme.primaryText)
+            }
+            .padding(Spacing.lg)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
+            .padding(Spacing.lg)
+        }
+    }
+
+    // MARK: Deal strip (all filtered deals, lazily rendered, selection-coupled)
+
+    private var dealStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !visible.isEmpty {
+                Text("\(visible.count) \(visible.count == 1 ? "deal" : "deals") · \(filter.sort.label)")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.top, 8)
+            }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: Spacing.sm) {
+                        ForEach(visible) { deal in
+                            stripCard(deal)
+                                .id(deal.id)
+                        }
+                    }
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.vertical, 8)
+                }
+                .onChange(of: selectedID) { _, id in
+                    guard let id else { return }
+                    withAnimation(.easeInOut) { proxy.scrollTo(id, anchor: .center) }
+                }
             }
         }
         .background(Theme.background)
     }
 
-    /// Compact horizontal card for the fresh-deals strip (keeps the top small).
-    private func freshCard(_ deal: Deal) -> some View {
-        Button {
-            app.recordOpened(deal.id)
-            detailDeal = deal
+    /// Compact card; highlights when its pin is selected. Tapping selects (coupling
+    /// pin + strip) on first tap and opens detail on the selected card.
+    private func stripCard(_ deal: Deal) -> some View {
+        let isSelected = selectedID == deal.id
+        return Button {
+            if isSelected {
+                app.recordOpened(deal.id)
+                detailDeal = deal
+            } else {
+                select(deal.id)
+            }
         } label: {
             HStack(spacing: Spacing.sm) {
                 DealImage(deal: deal)
@@ -126,128 +317,42 @@ struct DealsMapView: View {
             }
             .padding(8)
             .background(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).stroke(Theme.separator, lineWidth: 0.75))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                    .stroke(isSelected ? Theme.primary : Theme.separator, lineWidth: isSelected ? 2 : 0.75)
+            )
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens deal details")
+        .accessibilityHint(isSelected ? "Opens deal details" : "Selects this deal on the map")
     }
 
-    // MARK: Map
+    // MARK: Selection + framing
 
-    private var mapArea: some View {
-        Map(position: $position) {
-            // Range ring: deals shown are within this radius of your location.
-            MapCircle(center: center, radius: radiusMeters)
-                .foregroundStyle(Theme.primary.opacity(0.12))
-                .stroke(Theme.primary.opacity(0.75), lineWidth: 2.5)
-
-            Annotation("You", coordinate: center) { centerPin }
-                .annotationTitles(.hidden)
-
-            ForEach(mappable) { deal in
-                Annotation(deal.merchant, coordinate: DealGeo.coordinate(for: deal, around: center)) {
-                    DealMapPin(deal: deal, selected: selectedID == deal.id)
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                selectedID = (selectedID == deal.id) ? nil : deal.id
-                            }
-                            Haptics.selection()
-                        }
-                }
-                .annotationTitles(.hidden)
-            }
+    private func select(_ id: String) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            selectedID = (selectedID == id) ? nil : id
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
-        .mapControls { MapCompass() }
-        .overlay(alignment: .top) { VStack(spacing: Spacing.xs) { permissionBanner; topNote } }
-        .overlay(alignment: .bottom) { selectedCard }
-        .overlay { emptyOverlay }
+        Haptics.selection()
     }
 
-    @ViewBuilder private var permissionBanner: some View {
-        if app.locationAuthorization == .denied || app.locationAuthorization == .restricted {
-            Button { openSettings() } label: {
-                HStack(spacing: Spacing.xs) {
-                    Image(systemName: "location.slash.fill")
-                    Text("Location is off — tap to share your location")
-                        .font(.caption.weight(.semibold))
-                    Image(systemName: "arrow.up.forward")
-                }
-                .foregroundStyle(.white)
-                .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
-                .background(Theme.primary, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .padding(.top, Spacing.xs)
+    /// Drop a stale selection when the filter hides the selected deal.
+    private func clampSelection() {
+        if let id = selectedID, !visible.contains(where: { $0.id == id }) {
+            selectedID = nil
         }
+    }
+
+    /// Reframe to the zone-fit region: the whole area showing every visible deal,
+    /// capped to the zone box.
+    private func reframe() {
+        let region = MapCameraModel.zoneFitRegion(center: center, deals: visible)
+        withAnimation { position = .region(region) }
     }
 
     private func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
-    }
-
-    private var centerPin: some View {
-        ZStack {
-            Circle().fill(Theme.primary.opacity(0.25)).frame(width: 30, height: 30)
-            Circle().fill(.white).frame(width: 18, height: 18).dealyShadow(.soft)
-            Circle().fill(Theme.primary).frame(width: 11, height: 11)
-        }
-        .accessibilityLabel("Your location")
-    }
-
-    /// Caption that honestly reflects the precision mix of the pinned deals.
-    private var locationNote: String {
-        let n = mappable.count
-        let approx = mappable.filter { $0.isApproximateLocation }.count
-        if approx == 0 { return "Exact locations · \(n) deals" }
-        if approx == n { return "Approximate locations · \(n) deals" }
-        return "Exact + approximate locations · \(n) deals"
-    }
-
-    @ViewBuilder private var topNote: some View {
-        if !mappable.isEmpty {
-            Text(locationNote)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Theme.mutedText)
-                .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(.top, Spacing.xs)
-        }
-    }
-
-    @ViewBuilder private var selectedCard: some View {
-        if let id = selectedID, let deal = mappable.first(where: { $0.id == id }) {
-            DealRowCard(deal: deal) {
-                app.recordOpened(deal.id)
-                detailDeal = deal
-            }
-            .padding(.horizontal, Spacing.lg)
-            .padding(.bottom, Spacing.sm)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    @ViewBuilder private var emptyOverlay: some View {
-        if mappable.isEmpty {
-            VStack(spacing: Spacing.sm) {
-                Image(systemName: "mappin.slash")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(Theme.mutedText)
-                Text("No deals to map here")
-                    .font(.headline).foregroundStyle(Theme.primaryText)
-                Text(app.discovery.mode == .anywhere
-                     ? "Online deals don’t have a location. Switch to Nearby to see deals on the map."
-                     : "No nearby physical deals at this radius. Widen your range from the Home filter.")
-                    .font(.subheadline).foregroundStyle(Theme.mutedText)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Spacing.xl)
-            }
-            .padding(Spacing.lg)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
-            .padding(Spacing.lg)
-        }
     }
 
     // MARK: Actual location
@@ -260,14 +365,14 @@ struct DealsMapView: View {
             if let center = try? await app.resolveDeviceCenter() {
                 anchor = CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude)
             }
-            withAnimation { position = .region(region()) }
+            reframe()
         }
     }
 }
 
-/// Map pin: a category-tinted bubble that grows when selected.
-/// Approximate-location deals render with reduced opacity and a dashed stroke
-/// to signal that the pin placement is region-level, not a real storefront.
+/// Map pin: a category-tinted bubble that grows when selected. Exact-location deals
+/// render solid with a white ring; approximate deals render faded with a thin
+/// dashed ring so the placement reads as region-level, not a real storefront.
 private struct DealMapPin: View {
     let deal: Deal
     let selected: Bool
@@ -275,6 +380,7 @@ private struct DealMapPin: View {
     private var isApproximate: Bool { deal.isApproximateLocation }
     private var size: CGFloat { selected ? 46 : 36 }
     private var iconSize: CGFloat { selected ? 19 : 15 }
+    private var symbol: String { MapCameraModel.pinSymbol(for: deal) }
 
     var body: some View {
         ZStack {
@@ -285,14 +391,14 @@ private struct DealMapPin: View {
                 .overlay {
                     if isApproximate {
                         Circle()
-                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                             .foregroundStyle(.white.opacity(0.85))
                     } else {
                         Circle().stroke(.white, lineWidth: 2.5)
                     }
                 }
                 .dealyShadow(.soft)
-            Image(systemName: deal.category.symbol)
+            Image(systemName: symbol)
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(.white.opacity(isApproximate ? 0.7 : 1.0))
         }

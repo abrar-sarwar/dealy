@@ -7,6 +7,7 @@ struct ExploreView: View {
     @State private var activeCategory: DealCategory?
     @State private var selectedDeal: Deal?
     @State private var showLocation = false
+    @State private var localFilter: DealCategoryFilter = .all
 
     /// Deals available for browsing & search. The service already returns
     /// discovery-eligible inventory, so we only drop expired ones here.
@@ -50,6 +51,35 @@ struct ExploreView: View {
             .task { await app.loadTrendingDeals() }
             .task { await app.loadLocalDeals() }
             .task { await app.loadMissedDeals() }
+        }
+    }
+
+    // MARK: Local filter chips
+
+    /// A horizontal row of category filter chips over the Local Deals section.
+    /// Only chips that match ≥1 local deal are shown, each with a live count.
+    private var localFilterChips: some View {
+        let filters = DealFilter.availableFilters(in: app.localDeals)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Spacing.xs) {
+                ForEach(filters) { filter in
+                    let count = DealFilter.count(app.localDeals, for: filter)
+                    let selected = localFilter == filter
+                    Button {
+                        Haptics.selection()
+                        withAnimation(.snappy) { localFilter = filter }
+                    } label: {
+                        InfoChip(symbol: filter.symbol,
+                                 text: "\(filter.label) · \(count)",
+                                 tint: Theme.primary,
+                                 filled: selected)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(filter.label), \(count) deals")
+                    .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+                }
+            }
+            .padding(.horizontal, Spacing.lg)
         }
     }
 
@@ -149,7 +179,11 @@ struct ExploreView: View {
                 selectedDeal = deal
             }
             // Curated local deals within ~15mi (restaurants, cafés, student spots).
-            LocalDealsSection(deals: app.localDeals) { deal in
+            // Filterable by a coarse, user-facing category chip row.
+            if !app.localDeals.isEmpty {
+                localFilterChips
+            }
+            LocalDealsSection(deals: DealFilter.byCategoryFilter(app.localDeals, localFilter)) { deal in
                 app.recordOpened(deal.id)
                 selectedDeal = deal
             }
