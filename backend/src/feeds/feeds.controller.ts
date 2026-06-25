@@ -44,6 +44,16 @@ export class FeedsController {
     return this.feeds.local(query);
   }
 
+  @Public()
+  @Get('missed')
+  @ApiOperation({
+    summary:
+      'Recently-expired curated local deals (last 7 days), most-recent first — never redeemable',
+  })
+  missed(@Query() query: NearbyFeedQuery) {
+    return this.feeds.missed(query);
+  }
+
   @ApiBearerAuth('supabase')
   @Get('recommended')
   @ApiOperation({ summary: 'Personalized, explainable recommendations (with reasons)' })

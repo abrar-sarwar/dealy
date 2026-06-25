@@ -9,6 +9,9 @@ import type { FeedTier } from './feed-tier';
 
 const METERS_PER_MILE = 1609.344;
 
+/** How many days back to include in the recently-missed feed. */
+const MISSED_WINDOW_DAYS = 7;
+
 /** Freshness offset: each hour since creation reduces the effective distance by
  * this many metres, so a much-fresher deal ranks ahead of a marginally-closer
  * stale one. Only the DIFFERENCE in created_at between deals matters, so the
@@ -296,6 +299,53 @@ export class FeedsService {
       .sort((a, b) => b.savingsPercentage - a.savingsPercentage || b.dealScore - a.dealScore)
       .slice(0, limit);
     return { items, nextCursor: null };
+  }
+
+  /**
+   * Recently-Missed Deals: curated (editorial), approved, published, PHYSICAL
+   * deals within the radius that EXPIRED within the last MISSED_WINDOW_DAYS days.
+   * Sorted most-recently-expired first so the most relevant near-misses appear at
+   * the top. NOT redeemable — the client uses this feed for "You missed out"
+   * prompts only.
+   */
+  async missed(q: NearbyFeedQuery): Promise<DealPage> {
+    const limit = q.limit ?? 12;
+    const radiusMeters = (q.radiusMiles ?? 15) * METERS_PER_MILE;
+    const center = Prisma.sql`ST_SetSRID(ST_MakePoint(${q.lng}, ${q.lat}), 4326)::geography`;
+    const categoryFilter = q.category
+      ? Prisma.sql`AND d.category_id = (SELECT id FROM categories WHERE slug = ${q.category})`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<NearbyRow[]>(Prisma.sql`
+      SELECT d.id, d.title, d.merchant, cat.slug AS category_slug,
+             d.short_description, d.detailed_description, d.terms,
+             d.current_price_minor, d.original_price_minor, d.currency,
+             d.deal_score, d.is_online, d.is_student_only, d.coupon_code, d.destination_url,
+             d.redemption_brand,
+             d.latitude, d.longitude, d.location_precision, d.location_tags, d.visual_seed,
+             d.verification_status, d.last_verified_at, d.source_trust, d.moderation_status,
+             d.status, d.confidence_score, d.image_url, d.created_at, d.start_at, d.expires_at,
+             ST_Distance(d.geog, ${center}) AS distance_meters,
+             (${Prisma.raw(FEED_TIER_CASE_SQL)})::int AS tier_rank,
+             CASE (${Prisma.raw(FEED_TIER_CASE_SQL)})::int
+               WHEN 0 THEN 'verified' WHEN 1 THEN 'curated'
+               WHEN 2 THEN 'online' ELSE 'community' END AS feed_tier,
+             extract(epoch from d.expires_at)::double precision AS sort_key
+      FROM deals d
+      JOIN categories cat ON cat.id = d.category_id
+      WHERE d.status = 'published'::deal_status
+        AND d.source_trust = 'editorial'::source_trust
+        AND d.moderation_status = 'approved'::moderation_status
+        AND d.is_online = false
+        AND d.geog IS NOT NULL
+        AND d.expires_at <= now()
+        AND d.expires_at > now() - make_interval(days => ${MISSED_WINDOW_DAYS}::int)
+        AND ST_DWithin(d.geog, ${center}, ${radiusMeters})
+        ${categoryFilter}
+      ORDER BY d.expires_at DESC, d.id ASC
+      LIMIT ${limit}
+    `);
+    return { items: rows.map(mapNearbyRow), nextCursor: null };
   }
 
   /**
