@@ -153,21 +153,23 @@ struct DealsMapView: View {
     /// camera keeps the bubble centered so it lines up with the range.
     private var spotlightMask: some View {
         GeometryReader { geo in
-            let diameter = min(geo.size.width, geo.size.height) * 0.62
+            let side = min(geo.size.width, geo.size.height)
+            let diameter = side * 0.62
             ZStack {
-                Rectangle()
-                    .fill(.black.opacity(0.78))
-                    .mask {
-                        Rectangle()
-                            .overlay {
-                                Circle()
-                                    .frame(width: diameter, height: diameter)
-                                    .blendMode(.destinationOut)
-                            }
-                            .compositingGroup()
-                    }
+                // Soft radial fade: clear inside the bubble, gently fading to a light
+                // ~0.3 dim outside (you can still see beyond — just de-emphasized).
+                RadialGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .clear, location: 0.80),
+                        .init(color: .black.opacity(0.30), location: 1.0),
+                    ]),
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: diameter / 2 * 1.18
+                )
                 Circle()
-                    .stroke(Theme.primary, lineWidth: 3)
+                    .stroke(Theme.primary.opacity(0.8), lineWidth: 2.5)
                     .frame(width: diameter, height: diameter)
             }
             .frame(width: geo.size.width, height: geo.size.height)
