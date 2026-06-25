@@ -837,6 +837,16 @@ model Place {
   enrichedAt            DateTime? @map("enriched_at")
   enrichmentHash        String?   @map("enrichment_hash")
 
+  // Real Google Places photos (keyless, client-loadable URLs). Populated by a
+  // capped batch job — NEVER live-fetched on app open. See docs/places-photos.md.
+  primaryPhotoReference String?   @map("primary_photo_reference")
+  primaryPhotoUrl       String?   @map("primary_photo_url")
+  photoAttribution      String?   @map("photo_attribution")
+  photoSource           String?   @map("photo_source")
+  photoFetchedAt        DateTime? @map("photo_fetched_at")
+  imageStatus           String    @default("none") @map("image_status")
+  logoUrl               String?   @map("logo_url")
+
   crawlSources   CrawlSource[]
   dealCandidates DealCandidate[]
   deals          Deal[]
@@ -844,6 +854,7 @@ model Place {
   @@index([regionSlug, categorySlug])
   @@index([latitude, longitude])
   @@index([enrichedAt])
+  @@index([imageStatus])
   @@map("places")
 }
 

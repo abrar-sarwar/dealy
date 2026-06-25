@@ -17,6 +17,10 @@ struct Place: Identifiable, Equatable, Sendable {
     let vibeTags: [String]
     let studentValueScore: Double?
     let confidenceLabel: String?
+    /// Real remote photo URL (keyless `lh3.googleusercontent.com`) when the place has
+    /// a resolved image — a real place/food photo, NOT a logo. nil → `CategoryArtwork`.
+    let primaryPhotoUrl: String?
+    let imageStatus: String?
 
     /// Deterministic seed for `CategoryArtwork`, derived from the stable id so the
     /// same place always renders the same artwork.
@@ -27,6 +31,30 @@ struct Place: Identifiable, Equatable, Sendable {
     /// Whether this place can be navigated to (has resolvable coordinates).
     var hasCoordinates: Bool {
         latitude != nil && longitude != nil
+    }
+
+    /// Memberwise init with defaults for the photo fields so existing call sites
+    /// (mock fixtures, tests) that predate the "real photos" upgrade keep compiling.
+    init(id: String, name: String, category: DealCategory, priceBucket: String?,
+         rating: Double?, whyRecommended: String?, bestFor: String?, address: String?,
+         latitude: Double?, longitude: Double?, vibeTags: [String],
+         studentValueScore: Double?, confidenceLabel: String?,
+         primaryPhotoUrl: String? = nil, imageStatus: String? = nil) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.priceBucket = priceBucket
+        self.rating = rating
+        self.whyRecommended = whyRecommended
+        self.bestFor = bestFor
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.vibeTags = vibeTags
+        self.studentValueScore = studentValueScore
+        self.confidenceLabel = confidenceLabel
+        self.primaryPhotoUrl = primaryPhotoUrl
+        self.imageStatus = imageStatus
     }
 }
 
@@ -76,6 +104,8 @@ struct PlaceCardDTO: Decodable {
     let vibeTags: [String]?
     let studentValueScore: Double?
     let confidenceLabel: String?
+    let primaryPhotoUrl: String?
+    let imageStatus: String?
 
     /// Map to the domain `Place`. Unknown/absent category slugs fall back to `.food`.
     func toPlace() -> Place {
@@ -92,7 +122,9 @@ struct PlaceCardDTO: Decodable {
             longitude: longitude,
             vibeTags: vibeTags ?? [],
             studentValueScore: studentValueScore,
-            confidenceLabel: confidenceLabel
+            confidenceLabel: confidenceLabel,
+            primaryPhotoUrl: primaryPhotoUrl,
+            imageStatus: imageStatus
         )
     }
 }

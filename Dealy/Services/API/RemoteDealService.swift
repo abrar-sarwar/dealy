@@ -31,6 +31,26 @@ final class RemoteDealService: DealServicing, PlaceFeedServicing {
         }
     }
 
+    /// Bounded (≤40) map markers for the user's location. The backend resolves
+    /// `lat`/`lng` to its nearest region and returns a JSON array of markers.
+    /// Failures bubble up as `DealServiceError.unavailable` so the map degrades
+    /// gracefully (no markers) without distinguishing transport vs. decode.
+    func fetchPlaceMarkers(latitude: Double, longitude: Double) async throws -> [PlaceMarker] {
+        do {
+            let markers = try await client.get(
+                "/v1/feeds/places/map",
+                query: [
+                    URLQueryItem(name: "lat", value: String(latitude)),
+                    URLQueryItem(name: "lng", value: String(longitude)),
+                ],
+                as: [PlaceMarkerDTO].self
+            )
+            return markers.map { $0.toMarker() }
+        } catch {
+            throw DealServiceError.unavailable
+        }
+    }
+
     func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
         do {
             switch request {

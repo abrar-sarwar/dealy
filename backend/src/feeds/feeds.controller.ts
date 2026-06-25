@@ -88,6 +88,40 @@ export class FeedsController {
   }
 
   @Public()
+  @Get('places/map')
+  @ApiOperation({
+    summary:
+      'Map-ready place markers near a point: bounded (default ~40), with markerKind + keyless ' +
+      'primaryPhotoUrl. Read-only, no live AI or photo fetching. Pass lat+lng (resolves region), ' +
+      'optional radiusMiles, optional limit.',
+  })
+  async placesMap(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radiusMiles') radiusMiles?: string,
+    @Query('limit') limit?: string,
+    @Query('region') region?: string,
+  ) {
+    const latitude = lat != null ? Number(lat) : NaN;
+    const longitude = lng != null ? Number(lng) : NaN;
+    const hasPoint = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+    let resolved = region;
+    if (!resolved && hasPoint) {
+      resolved = (await this.placeFeed.resolveRegion({ latitude, longitude })) ?? undefined;
+    }
+    if (!resolved) return [];
+
+    const radius = radiusMiles != null ? Number(radiusMiles) : undefined;
+    const lim = limit != null ? Number(limit) : undefined;
+    return this.placeFeed.mapMarkers(resolved, {
+      center: hasPoint ? { latitude, longitude } : undefined,
+      radiusMiles: Number.isFinite(radius) ? radius : undefined,
+      limit: Number.isFinite(lim) ? lim : undefined,
+    });
+  }
+
+  @Public()
   @Get('trending')
   @ApiOperation({
     summary: 'Cross-campus trending deals (high-value/urgent, location-independent)',

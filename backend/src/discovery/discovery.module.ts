@@ -26,6 +26,8 @@ import { PlaceDiscoveryService } from './place-discovery.service';
 import { PlaceCrawlEnrollmentService } from './place-crawl-enrollment.service';
 import { PlaceEnrichmentService, type EnrichmentConfig } from './place-enrichment.service';
 import { PlaceFeedService } from './place-feed.service';
+import { PlacePhotoService } from './place-photo.service';
+import { placesPhotosConfig } from '../config/places-photos';
 import { GeminiClient } from '../services/gemini/gemini.client';
 
 @Module({
@@ -159,6 +161,15 @@ import { GeminiClient } from '../services/gemini/gemini.client';
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) => new PlaceFeedService(prisma),
     },
+    {
+      provide: PlacePhotoService,
+      inject: [PrismaService, GooglePlacesService, ConfigService],
+      useFactory: (
+        prisma: PrismaService,
+        places: GooglePlacesService,
+        config: ConfigService<Env, true>,
+      ) => new PlacePhotoService(prisma, places, placesPhotosConfig(config)),
+    },
   ],
   exports: [
     DiscoveryService,
@@ -168,6 +179,7 @@ import { GeminiClient } from '../services/gemini/gemini.client';
     PlaceCrawlEnrollmentService,
     PlaceEnrichmentService,
     PlaceFeedService,
+    PlacePhotoService,
   ],
 })
 export class DiscoveryModule {}

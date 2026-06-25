@@ -19,8 +19,12 @@ struct PlaceTile: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
-                CategoryArtwork(category: place.category, seed: place.visualSeed)
+                // Real place/food photo when present, else generated artwork. Same
+                // clip/fill pattern as DealImage so the photo never stretches/overflows.
+                PlaceImage(photoURL: place.primaryPhotoUrl,
+                           category: place.category, seed: place.visualSeed)
                     .frame(height: 132)
+                    .clipped()
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(place.name)

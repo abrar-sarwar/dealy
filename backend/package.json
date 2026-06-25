@@ -42,7 +42,8 @@
     "discovery:run": "ts-node -r tsconfig-paths/register src/discovery/discovery.cli.ts",
     "places:discover": "ts-node -r tsconfig-paths/register src/discovery/place-discovery.cli.ts",
     "places:crawl": "ts-node -r tsconfig-paths/register src/discovery/place-crawl.cli.ts",
-    "places:enrich": "ts-node -r tsconfig-paths/register src/discovery/place-enrich.cli.ts"
+    "places:enrich": "ts-node -r tsconfig-paths/register src/discovery/place-enrich.cli.ts",
+    "places:photos": "ts-node -r tsconfig-paths/register src/discovery/place-photos.cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

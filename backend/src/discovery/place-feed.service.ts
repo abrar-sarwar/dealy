@@ -24,6 +24,10 @@ export interface FeedPlace {
   whyRecommended: string | null;
   website: string | null;
   enrichedAt: Date | null;
+  // Real Google Places photo (keyless URL) + status — populated by the photo job.
+  primaryPhotoUrl: string | null;
+  imageStatus: string;
+  feedSectionCandidates: string[];
 }
 
 export interface RankedPlace {
@@ -43,6 +47,9 @@ export interface RankedPlace {
   vibeTags: string[];
   studentValueScore: number | null;
   confidenceLabel: string | null;
+  /** Keyless, client-loadable Google Places photo URL (nullable). */
+  primaryPhotoUrl: string | null;
+  imageStatus: string;
 }
 
 export interface FeedSection {
@@ -56,6 +63,58 @@ export interface SectionsOptions {
   limit?: number;
   /** Region centroid for the distance term; omit to skip distance weighting. */
   center?: { latitude: number; longitude: number };
+}
+
+/** Visual kind a map marker renders as — derived from category + top section. */
+export type MarkerKind = 'food' | 'cafe' | 'hidden_gem' | 'student' | 'deal' | 'service';
+
+/** A single bounded, map-ready place marker. */
+export interface MapMarker {
+  id: string;
+  name: string;
+  categorySlug: string;
+  latitude: number;
+  longitude: number;
+  priceBucket: string | null;
+  rating: number | null;
+  whyRecommended: string | null;
+  /** Keyless, client-loadable Google Places photo URL (nullable). */
+  primaryPhotoUrl: string | null;
+  imageStatus: string;
+  markerKind: MarkerKind;
+}
+
+export interface MapOptions {
+  /** Max markers returned (keeps the map uncluttered). Default 40. */
+  limit?: number;
+  /** Origin for distance ranking + optional radius filter. */
+  center?: { latitude: number; longitude: number };
+  /** When set with `center`, drop places farther than this many miles. */
+  radiusMiles?: number;
+}
+
+const DEFAULT_MAP_LIMIT = 40;
+
+/** Derive the marker's visual kind from its top feed-section candidate, then category. */
+function deriveMarkerKind(p: FeedPlace): MarkerKind {
+  const top = p.feedSectionCandidates?.[0];
+  switch (top) {
+    case 'hidden_gem':
+      return 'hidden_gem';
+    case 'student_friendly':
+      return 'student';
+    case 'worth_checking_deals':
+      return 'deal';
+    case 'cheap_eats':
+      return 'food';
+    default:
+      break;
+  }
+  const cat = p.categorySlug;
+  if (cat === 'cafe' || cat === 'coffee') return 'cafe';
+  if (cat === 'food' || cat === 'restaurant') return 'food';
+  if (cat === 'services' || cat === 'service') return 'service';
+  return 'food';
 }
 
 export interface PlaceFeedPrisma {
@@ -178,6 +237,8 @@ export class PlaceFeedService {
           vibeTags: p.vibeTags ?? [],
           studentValueScore: p.studentValueScore,
           confidenceLabel: p.confidenceLabel,
+          primaryPhotoUrl: p.primaryPhotoUrl,
+          imageStatus: p.imageStatus,
         }));
       return { key, title, places: ranked };
     };
@@ -214,5 +275,62 @@ export class PlaceFeedService {
         (p) => p.dealLikelihoodScore ?? 0,
       ),
     ];
+  }
+
+  /**
+   * Bounded, map-ready markers for a region. Reads ONLY stored Place fields —
+   * zero Gemini, zero live photo fetching (the stored keyless `primaryPhotoUrl`
+   * is used as-is). Ranked by distance + rating + value scores and capped so the
+   * map stays uncluttered.
+   */
+  async mapMarkers(regionSlug: string, opts: MapOptions = {}): Promise<MapMarker[]> {
+    const limit = opts.limit ?? DEFAULT_MAP_LIMIT;
+
+    const places = (await this.prisma.place.findMany({
+      where: { regionSlug, enrichedAt: { not: null } },
+    })) as FeedPlace[];
+
+    let center = opts.center;
+    if (!center && this.prisma.regionalInventory) {
+      const region = await this.prisma.regionalInventory.findUnique({ where: { regionSlug } });
+      if (region?.latitude != null && region.longitude != null) {
+        center = { latitude: region.latitude, longitude: region.longitude };
+      }
+    }
+
+    // Optional hard radius filter (only meaningful with a center).
+    const within =
+      center && opts.radiusMiles != null
+        ? places.filter((p) => haversineMiles(center!, p) <= opts.radiusMiles!)
+        : places;
+
+    // Composite map value: distance (when centered) + rating + best value score.
+    const valueScore = (p: FeedPlace): number => {
+      const best = Math.max(
+        p.cheapEatsScore ?? 0,
+        p.hiddenGemScore ?? 0,
+        p.studentValueScore ?? 0,
+        p.dealLikelihoodScore ?? 0,
+      );
+      return 0.45 * distanceTerm(p, center) + 0.35 * ratingTerm(p.rating) + 0.2 * best;
+    };
+
+    return within
+      .map((p) => ({ p, score: valueScore(p) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ p }) => ({
+        id: p.id,
+        name: p.name,
+        categorySlug: p.categorySlug,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        priceBucket: p.priceBucket,
+        rating: p.rating,
+        whyRecommended: p.whyRecommended,
+        primaryPhotoUrl: p.primaryPhotoUrl,
+        imageStatus: p.imageStatus,
+        markerKind: deriveMarkerKind(p),
+      }));
   }
 }
