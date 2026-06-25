@@ -39,7 +39,10 @@ struct SwipeCardView: View {
 
     private var dealDetails: some View {
         VStack(alignment: .leading, spacing: 12) {
-            metadataRail
+            HStack(spacing: 8) {
+                metadataRail
+                if deal.isEndingSoon() { EndingSoonBadge() }
+            }
 
             HStack(alignment: .bottom, spacing: Spacing.sm) {
                 VStack(alignment: .leading, spacing: 3) {

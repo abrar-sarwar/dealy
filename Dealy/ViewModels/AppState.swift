@@ -102,8 +102,9 @@ final class AppState {
         do {
             let page = try await dealService.fetchDeals(for: activeRequest)
             guard generation == loadGeneration else { return }
-            allDeals = page.items
-            dealsByID = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
+            let items = DealImageDedup.nullingSharedImages(page.items)
+            allDeals = items
+            dealsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             nearbyCoverage = page.coverage
             loadState = .loaded
         } catch is CancellationError {
@@ -153,8 +154,9 @@ final class AppState {
         do {
             let page = try await dealService.fetchDeals(
                 for: .local(center: persisted.discovery.center, radiusMiles: radiusMiles))
-            localDeals = page.items
-            for deal in page.items { dealsByID[deal.id] = deal }
+            let items = DealImageDedup.nullingSharedImages(page.items)
+            localDeals = items
+            for deal in items { dealsByID[deal.id] = deal }
         } catch {
             localDeals = []
         }

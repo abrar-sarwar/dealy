@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 /// Full deal detail, presented as a sheet. Reads/writes shared state through
 /// AppState so saved/watched/used stay consistent everywhere.
@@ -20,6 +21,13 @@ struct DealDetailView: View {
 
     private var reasons: [MatchReason] {
         DealRanker.reasons(for: deal, interests: app.interests, campus: app.currentCampus)
+    }
+
+    /// The deal's real storefront coordinate, only when the backend reports it
+    /// as exact. Nil for approximate deals — we never navigate to a centroid.
+    private var exactCoordinate: CLLocationCoordinate2D? {
+        guard deal.isExactLocation, let lat = deal.latitude, let lng = deal.longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
 
     private var shareText: String {
@@ -119,6 +127,7 @@ struct DealDetailView: View {
 
     private var chipsRow: some View {
         FlexibleWrap(spacing: Spacing.xs, lineSpacing: Spacing.xs) {
+            if deal.isEndingSoon() { EndingSoonBadge() }
             if deal.verified {
                 VerifiedBadge()
             }
@@ -171,6 +180,15 @@ struct DealDetailView: View {
         .dealyCardSurface()
     }
 
+    /// Honest location caption: exact deals state the storefront distance;
+    /// approximate deals say "Approximate area" and never imply precision.
+    private var locationCaption: String {
+        if deal.isExactLocation {
+            return "\(Format.distance(deal.distanceMiles, isOnline: false)) away · exact location"
+        }
+        return "Approximate area · within ~\(Format.distance(deal.distanceMiles, isOnline: false))"
+    }
+
     private var mapSnippet: some View {
         let coord = DealGeo.coordinate(for: deal, around: app.currentCampus)
         return VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -197,7 +215,7 @@ struct DealDetailView: View {
                 .stroke(Theme.separator, lineWidth: 0.75))
             .allowsHitTesting(false)
             .overlay(alignment: .bottomLeading) {
-                Text("\(Format.distance(deal.distanceMiles, isOnline: false)) from \(app.currentCampus.shortName) · approximate")
+                Text(locationCaption)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
                     .padding(.vertical, 5).padding(.horizontal, Spacing.xs)
@@ -245,6 +263,17 @@ struct DealDetailView: View {
                 Label("Get Deal", systemImage: "arrow.up.right.square.fill")
             }
             .buttonStyle(.primaryDealy)
+
+            if deal.isExactLocation, let coord = exactCoordinate {
+                Button {
+                    DirectionsLauncher.open(to: coord, name: deal.merchant)
+                    Haptics.impact(.light)
+                } label: {
+                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                }
+                .buttonStyle(GhostButtonStyle(fullWidth: true))
+                .accessibilityHint("Opens directions to \(deal.merchant) in Maps")
+            }
 
             if let brand = deal.redemptionBrand {
                 Button {
