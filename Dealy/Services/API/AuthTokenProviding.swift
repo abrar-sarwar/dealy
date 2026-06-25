@@ -31,12 +31,15 @@ enum RemoteComposition {
         baseURL: URL,
         auth: AuthTokenProviding,
         session: URLSession = .shared
-    ) -> (service: DealServicing, recorder: DealInteractionRecording) {
+    ) -> (service: DealServicing, placeFeed: PlaceFeedServicing, recorder: DealInteractionRecording) {
         let client = APIClient(
             baseURL: baseURL,
             session: session,
             tokenProvider: { await auth.currentAccessToken() }
         )
-        return (RemoteDealService(client: client), RemoteInteractionRecorder(client: client))
+        // One RemoteDealService backs both the deal feeds and the place feed (it
+        // conforms to DealServicing + PlaceFeedServicing over the same client).
+        let remote = RemoteDealService(client: client)
+        return (remote, remote, RemoteInteractionRecorder(client: client))
     }
 }

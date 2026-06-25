@@ -17,6 +17,7 @@ struct DealyApp: App {
         let useRemote = apiEnv != nil
         #endif
         let service: DealServicing
+        let placeFeed: PlaceFeedServicing
         let recorder: DealInteractionRecording
         if useRemote {
             // Feeds + interaction events share one authenticated client. The token
@@ -28,13 +29,16 @@ struct DealyApp: App {
                 auth: NoSessionTokenProvider()
             )
             service = composed.service
+            placeFeed = composed.placeFeed
             recorder = composed.recorder
         } else {
             service = MockDealService()
+            placeFeed = MockPlaceFeedService()
             recorder = NoopInteractionRecorder()
         }
         _appState = State(initialValue: AppState(
             dealService: service,
+            placeFeedService: placeFeed,
             locationProvider: CoreLocationProvider(),
             interactionRecorder: recorder,
             nearbyStores: MapKitNearbyStoresService()
