@@ -122,6 +122,26 @@ final class RemoteDealServiceTests: XCTestCase {
         XCTAssertEqual(page.items.map(\.id), ["l1", "l2"])
     }
 
+    func testMissedRoutesToMissedFeedWithCoords() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.responder = { path in
+            XCTAssertEqual(path, "/v1/feeds/missed")
+            // Simulate expired items (expiresAt in the past).
+            return Self.expiredPage(ids: ["m1", "m2"])
+        }
+        let service = RemoteDealService(client: Self.stubbedClient())
+        let center = DiscoveryCenter(latitude: 33.7531, longitude: -84.3857,
+                                     displayName: "Current location", source: .device)
+        let page = try await service.fetchDeals(for: .missed(center: center, radiusMiles: 15))
+        XCTAssertEqual(StubURLProtocol.paths, ["/v1/feeds/missed"])
+        XCTAssertEqual(page.items.map(\.id), ["m1", "m2"])
+        // All items returned by /missed have expiresAt in the past → isExpired == true.
+        XCTAssertTrue(page.items.allSatisfy(\.isExpired),
+                      "every item from /v1/feeds/missed must be expired")
+        XCTAssertTrue(page.items.allSatisfy { !$0.isRedeemable },
+                      "expired deals from /missed must not be redeemable")
+    }
+
     // MARK: Helpers
 
     private static func stubbedClient() -> APIClient {
@@ -129,6 +149,29 @@ final class RemoteDealServiceTests: XCTestCase {
         config.protocolClasses = [StubURLProtocol.self]
         return APIClient(baseURL: URL(string: "https://stub.dealy.test")!,
                          session: URLSession(configuration: config))
+    }
+
+    /// Minimal DealPageDTO JSON with the given ids and an expiry 1 day in the past.
+    private static func expiredPage(ids: [String]) -> Data {
+        let items = ids.map { id in
+            """
+            {
+              "id": "\(id)", "title": "\(id)", "merchant": "M", "category": "food",
+              "currentPrice": 5, "originalPrice": 10, "currency": "USD",
+              "distanceMiles": 1, "dealScore": 80,
+              "isOnline": false, "isStudentOnly": false,
+              "shortDescription": "s", "detailedDescription": "d", "terms": "t",
+              "couponCode": null, "destinationUrl": null,
+              "latitude": null, "longitude": null,
+              "locationTags": ["Atlanta"],
+              "visualSeed": 0,
+              "publishedAt": "2025-01-01T00:00:00Z",
+              "startAt": null,
+              "expiresAt": "2025-01-02T00:00:00Z"
+            }
+            """
+        }.joined(separator: ",")
+        return Data("{\"items\":[\(items)],\"nextCursor\":null}".utf8)
     }
 
     /// Minimal DealPageDTO JSON with the given ids.

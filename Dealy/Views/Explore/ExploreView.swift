@@ -49,6 +49,7 @@ struct ExploreView: View {
             .task { await app.loadStudentDeals() }
             .task { await app.loadTrendingDeals() }
             .task { await app.loadLocalDeals() }
+            .task { await app.loadMissedDeals() }
         }
     }
 
@@ -152,6 +153,8 @@ struct ExploreView: View {
                 app.recordOpened(deal.id)
                 selectedDeal = deal
             }
+            // Recently-expired local deals — visible but never redeemable.
+            MissedDealsSection(deals: app.missedDeals)
             if sections.isEmpty {
                 EmptyStateView(symbol: "map",
                                title: "Nothing here yet",

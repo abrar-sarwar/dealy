@@ -52,6 +52,20 @@ final class RemoteDealService: DealServicing {
                     as: DealPageDTO.self
                 )
                 return DealPage(items: page.items.map { $0.toDeal() }, nextCursor: page.nextCursor)
+            case let .missed(center, radiusMiles):
+                // Recently-expired local deals (last 7 days), most-recently-expired first.
+                // expiresAt is always in the past; items must NEVER be redeemable.
+                let page = try await client.get(
+                    "/v1/feeds/missed",
+                    query: [
+                        URLQueryItem(name: "lat", value: String(center.latitude)),
+                        URLQueryItem(name: "lng", value: String(center.longitude)),
+                        URLQueryItem(name: "radiusMiles", value: String(radiusMiles)),
+                        URLQueryItem(name: "limit", value: "50"),
+                    ],
+                    as: DealPageDTO.self
+                )
+                return DealPage(items: page.items.map { $0.toDeal() }, nextCursor: page.nextCursor)
             }
         } catch {
             // Surface a user-friendly error consistent with the existing UI state.

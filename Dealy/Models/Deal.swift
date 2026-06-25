@@ -68,6 +68,10 @@ struct Deal: Identifiable, Codable, Hashable {
         expirationDate <= Date()
     }
 
+    /// Whether a deal can currently be redeemed. Expired deals are never
+    /// redeemable — this is the single testable gate for the missed-deals surface.
+    var isRedeemable: Bool { !isExpired }
+
     /// True when the deal ends within the next 12 hours.
     func isEndingSoon(reference: Date = Date()) -> Bool {
         let interval = expirationDate.timeIntervalSince(reference)
