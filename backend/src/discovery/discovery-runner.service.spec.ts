@@ -185,6 +185,37 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(arg.data.categorySlug).toBe('groceries');
   });
 
+  it('prefers the per-deal product image over the page OG image', async () => {
+    const d = deps();
+    d.firecrawl.scrape = jest.fn(async () => ({
+      markdown: '![](https://cdn.shop.com/eggs.jpg) Eggs',
+      url: 'https://shop.com/weekly-ad',
+      metadata: { ogImage: 'https://cdn.shop.com/store-logo.png' },
+    }));
+    d.gemini.extractDeals = jest.fn(async () => ({
+      deals: [
+        {
+          title: 'Eggs $1.99',
+          merchant: 'Shop',
+          category: 'groceries',
+          discount: '20%',
+          expiration: null,
+          location: null,
+          summary: 's',
+          confidence: 90,
+          verification_status: 'pending',
+          verified: false,
+          image_url: 'https://cdn.shop.com/eggs.jpg',
+        },
+      ],
+    }));
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: { imageUrl: string | null } }]
+    )[0];
+    expect(arg.data.imageUrl).toBe('https://cdn.shop.com/eggs.jpg');
+  });
+
   it('runs the full pipeline and persists a candidate with approximate centroid by default', async () => {
     const d = deps();
     const out = await build(d).runRegion('atlanta');

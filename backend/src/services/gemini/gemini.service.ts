@@ -28,6 +28,7 @@ const dealExtractionSchema = {
             enum: ['pending', 'verified', 'unreachable', 'invalid', 'expired'],
           },
           verified: { type: 'boolean' },
+          image_url: { type: ['string', 'null'] },
         },
         required: [
           'title',
@@ -40,6 +41,7 @@ const dealExtractionSchema = {
           'confidence',
           'verification_status',
           'verified',
+          'image_url',
         ],
       },
     },
@@ -77,6 +79,10 @@ export class GeminiService {
       prompt:
         'Extract concrete user-facing deals from the extracted page content. ' +
         'Return only offers with clear discount, promotion, or special value. ' +
+        'For each deal set image_url to the single most relevant product / food / ' +
+        'merchant image for that specific deal — an absolute https image URL that ' +
+        'appears in the page content (e.g. a markdown image). Prefer a real product ' +
+        'or food photo over a logo/banner; use null if the page has no suitable image. ' +
         `Source URL: ${input.sourceUrl}\nMerchant hint: ${input.merchantHint ?? ''}\n\nCONTENT:\n${input.content.slice(0, 12_000)}`,
     });
   }

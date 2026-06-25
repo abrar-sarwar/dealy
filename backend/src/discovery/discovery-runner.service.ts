@@ -161,10 +161,10 @@ export class DiscoveryRunnerService {
         pages++;
         summary.pagesFetched++;
         const text = doc.markdown ?? '';
-        // Capture OG image from Firecrawl metadata. Different Firecrawl versions
-        // use `ogImage` (camelCase) or `og:image` (colon-separated key).
+        // Page-level OG image, used as a fallback when a deal has no per-item image.
+        // Different Firecrawl versions use `ogImage` or `og:image`.
         const meta = doc.metadata as Record<string, unknown> | undefined;
-        const imageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
+        const ogImageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
         const hash = contentHash(text);
 
         const prior = await this.prisma.contentHash.findUnique({
@@ -285,7 +285,9 @@ export class DiscoveryRunnerService {
                 verificationStatus: dl.verification_status,
                 fingerprint,
                 raw: dl as object,
-                imageUrl,
+                // Prefer the per-deal product/food image Gemini picked from the page;
+                // fall back to the page-level OG image.
+                imageUrl: validImageUrl(dl.image_url) ?? ogImageUrl,
               },
             });
             queued++;

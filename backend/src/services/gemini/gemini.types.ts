@@ -24,6 +24,7 @@ export interface GeminiDeal {
   confidence: number;
   verification_status: 'pending' | 'verified' | 'unreachable' | 'invalid' | 'expired';
   verified: boolean;
+  image_url: string | null;
 }
 
 export interface GeminiDealExtraction {
