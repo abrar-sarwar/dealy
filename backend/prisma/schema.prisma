@@ -792,6 +792,34 @@ model RegionalInventory {
   @@map("regional_inventories")
 }
 
+/// A real local-business record discovered via Google Places. Inventory health,
+/// independent of deals — Place stands alone for now (Deal linkage is a later
+/// phase). `googlePlaceId` is the dedup key for upsert-on-rediscovery.
+model Place {
+  id               String   @id @default(uuid()) @db.Uuid
+  googlePlaceId    String?  @unique @map("google_place_id")
+  name             String
+  categorySlug     String   @map("category_slug")
+  googleTypes      String[] @map("google_types")
+  address          String?
+  latitude         Float
+  longitude        Float
+  priceLevel       Int?     @map("price_level")
+  rating           Float?
+  userRatingsTotal Int?     @map("user_ratings_total")
+  website          String?
+  phone            String?
+  regionSlug       String   @map("region_slug")
+  campusSlug       String?  @map("campus_slug")
+  source           String   @default("google_places")
+  discoveredAt     DateTime @default(now()) @map("discovered_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([regionSlug, categorySlug])
+  @@index([latitude, longitude])
+  @@map("places")
+}
+
 model ContentHash {
   id             String    @id @default(uuid()) @db.Uuid
   sourceUrl      String    @map("source_url")

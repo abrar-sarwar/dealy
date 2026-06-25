@@ -22,6 +22,7 @@ import { DiscoveryRunnerService, type DiscoveryRunnerConfig } from './discovery-
 import { MerchantLocationResolver } from './merchant-location.resolver';
 import { CandidatePromotionService } from './candidate-promotion.service';
 import { DiscoverySchedulerService } from './discovery.scheduler';
+import { PlaceDiscoveryService } from './place-discovery.service';
 
 @Module({
   imports: [PrismaModule, SearchModule, FirecrawlModule, GeminiModule],
@@ -118,7 +119,18 @@ import { DiscoverySchedulerService } from './discovery.scheduler';
       },
     },
     DiscoverySchedulerService,
+    {
+      provide: PlaceDiscoveryService,
+      inject: [PrismaService, GooglePlacesService],
+      useFactory: (prisma: PrismaService, places: GooglePlacesService) =>
+        new PlaceDiscoveryService(prisma, places),
+    },
   ],
-  exports: [DiscoveryService, DiscoveryRunnerService, CandidatePromotionService],
+  exports: [
+    DiscoveryService,
+    DiscoveryRunnerService,
+    CandidatePromotionService,
+    PlaceDiscoveryService,
+  ],
 })
 export class DiscoveryModule {}

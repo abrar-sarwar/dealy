@@ -20,6 +20,7 @@ export class GooglePlacesService {
     latitude: number;
     longitude: number;
     radiusMeters: number;
+    includeDetails?: boolean;
   }): Promise<PlaceResult[]> {
     return this.client.nearbySearch(p);
   }
