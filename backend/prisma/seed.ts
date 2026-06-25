@@ -92,12 +92,12 @@ export const crawlSources = [
   // resolveCrawlTargets keeps the deep link. Seeded DISABLED until a trial discovery run
   // proves Gemini extracts ≥1 concrete offer. Eligibility (student vs faculty/staff/alumni)
   // is set per-offer by extraction → requiresStudentId, NOT assumed here.
-  { url: 'https://engagement.gsu.edu/student-center/foodandretail/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'entertainment', zoneSlug: 'gsu', dealUrl: 'https://engagement.gsu.edu/student-center/foodandretail/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://engagement.gsu.edu/student-center/foodandretail/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'entertainment', zoneSlug: 'gsu', dealUrl: 'https://engagement.gsu.edu/student-center/foodandretail/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
   { url: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT BuzzCard', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://benefits.hr.gatech.edu/perks-and-programs/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT Perks & Programs', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: 'https://benefits.hr.gatech.edu/perks-and-programs/', targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'KSU Perks & Discounts', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://alumni.uga.edu/benefits/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Benefits', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: 'https://alumni.uga.edu/benefits/', targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://pac.uga.edu/discounts/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Performing Arts Center', defaultCategorySlug: 'entertainment', zoneSlug: 'uga', dealUrl: 'https://pac.uga.edu/discounts/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://alumni.uga.edu/benefits/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Benefits', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: 'https://alumni.uga.edu/benefits/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
+  { url: 'https://pac.uga.edu/discounts/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Performing Arts Center', defaultCategorySlug: 'entertainment', zoneSlug: 'uga', dealUrl: 'https://pac.uga.edu/discounts/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
 ];
 
 async function seedCrawlSources(): Promise<void> {
@@ -126,7 +126,10 @@ async function seedCrawlSources(): Promise<void> {
         dealUrl: s.dealUrl,
         targetPaths: s.targetPaths,
         crawlIntervalHours: s.crawlIntervalHours,
-        enabled: false, // operator verifies the URL, then flips this on
+        // Disabled by default — operator verifies the URL, then flips this on. A
+        // source may opt into enabled-on-seed only after it's been verified to yield
+        // (see the GSU/UGA campus sources, trial-verified in docs/campus-source-intel.md).
+        enabled: 'enabled' in s ? (s as { enabled?: boolean }).enabled ?? false : false,
       },
     });
   }

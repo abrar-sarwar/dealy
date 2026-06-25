@@ -200,12 +200,25 @@ describe('campus student-discount lane sources', () => {
     for (const s of verifiedSources()) expect(ok.has(s.defaultCategorySlug)).toBe(true);
   });
 
-  it('no crawl source is pre-enabled in the seed array (all seeded disabled)', () => {
-    // The seed array carries no `enabled` field; seedCrawlSources() creates every
-    // source disabled. Guard that nothing sneaks in a pre-enabled flag (which would
-    // let an unverified source crawl on first seed).
+  it('only the trial-verified GSU/UGA campus sources are pre-enabled on seed', () => {
+    // Only sources verified (via a discovery trial) to yield real, correctly-classified
+    // offers may opt into enabled-on-seed. Everything else stays disabled so an
+    // unverified source never crawls on first seed.
+    const preEnabled = crawlSources
+      .filter((s) => (s as { enabled?: boolean }).enabled === true)
+      .map((s) => s.url)
+      .sort();
+    expect(preEnabled).toEqual(
+      [
+        'https://alumni.uga.edu/benefits/',
+        'https://engagement.gsu.edu/student-center/foodandretail/',
+        'https://pac.uga.edu/discounts/',
+      ].sort(),
+    );
     for (const s of crawlSources) {
-      expect((s as { enabled?: boolean }).enabled).toBeUndefined();
+      if (!preEnabled.includes(s.url)) {
+        expect((s as { enabled?: boolean }).enabled).toBeUndefined();
+      }
     }
   });
 });
