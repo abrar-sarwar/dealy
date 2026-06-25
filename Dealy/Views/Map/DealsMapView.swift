@@ -22,9 +22,9 @@ struct DealsMapView: View {
 
     /// The signature control: a top-level map value (NOT a sheet filter). Drives
     /// the ring, the visible set, and the camera. Defaults to the widest (show all).
-    @State private var radiusMiles: Int = MapCameraModel.maxRadiusMiles
+    @State private var radiusMiles: Int = 5
     /// Continuous slider backing value; snaps to whole miles in `radiusMiles`.
-    @State private var radiusRaw: Double = Double(MapCameraModel.maxRadiusMiles)
+    @State private var radiusRaw: Double = 5
 
     @State private var filter = MapFilterState()
     @State private var showingFilters = false
@@ -64,12 +64,13 @@ struct DealsMapView: View {
         MapCameraModel.countLabel(shown: visible, totalMappable: mappableAll)
     }
 
-    /// Bounds: the camera is locked to the Dealy service-zone box and cannot zoom
-    /// out past the metro.
+    /// Bounds: the camera is locked to the CURRENT RADIUS bubble — the user cannot
+    /// pan or zoom out beyond the selected range. Tighten/widen the slider and the
+    /// allowed area follows. No metro-wide free roaming.
     private var cameraBounds: MapCameraBounds {
         MapCameraBounds(
-            centerCoordinateBounds: MapCameraModel.zoneRegion(center: center),
-            maximumDistance: MapCameraModel.zoneMaxDistanceMeters
+            centerCoordinateBounds: MapCameraModel.region(center: center, radiusMiles: radiusMiles),
+            maximumDistance: MapCameraModel.radiusMeters(radiusMiles) * 2.6
         )
     }
 
@@ -90,7 +91,7 @@ struct DealsMapView: View {
                 }
             }
             .sheet(isPresented: $showingFilters) {
-                MapFilterSheet(state: $filter, radiusMiles: $radiusMiles, availableCategories: availableCategories)
+                MapFilterSheet(state: $filter, availableCategories: availableCategories)
             }
             .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
             .onAppear { resolveLocation(force: false) }
@@ -347,13 +348,13 @@ struct DealsMapView: View {
     // MARK: Deal strip (all filtered deals, lazily rendered, selection-coupled)
 
     private var dealStrip: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             if !visible.isEmpty {
                 Text("\(visible.count) \(visible.count == 1 ? "deal" : "deals") · \(filter.sort.label)")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Theme.primaryText)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.mutedText)
                     .padding(.horizontal, Spacing.lg)
-                    .padding(.top, 8)
+                    .padding(.top, 6)
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -364,7 +365,7 @@ struct DealsMapView: View {
                         }
                     }
                     .padding(.horizontal, Spacing.lg)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                 }
                 .onChange(of: selectedID) { _, id in
                     guard let id else { return }
@@ -387,48 +388,38 @@ struct DealsMapView: View {
                 select(deal.id)
             }
         } label: {
-            HStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xs) {
                 DealImage(deal: deal)
-                    .frame(width: 50, height: 50)
+                    .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(deal.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
                         .lineLimit(1)
-                    Text(deal.merchant)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
-                        .lineLimit(1)
-                    // Distance (honest: exact = real, approximate = "Nearby") + price +
-                    // ending-soon + student-ID, all compact and truncating.
-                    HStack(spacing: 4) {
+                    // One compact info line: merchant · distance (honest) · price, with
+                    // ending-soon / student-ID as trailing icons.
+                    HStack(spacing: 3) {
+                        Text(deal.merchant).lineLimit(1)
                         if !deal.isOnline {
+                            Text("·")
                             Text(deal.isExactLocation
                                  ? Format.distance(deal.distanceMiles, isOnline: false)
                                  : "Nearby")
-                                .foregroundStyle(Theme.mutedText)
                         }
                         if deal.hasFixedPricing {
                             Text(Format.price(deal.currentPrice)).foregroundStyle(Theme.primary)
                         }
-                        if deal.isEndingSoon() {
-                            Image(systemName: "clock.fill").foregroundStyle(.orange)
-                        }
-                        if deal.requiresStudentId {
-                            Image(systemName: "graduationcap.fill").foregroundStyle(Theme.primary)
-                        }
+                        if deal.isEndingSoon() { Image(systemName: "clock.fill").foregroundStyle(.orange) }
+                        if deal.requiresStudentId { Image(systemName: "graduationcap.fill").foregroundStyle(Theme.primary) }
                     }
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedText)
                     .lineLimit(1)
-                    Text(deal.category.displayName)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Theme.mutedText)
-                        .lineLimit(1)
                 }
-                .frame(width: 116, alignment: .leading)
+                .frame(width: 124, alignment: .leading)
             }
-            .padding(8)
+            .padding(7)
             .background(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(Theme.surface))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
