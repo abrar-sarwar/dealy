@@ -11,6 +11,38 @@ interface NearbySearchParams {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  /** When true, also request types/priceLevel/rating/website/phone (inventory
+   *  discovery). Off by default so the merchant-resolver path stays cheap. */
+  includeDetails?: boolean;
+}
+
+const BASE_FIELD_MASK = 'places.id,places.displayName,places.location,places.formattedAddress';
+const DETAIL_FIELD_MASK =
+  `${BASE_FIELD_MASK},places.types,places.priceLevel,places.rating,` +
+  'places.userRatingCount,places.websiteUri,places.nationalPhoneNumber';
+
+/** Map Google's PRICE_LEVEL_* enum (Places API v1) to a 0–4 integer. */
+function priceLevelToInt(v: unknown): number | null {
+  switch (v) {
+    case 'PRICE_LEVEL_FREE':
+      return 0;
+    case 'PRICE_LEVEL_INEXPENSIVE':
+      return 1;
+    case 'PRICE_LEVEL_MODERATE':
+      return 2;
+    case 'PRICE_LEVEL_EXPENSIVE':
+      return 3;
+    case 'PRICE_LEVEL_VERY_EXPENSIVE':
+      return 4;
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      return v;
+    default:
+      return null;
+  }
 }
 
 /** Haversine distance in metres between two lat/lng points. */
@@ -56,8 +88,7 @@ export class GooglePlacesClient {
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': this.apiKey,
-          'X-Goog-FieldMask':
-            'places.id,places.displayName,places.location,places.formattedAddress',
+          'X-Goog-FieldMask': p.includeDetails ? DETAIL_FIELD_MASK : BASE_FIELD_MASK,
         },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -78,7 +109,7 @@ export class GooglePlacesClient {
     const places = json.places ?? [];
 
     const results: PlaceResult[] = places
-      .map((place) => {
+      .map((place): PlaceResult | null => {
         const pl = place as Record<string, unknown>;
         const loc = pl.location as { latitude?: number; longitude?: number } | undefined;
         const displayName = pl.displayName as { text?: string } | undefined;
@@ -89,7 +120,13 @@ export class GooglePlacesClient {
           longitude: loc.longitude,
           address: (pl.formattedAddress as string | undefined) ?? null,
           placeId: pl.id as string,
-        } satisfies PlaceResult;
+          types: (pl.types as string[] | undefined) ?? [],
+          priceLevel: priceLevelToInt(pl.priceLevel),
+          rating: (pl.rating as number | undefined) ?? null,
+          userRatingsTotal: (pl.userRatingCount as number | undefined) ?? null,
+          website: (pl.websiteUri as string | undefined) ?? null,
+          phone: (pl.nationalPhoneNumber as string | undefined) ?? null,
+        };
       })
       .filter((r): r is PlaceResult => r !== null);
 

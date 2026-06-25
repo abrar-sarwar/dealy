@@ -39,7 +39,9 @@
     "coverage": "ts-node src/coverage/coverage-cli.ts",
     "grant-admin": "ts-node src/admin/grant-admin-cli.ts",
     "openapi:export": "ts-node src/export-openapi.ts",
-    "discovery:run": "ts-node -r tsconfig-paths/register src/discovery/discovery.cli.ts"
+    "discovery:run": "ts-node -r tsconfig-paths/register src/discovery/discovery.cli.ts",
+    "places:discover": "ts-node -r tsconfig-paths/register src/discovery/place-discovery.cli.ts",
+    "places:crawl": "ts-node -r tsconfig-paths/register src/discovery/place-crawl.cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

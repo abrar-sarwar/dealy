@@ -124,6 +124,10 @@ describe('discovery cost env defaults', () => {
     expect(env.GEMINI_ESCALATION_MIN_RELIABILITY).toBe(80);
     expect(env.DISCOVERY_CRON).toBe('0 */6 * * *');
     expect(env.DISCOVERY_TARGET_PATHS).toContain('/deals');
+    // P2: targeted paths for place-website crawls.
+    for (const p of ['/menu', '/happy-hour', '/student-discount', '/locations']) {
+      expect(env.DISCOVERY_TARGET_PATHS).toContain(p);
+    }
     expect(env.DISCOVERY_PUBLISH_MIN_CONFIDENCE).toBe(80);
   });
 });

@@ -257,6 +257,8 @@ model Deal {
   campusDealType      String?          @map("campus_deal_type")
   crawlSourceId       String?          @map("crawl_source_id") @db.Uuid
   crawlSource         CrawlSource?     @relation(fields: [crawlSourceId], references: [id], onDelete: SetNull)
+  placeId             String?          @map("place_id") @db.Uuid
+  place               Place?           @relation(fields: [placeId], references: [id], onDelete: SetNull)
   startAt             DateTime?        @map("start_at")
   expiresAt           DateTime         @map("expires_at")
   createdAt           DateTime         @default(now()) @map("created_at")
@@ -280,6 +282,7 @@ model Deal {
   @@index([verificationStatus, expiresAt])
   // Curated-in-radius feed read (editorial + approved + published).
   @@index([status, moderationStatus, expiresAt])
+  @@index([placeId])
   @@map("deals")
 }
 
@@ -720,8 +723,10 @@ model CrawlSource {
   reliabilityScore    Int        @default(50) @map("reliability_score")
   lastSuccessAt       DateTime?  @map("last_success_at")
   averageDealsFound   Float      @default(0) @map("average_deals_found")
+  placeId             String?    @unique @map("place_id") @db.Uuid
   createdAt           DateTime   @default(now()) @map("created_at")
 
+  place         Place?          @relation(fields: [placeId], references: [id], onDelete: SetNull)
   deals         Deal[]
   runs          CrawlRun[]
   contentHashes ContentHash[]
@@ -792,6 +797,38 @@ model RegionalInventory {
   @@map("regional_inventories")
 }
 
+/// A real local-business record discovered via Google Places. Inventory health,
+/// independent of deals — Place stands alone for now (Deal linkage is a later
+/// phase). `googlePlaceId` is the dedup key for upsert-on-rediscovery.
+model Place {
+  id               String   @id @default(uuid()) @db.Uuid
+  googlePlaceId    String?  @unique @map("google_place_id")
+  name             String
+  categorySlug     String   @map("category_slug")
+  googleTypes      String[] @map("google_types")
+  address          String?
+  latitude         Float
+  longitude        Float
+  priceLevel       Int?     @map("price_level")
+  rating           Float?
+  userRatingsTotal Int?     @map("user_ratings_total")
+  website          String?
+  phone            String?
+  regionSlug       String   @map("region_slug")
+  campusSlug       String?  @map("campus_slug")
+  source           String   @default("google_places")
+  discoveredAt     DateTime @default(now()) @map("discovered_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  crawlSources   CrawlSource[]
+  dealCandidates DealCandidate[]
+  deals          Deal[]
+
+  @@index([regionSlug, categorySlug])
+  @@index([latitude, longitude])
+  @@map("places")
+}
+
 model ContentHash {
   id             String    @id @default(uuid()) @db.Uuid
   sourceUrl      String    @map("source_url")
@@ -817,6 +854,7 @@ model DealCandidate {
   sourceUrl          String    @map("source_url")
   contentHashId      String?   @map("content_hash_id") @db.Uuid
   regionalInventoryId String?  @map("regional_inventory_id") @db.Uuid
+  placeId            String?   @map("place_id") @db.Uuid
   title              String
   merchant           String
   discount           String?
@@ -850,11 +888,13 @@ model DealCandidate {
   source            CrawlSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   contentHash       ContentHash?       @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
   regionalInventory RegionalInventory? @relation(fields: [regionalInventoryId], references: [id], onDelete: SetNull)
+  place             Place?             @relation(fields: [placeId], references: [id], onDelete: SetNull)
   classifications   AiClassification[]
 
   @@index([sourceId])
   @@index([contentHashId])
   @@index([regionalInventoryId])
+  @@index([placeId])
   @@index([fingerprint])
   @@index([verificationStatus])
   @@index([promotedAt])

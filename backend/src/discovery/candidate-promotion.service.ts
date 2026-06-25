@@ -129,6 +129,8 @@ export class CandidatePromotionService {
           audience: c.audience,
           campusDealType: c.campusDealType,
           crawlSourceId: c.sourceId,
+          // P2: keep the local-business linkage on the promoted deal.
+          placeId: c.placeId,
           fingerprint: c.fingerprint,
           startAt: null,
           expiresAt,

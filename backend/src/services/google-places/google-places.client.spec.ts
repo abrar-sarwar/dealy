@@ -81,6 +81,14 @@ describe('GooglePlacesClient.nearbySearch', () => {
       longitude: -84.39,
       address: '123 Main St, Atlanta, GA',
       placeId: 'place-x',
+      // Detail fields (added for place discovery) default to null/[] when the API
+      // response omits them.
+      types: [],
+      priceLevel: null,
+      rating: null,
+      userRatingsTotal: null,
+      website: null,
+      phone: null,
     });
   });
 

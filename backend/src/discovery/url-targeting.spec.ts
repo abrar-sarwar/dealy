@@ -56,13 +56,32 @@ describe('resolveCrawlTargets', () => {
     ).toEqual(['https://shop.com/coupons']);
   });
 
-  it('refuses to crawl a bare domain with no targeted path', () => {
+  it('synthesizes the full allowlist for a place-sourced bare domain with empty targetPaths', () => {
+    // A place-sourced CrawlSource carries the merchant homepage and targetPaths=[]
+    // so the runner crawls the most likely deal-bearing paths. The seed is bare,
+    // so every allowed path is synthesized — non-bare, hitting the allowlist.
+    const targets = resolveCrawlTargets({
+      websiteUrl: 'https://joescoffee.com',
+      dealUrl: null,
+      targetPaths: [],
+      allowedPaths: ['/deals', '/specials', '/menu', '/happy-hour'],
+    });
+    expect(targets).toEqual([
+      'https://joescoffee.com/deals',
+      'https://joescoffee.com/specials',
+      'https://joescoffee.com/menu',
+      'https://joescoffee.com/happy-hour',
+    ]);
+    for (const t of targets) expect(t).not.toMatch(/^https?:\/\/[^/]+\/?$/);
+  });
+
+  it('still refuses to crawl a bare domain when there are no allowed paths to synthesize', () => {
     expect(
       resolveCrawlTargets({
         websiteUrl: 'https://shop.com/',
         dealUrl: null,
         targetPaths: [],
-        allowedPaths: allowed,
+        allowedPaths: [],
       }),
     ).toEqual([]);
   });
