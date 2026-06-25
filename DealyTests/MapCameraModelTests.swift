@@ -90,6 +90,15 @@ final class MapCameraModelTests: XCTestCase {
         XCTAssertEqual(MapCameraModel.defaultRadius(for: deals, target: 6, reference: ref), 10)
     }
 
+    func testDefaultRadiusSkipsFoodlessTightRadiusWhenFoodExistsFarther() {
+        // 6 grocery within 1mi (meets target) but the only food is 2.5mi out. The
+        // default must open at 3mi so "Food" isn't 0 by default (GSU-shaped case).
+        var deals: [Deal] = []
+        for i in 0..<6 { deals.append(deal("g\(i)", category: .groceries, distance: 0.4)) }
+        deals.append(deal("food", category: .food, distance: 2.5))
+        XCTAssertEqual(MapCameraModel.defaultRadius(for: deals, target: 6, reference: ref), 3)
+    }
+
     // MARK: Camera span cap
 
     func testSpanNeverExceedsMaxCap() {

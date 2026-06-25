@@ -59,16 +59,23 @@ enum MapCameraModel {
         filtered(deals, category: category, radiusMiles: radiusMiles).count
     }
 
-    /// The smallest radius option whose (all-category) count is ≥ `target`, else the
-    /// widest option. Used to pick a sensible default that isn't empty or sparse.
+    /// The smallest radius option that is non-sparse (count ≥ `target`) and — when the
+    /// area has any food deals at all — actually includes one, so "Food" is never 0 by
+    /// default (local food is the hero of local discovery). Falls back to the widest
+    /// option. Example: at GSU the nearest food is ~1.6mi, so this opens at 3mi (with
+    /// restaurants) rather than 1mi (grocery/campus only); at GT food is <1mi so it
+    /// stays tight.
     static func defaultRadius(
         for deals: [Deal],
         target: Int = 6,
         reference: Date = Date()
     ) -> Int {
         let mappableDeals = mappable(deals, reference: reference)
-        for r in radiusOptions where within(mappableDeals, radiusMiles: r).count >= target {
-            return r
+        let hasFood = mappableDeals.contains { $0.category == .food }
+        for r in radiusOptions {
+            let inRange = within(mappableDeals, radiusMiles: r)
+            let includesFood = !hasFood || inRange.contains { $0.category == .food }
+            if inRange.count >= target && includesFood { return r }
         }
         return radiusOptions.last ?? 5
     }
