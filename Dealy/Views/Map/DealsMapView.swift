@@ -17,6 +17,9 @@ struct DealsMapView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var anchor: CLLocationCoordinate2D?
     @State private var selectedID: String?
+    /// Selected place marker (separate from the deal-pin selection so the two never
+    /// collide). Drives the place-preview card overlay; selecting one clears the other.
+    @State private var selectedPlaceID: String?
     @State private var detailDeal: Deal?
     @State private var isLocating = false
 
@@ -64,6 +67,18 @@ struct DealsMapView: View {
         MapCameraModel.countLabel(shown: visible, totalMappable: mappableAll)
     }
 
+    /// Place markers (backend, bounded ≤40) within the current slider radius of the
+    /// user, so the place pins track the spotlight bubble and don't clutter the map.
+    private var visibleMarkers: [PlaceMarker] {
+        MapCameraModel.markersWithin(app.placeMarkers, center: center, radiusMiles: radiusMiles)
+    }
+
+    /// The currently-selected place marker (if still visible), backing the preview card.
+    private var selectedPlace: PlaceMarker? {
+        guard let id = selectedPlaceID else { return nil }
+        return visibleMarkers.first { $0.id == id }
+    }
+
     /// Bounds: the camera is locked to the CURRENT RADIUS bubble — the user cannot
     /// pan or zoom out beyond the selected range. Tighten/widen the slider and the
     /// allowed area follows. No metro-wide free roaming.
@@ -97,6 +112,7 @@ struct DealsMapView: View {
             .onAppear { resolveLocation(force: false) }
             .task {
                 await app.loadLocalDeals()
+                await app.loadPlaceMarkers()
                 frameToRadius()
             }
             .onChange(of: filter) { _, _ in clampSelection(); frameToRadius() }
@@ -133,6 +149,16 @@ struct DealsMapView: View {
                 }
                 .annotationTitles(.hidden)
             }
+
+            // Place markers render AFTER (on top of) the deal pins. They sit under the
+            // spotlight overlay (clear inside the bubble, dimmed outside) — intended.
+            ForEach(visibleMarkers) { marker in
+                Annotation(marker.name, coordinate: marker.coordinate) {
+                    PlaceMapPin(marker: marker, selected: selectedPlaceID == marker.id)
+                        .onTapGesture { selectPlace(marker.id) }
+                }
+                .annotationTitles(.hidden)
+            }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
@@ -143,6 +169,7 @@ struct DealsMapView: View {
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .topLeading) { filterButton }
         .overlay(alignment: .topTrailing) { countOverlay }
+        .overlay(alignment: .bottom) { placePreviewCard }
         .overlay(alignment: .bottom) { radiusSlider }
         .overlay(alignment: .bottomTrailing) { recenterPill }
         .overlay { emptyOverlay }
@@ -322,6 +349,28 @@ struct DealsMapView: View {
         .accessibilityLabel("Your location")
     }
 
+    // MARK: Place preview card
+
+    /// Compact preview card for the selected place marker. Sits above the bottom
+    /// slider (extra bottom inset) so it never overlaps the radius control. Shows the
+    /// photo (real → artwork fallback), name, meta, why-recommended, and Directions.
+    @ViewBuilder private var placePreviewCard: some View {
+        if let place = selectedPlace {
+            PlacePreviewCard(
+                marker: place,
+                onDirections: {
+                    DirectionsLauncher.open(to: place.coordinate, name: place.name)
+                    Haptics.selection()
+                },
+                onClose: { dismissPlace() }
+            )
+            .padding(.horizontal, Spacing.lg)
+            // Clear the bottom slider (its docked height + padding ≈ 108pt).
+            .padding(.bottom, 112)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
     @ViewBuilder private var emptyOverlay: some View {
         if MapCameraModel.isRadiusEmpty(shown: visible, totalMappable: mappableAll) {
             // Honest empty state: the radius + filters hide everything, but the area
@@ -478,14 +527,33 @@ struct DealsMapView: View {
     private func select(_ id: String) {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             selectedID = (selectedID == id) ? nil : id
+            // Selecting a deal clears any place selection so the two stay coherent.
+            if selectedID != nil { selectedPlaceID = nil }
         }
         Haptics.selection()
     }
 
-    /// Drop a stale selection when the filter hides the selected deal.
+    /// Select a place marker (toggling off if re-tapped). Clears the deal selection
+    /// so the two never show simultaneously; drives the place-preview card.
+    private func selectPlace(_ id: String) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            selectedPlaceID = (selectedPlaceID == id) ? nil : id
+            if selectedPlaceID != nil { selectedID = nil }
+        }
+        Haptics.selection()
+    }
+
+    private func dismissPlace() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selectedPlaceID = nil }
+    }
+
+    /// Drop a stale selection when the filter/radius hides the selected deal or place.
     private func clampSelection() {
         if let id = selectedID, !visible.contains(where: { $0.id == id }) {
             selectedID = nil
+        }
+        if let id = selectedPlaceID, !visibleMarkers.contains(where: { $0.id == id }) {
+            selectedPlaceID = nil
         }
     }
 
@@ -549,5 +617,106 @@ private struct DealMapPin: View {
                 .foregroundStyle(.white.opacity(isApproximate ? 0.7 : 1.0))
         }
         .accessibilityLabel("\(deal.title) at \(deal.merchant)")
+    }
+}
+
+/// Compact, kind-tinted place pin — a smaller teardrop, deliberately distinct from
+/// the round category-gradient deal pins, so real places read as a separate layer.
+/// Grows + brightens when selected.
+private struct PlaceMapPin: View {
+    let marker: PlaceMarker
+    let selected: Bool
+
+    private var size: CGFloat { selected ? 34 : 26 }
+    private var iconSize: CGFloat { selected ? 15 : 12 }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(marker.kind.tint)
+                .frame(width: size, height: size)
+                .overlay(Circle().stroke(.white, lineWidth: selected ? 2.5 : 1.5))
+                .shadow(color: .black.opacity(0.25), radius: selected ? 4 : 2, y: 1)
+            Image(systemName: marker.kind.symbol)
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .accessibilityLabel("\(marker.name), place")
+        .accessibilityHint("Shows a preview with directions")
+    }
+}
+
+/// Compact place-preview card shown over the map when a place marker is tapped.
+/// Photo (real → `CategoryArtwork` fallback) + name + meta + why-recommended +
+/// a Directions button. Lives above the bottom slider, not under the controls.
+private struct PlacePreviewCard: View {
+    let marker: PlaceMarker
+    var onDirections: () -> Void
+    var onClose: () -> Void
+
+    /// "{priceBucket} · ★{rating} · {category}" — omits absent parts cleanly.
+    private var metaLine: String {
+        var parts: [String] = []
+        if let bucket = marker.priceBucket, !bucket.isEmpty { parts.append(bucket) }
+        if let rating = marker.rating { parts.append(String(format: "★%.1f", rating)) }
+        parts.append(marker.category.displayName)
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            PlaceImage(photoURL: marker.primaryPhotoUrl,
+                       category: marker.category, seed: marker.visualSeed)
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(marker.name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Text(metaLine)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.mutedText)
+                    .lineLimit(1)
+                if let why = marker.whyRecommended, !why.isEmpty {
+                    Text(why)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Button(action: onDirections) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        Text("Directions")
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
+                    .background(Theme.primary, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+                .accessibilityLabel("Directions to \(marker.name)")
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.mutedText)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss preview")
+        }
+        .padding(Spacing.sm)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+            .stroke(marker.kind.tint.opacity(0.35), lineWidth: 1))
+        .dealyShadow(.soft)
+        .accessibilityElement(children: .contain)
     }
 }

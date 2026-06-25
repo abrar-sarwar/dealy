@@ -70,6 +70,10 @@ final class AppState {
     /// for the active discovery center. The "local savings feed" at the top of
     /// Explore. Loaded independently; failures leave it empty and never block.
     private(set) var placeSections: [PlaceFeedSection] = []
+    /// Bounded (≤40) map markers for the active discovery center — real local places
+    /// rendered on the Map ON TOP of the curated deal pins. Loaded independently;
+    /// failures leave it empty and never block the map.
+    private(set) var placeMarkers: [PlaceMarker] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -196,6 +200,21 @@ final class AppState {
                 latitude: center.latitude, longitude: center.longitude)
         } catch {
             placeSections = []
+        }
+    }
+
+    /// Load the bounded map markers for the active discovery center. The backend
+    /// resolves the sent coordinate to its nearest region and caps the count.
+    /// Independent of the deck; failures leave the markers empty and never block
+    /// the map (existing deal pins + UX stay intact).
+    @MainActor
+    func loadPlaceMarkers() async {
+        let center = persisted.discovery.center
+        do {
+            placeMarkers = try await placeFeedService.fetchPlaceMarkers(
+                latitude: center.latitude, longitude: center.longitude)
+        } catch {
+            placeMarkers = []
         }
     }
 

@@ -66,6 +66,22 @@ enum MapCameraModel {
         deals.filter { $0.distanceMiles <= Double(radiusMiles) }
     }
 
+    /// Place markers within `radiusMiles` of `center` (great-circle distance from the
+    /// marker's real coordinate). Keeps the place pins tracking the radius slider so
+    /// the map doesn't clutter beyond the spotlight bubble.
+    static func markersWithin(
+        _ markers: [PlaceMarker],
+        center: CLLocationCoordinate2D,
+        radiusMiles: Int
+    ) -> [PlaceMarker] {
+        let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
+        let limitMeters = radiusMeters(radiusMiles)
+        return markers.filter { marker in
+            let point = CLLocation(latitude: marker.latitude, longitude: marker.longitude)
+            return origin.distance(from: point) <= limitMeters
+        }
+    }
+
     /// Compose category + radius filtering over a mappable set (already non-online).
     /// food@3mi = food deals within 3 miles.
     static func filtered(

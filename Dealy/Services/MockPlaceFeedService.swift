@@ -5,9 +5,11 @@ import Foundation
 /// directions launch sensibly in previews.
 final class MockPlaceFeedService: PlaceFeedServicing {
     var simulateFailureOnce: Bool
+    var simulateMarkerFailureOnce: Bool
 
-    init(simulateFailureOnce: Bool = false) {
+    init(simulateFailureOnce: Bool = false, simulateMarkerFailureOnce: Bool = false) {
         self.simulateFailureOnce = simulateFailureOnce
+        self.simulateMarkerFailureOnce = simulateMarkerFailureOnce
     }
 
     func fetchPlaceSections(latitude: Double, longitude: Double) async throws -> [PlaceFeedSection] {
@@ -17,6 +19,36 @@ final class MockPlaceFeedService: PlaceFeedServicing {
         }
         return Self.sample
     }
+
+    func fetchPlaceMarkers(latitude: Double, longitude: Double) async throws -> [PlaceMarker] {
+        if simulateMarkerFailureOnce {
+            simulateMarkerFailureOnce = false
+            throw DealServiceError.unavailable
+        }
+        return Self.sampleMarkers
+    }
+
+    /// Deterministic map markers anchored near GSU, covering several marker kinds
+    /// and a mix of present/absent photos, so previews + the offline build render
+    /// place pins + the preview card without a backend.
+    static let sampleMarkers: [PlaceMarker] = [
+        PlaceMarker(id: "m1", name: "Baraka Shawarma", category: .food,
+                    latitude: 33.7563, longitude: -84.3909, priceBucket: "$", rating: 4.6,
+                    whyRecommended: "High ratings and low prices for a filling meal.",
+                    primaryPhotoUrl: nil, imageStatus: "none", kind: .food),
+        PlaceMarker(id: "m2", name: "Con Leche Coffee", category: .food,
+                    latitude: 33.754, longitude: -84.388, priceBucket: "$", rating: 4.8,
+                    whyRecommended: "Quality coffee at accessible prices.",
+                    primaryPhotoUrl: nil, imageStatus: "none", kind: .cafe),
+        PlaceMarker(id: "m3", name: "Blossom Tree", category: .food,
+                    latitude: 33.755, longitude: -84.39, priceBucket: "$$", rating: 4.7,
+                    whyRecommended: "A local favorite that flies under the radar.",
+                    primaryPhotoUrl: nil, imageStatus: "none", kind: .hiddenGem),
+        PlaceMarker(id: "m4", name: "The Food Shoppe", category: .food,
+                    latitude: 33.752, longitude: -84.385, priceBucket: "$", rating: 4.5,
+                    whyRecommended: "Affordable comfort food students love.",
+                    primaryPhotoUrl: nil, imageStatus: "none", kind: .student),
+    ]
 
     static let sample: [PlaceFeedSection] = [
         PlaceFeedSection(
