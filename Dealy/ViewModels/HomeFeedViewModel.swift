@@ -42,7 +42,10 @@ final class HomeFeedViewModel {
                                           interests: app.interests,
                                           campus: app.currentCampus,
                                           radius: app.radius)
-        deck = filters.sort.sort(recommended)
+        // Diversify the recommended order so the early deck isn't one merchant /
+        // one category (e.g. 10 grocery items). An explicit non-recommended sort
+        // still overrides this below.
+        deck = filters.sort.sort(DealRanker.diversified(recommended))
     }
 
     var topDeal: Deal? { deck.first }

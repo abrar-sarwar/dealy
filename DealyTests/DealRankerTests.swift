@@ -12,9 +12,10 @@ final class DealRankerTests: XCTestCase {
                       online: Bool, distance: Double,
                       category: DealCategory = .food,
                       tags: [String] = [],
+                      merchant: String = "M",
                       expiresInHours: Double = 240) -> Deal {
         Deal(
-            id: id, title: id, merchant: "M", category: category,
+            id: id, title: id, merchant: merchant, category: category,
             currentPrice: current, originalPrice: original, distanceMiles: distance,
             expirationDate: ref.addingTimeInterval(expiresInHours * 3600),
             dealScore: 50, isOnline: online,
@@ -72,6 +73,41 @@ final class DealRankerTests: XCTestCase {
         let b = deal("bbb", current: 50, original: 100, online: true, distance: 0)
         let ranked = DealRanker.rank([b, a], interests: [], campus: campus, radius: radius, reference: ref)
         XCTAssertEqual(ranked.map(\.id), ["aaa", "bbb"])
+    }
+
+    // MARK: Diversity-aware deck ordering
+
+    /// A score-ranked list that is grocery-first (as distance-dominated ranking
+    /// produces) should still surface restaurants and respect per-merchant caps in
+    /// the first 10 cards.
+    func testDiversifiedSurfacesRestaurantsEarlyAndCapsMerchants() {
+        var ranked: [Deal] = []
+        for i in 0..<10 { ranked.append(deal("aldi\(i)", current: 0, original: 0, online: false, distance: 0.2, category: .groceries, merchant: "Aldi")) }
+        for i in 0..<8 { ranked.append(deal("pub\(i)", current: 0, original: 0, online: false, distance: 1, category: .groceries, merchant: "Publix")) }
+        for i in 0..<4 { ranked.append(deal("chi\(i)", current: 0, original: 0, online: false, distance: 6, category: .food, merchant: "Chili's")) }
+        for i in 0..<4 { ranked.append(deal("app\(i)", current: 0, original: 0, online: false, distance: 7, category: .food, merchant: "Applebee's")) }
+
+        let varied = DealRanker.diversified(ranked)
+        let first10 = Array(varied.prefix(10))
+        let grocery = first10.filter { $0.category == .groceries }.count
+        let food = first10.filter { $0.category == .food }.count
+        let perMerchant = Dictionary(grouping: first10, by: \.merchant).mapValues(\.count)
+
+        XCTAssertLessThanOrEqual(grocery, 5, "no more than 5 grocery cards in the first 10")
+        XCTAssertGreaterThanOrEqual(food, 2, "at least 2 restaurant/food cards in the first 10")
+        XCTAssertTrue(perMerchant.values.allSatisfy { $0 <= 3 }, "no merchant more than 3× in the first 10")
+        XCTAssertTrue(varied.prefix(4).contains { $0.category == .food },
+                      "a restaurant/food card should appear within the first 4 cards")
+        XCTAssertEqual(varied.count, ranked.count, "diversify drops nothing")
+    }
+
+    /// Nothing is hidden: a grocery-only list keeps all its deals (caps relax when
+    /// no other category exists).
+    func testDiversifiedHidesNothingWhenOnlyOneCategory() {
+        let ranked = (0..<12).map { deal("g\($0)", current: 0, original: 0, online: false, distance: 0.5, category: .groceries, merchant: "Aldi") }
+        let out = DealRanker.diversified(ranked)
+        XCTAssertEqual(out.count, 12)
+        XCTAssertEqual(Set(out.map(\.id)), Set(ranked.map(\.id)))
     }
 
     func testReasonsLeadWithDollarsWhenConcrete() {
