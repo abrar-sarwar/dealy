@@ -6,6 +6,10 @@ function fp(over: Partial<FeedPlace> = {}): FeedPlace {
     name: over.name ?? 'Place',
     categorySlug: over.categorySlug ?? 'food',
     regionSlug: over.regionSlug ?? 'gsu',
+    address: over.address ?? null,
+    bestFor: over.bestFor ?? null,
+    vibeTags: over.vibeTags ?? [],
+    confidenceLabel: over.confidenceLabel ?? null,
     latitude: over.latitude ?? 33.753,
     longitude: over.longitude ?? -84.386,
     rating: over.rating ?? 4.2,
@@ -108,5 +112,77 @@ describe('PlaceFeedService.sections', () => {
     const sections = await svc.sections('gsu', { limit: 10 });
     const student = sections.find((s) => s.key === 'student_friendly')!;
     expect(student.places.length).toBe(10);
+  });
+
+  it('projects the enriched detail fields onto each ranked place', async () => {
+    const detailed = fp({
+      id: 'detailed',
+      categorySlug: 'food',
+      cheapEatsScore: 0.95,
+      affordabilityScore: 0.9,
+      rating: 4.4,
+      address: '123 Peachtree St',
+      latitude: 33.7,
+      longitude: -84.39,
+      bestFor: 'Late-night study fuel',
+      vibeTags: ['cozy', 'cheap'],
+      studentValueScore: 0.8,
+      confidenceLabel: 'high',
+    });
+    const { prisma } = makePrisma([detailed]);
+    const svc = new PlaceFeedService(prisma as never);
+
+    const sections = await svc.sections('gsu');
+    const place = sections.find((s) => s.key === 'cheap_eats')!.places[0];
+    expect(place).toMatchObject({
+      id: 'detailed',
+      categorySlug: 'food',
+      address: '123 Peachtree St',
+      latitude: 33.7,
+      longitude: -84.39,
+      bestFor: 'Late-night study fuel',
+      vibeTags: ['cozy', 'cheap'],
+      studentValueScore: 0.8,
+      confidenceLabel: 'high',
+    });
+  });
+});
+
+describe('PlaceFeedService.resolveRegion (nearest by location)', () => {
+  const regions = [
+    { regionSlug: 'gsu', latitude: 33.7531, longitude: -84.3857 },
+    { regionSlug: 'midtown', latitude: 33.7838, longitude: -84.3825 },
+    { regionSlug: 'uga', latitude: 33.948, longitude: -83.3773 },
+    { regionSlug: 'kennesaw', latitude: 34.0234, longitude: -84.6155 },
+  ];
+
+  function makeInvPrisma() {
+    const findMany = jest.fn(async () => regions);
+    return {
+      prisma: { place: { findMany: jest.fn(async () => []) }, regionalInventory: { findMany } },
+    };
+  }
+
+  it('picks the GSU region for a downtown-Atlanta-ish coordinate', async () => {
+    const { prisma } = makeInvPrisma();
+    const svc = new PlaceFeedService(prisma as never);
+    const slug = await svc.resolveRegion({ latitude: 33.7525, longitude: -84.386 });
+    expect(slug).toBe('gsu');
+  });
+
+  it('picks UGA for an Athens coordinate', async () => {
+    const { prisma } = makeInvPrisma();
+    const svc = new PlaceFeedService(prisma as never);
+    const slug = await svc.resolveRegion({ latitude: 33.95, longitude: -83.38 });
+    expect(slug).toBe('uga');
+  });
+
+  it('returns null when no regions have centroids', async () => {
+    const prisma = {
+      place: { findMany: jest.fn(async () => []) },
+      regionalInventory: { findMany: jest.fn(async () => []) },
+    };
+    const svc = new PlaceFeedService(prisma as never);
+    expect(await svc.resolveRegion({ latitude: 33.75, longitude: -84.38 })).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ export interface FeedPlace {
   name: string;
   categorySlug: string;
   regionSlug: string;
+  address: string | null;
   latitude: number;
   longitude: number;
   rating: number | null;
@@ -17,6 +18,9 @@ export interface FeedPlace {
   dealLikelihoodScore: number | null;
   hiddenGemScore: number | null;
   cheapEatsScore: number | null;
+  bestFor: string | null;
+  vibeTags: string[];
+  confidenceLabel: string | null;
   whyRecommended: string | null;
   website: string | null;
   enrichedAt: Date | null;
@@ -30,6 +34,15 @@ export interface RankedPlace {
   /** The score (0..1) that placed this entry in its section. */
   score: number;
   whyRecommended: string | null;
+  // Enriched detail fields (P4) — let the app render & navigate without a second call.
+  categorySlug: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  bestFor: string | null;
+  vibeTags: string[];
+  studentValueScore: number | null;
+  confidenceLabel: string | null;
 }
 
 export interface FeedSection {
@@ -53,6 +66,9 @@ export interface PlaceFeedPrisma {
     findUnique(
       args: unknown,
     ): Promise<{ latitude: number | null; longitude: number | null } | null>;
+    findMany?(
+      args?: unknown,
+    ): Promise<{ regionSlug: string; latitude: number | null; longitude: number | null }[]>;
   };
 }
 
@@ -103,6 +119,23 @@ function composite(
 export class PlaceFeedService {
   constructor(private readonly prisma: PlaceFeedPrisma) {}
 
+  /**
+   * Resolve the nearest region slug to a coordinate by comparing against
+   * RegionalInventory centroids. Returns null if no region has a centroid.
+   */
+  async resolveRegion(point: { latitude: number; longitude: number }): Promise<string | null> {
+    const inv = this.prisma.regionalInventory;
+    if (!inv?.findMany) return null;
+    const regions = await inv.findMany();
+    let best: { slug: string; miles: number } | null = null;
+    for (const r of regions) {
+      if (r.latitude == null || r.longitude == null) continue;
+      const miles = haversineMiles(point, { latitude: r.latitude, longitude: r.longitude });
+      if (!best || miles < best.miles) best = { slug: r.regionSlug, miles };
+    }
+    return best?.slug ?? null;
+  }
+
   async sections(regionSlug: string, opts: SectionsOptions = {}): Promise<FeedSection[]> {
     const limit = opts.limit ?? DEFAULT_LIMIT;
 
@@ -137,6 +170,14 @@ export class PlaceFeedService {
           rating: p.rating,
           score,
           whyRecommended: p.whyRecommended,
+          categorySlug: p.categorySlug,
+          address: p.address,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          bestFor: p.bestFor,
+          vibeTags: p.vibeTags ?? [],
+          studentValueScore: p.studentValueScore,
+          confidenceLabel: p.confidenceLabel,
         }));
       return { key, title, places: ranked };
     };

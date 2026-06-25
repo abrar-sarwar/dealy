@@ -44,6 +44,7 @@ final class AppState {
     // MARK: Dependencies (injected, replaceable)
     private let store: PreferenceStoring
     private let dealService: DealServicing
+    private let placeFeedService: PlaceFeedServicing
     private let locationProvider: LocationProviding
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
@@ -65,6 +66,10 @@ final class AppState {
     /// Recently-expired local deals (last 7 days), most-recently-expired first.
     /// These must NEVER be redeemable (expiresAt is always in the past).
     private(set) var missedDeals: [Deal] = []
+    /// Enriched-place feed sections (cheap eats, hidden gems, student-friendly, …)
+    /// for the active discovery center. The "local savings feed" at the top of
+    /// Explore. Loaded independently; failures leave it empty and never block.
+    private(set) var placeSections: [PlaceFeedSection] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -76,12 +81,14 @@ final class AppState {
 
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
+         placeFeedService: PlaceFeedServicing = MockPlaceFeedService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
          interactionRecorder: DealInteractionRecording = NoopInteractionRecorder(),
          nearbyStores: NearbyStoreSearching = MockNearbyStoresService()) {
         self.store = store
         self.dealService = dealService
+        self.placeFeedService = placeFeedService
         self.nearbyStores = nearbyStores
         self.locationProvider = locationProvider
         self.redemptionHandler = redemptionHandler
@@ -175,6 +182,20 @@ final class AppState {
             for deal in page.items { dealsByID[deal.id] = deal }
         } catch {
             missedDeals = []
+        }
+    }
+
+    /// Load the enriched-place feed sections for the active discovery center. The
+    /// backend resolves the sent coordinate to its nearest region. Independent of
+    /// the deck; failures leave the feed empty and never block the app.
+    @MainActor
+    func loadPlaceSections() async {
+        let center = persisted.discovery.center
+        do {
+            placeSections = try await placeFeedService.fetchPlaceSections(
+                latitude: center.latitude, longitude: center.longitude)
+        } catch {
+            placeSections = []
         }
     }
 

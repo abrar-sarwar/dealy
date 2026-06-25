@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct ExploreView: View {
     @Environment(AppState.self) private var app
@@ -47,6 +48,7 @@ struct ExploreView: View {
             .sheet(isPresented: $showLocation) {
                 LocationSelectorView()
             }
+            .task { await app.loadPlaceSections() }
             .task { await app.loadStudentDeals() }
             .task { await app.loadTrendingDeals() }
             .task { await app.loadLocalDeals() }
@@ -81,6 +83,43 @@ struct ExploreView: View {
             }
             .padding(.horizontal, Spacing.lg)
         }
+    }
+
+    // MARK: Local savings feed (enriched places)
+
+    /// The ranked enriched-place sections, each a titled horizontal carousel of
+    /// `PlaceTile`s. Empty sections are skipped; the whole feed is omitted when
+    /// there are no places (graceful empty — Explore's other sections remain).
+    @ViewBuilder
+    private var placeSectionsFeed: some View {
+        let sections = app.placeSections.filter { !$0.places.isEmpty }
+        if !sections.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                ForEach(sections) { section in
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        SectionHeader(title: section.displayTitle, symbol: "mappin.and.ellipse")
+                            .padding(.horizontal, Spacing.lg)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Spacing.sm) {
+                                ForEach(section.places) { place in
+                                    PlaceTile(place: place) { openDirections(to: place) }
+                                }
+                            }
+                            .padding(.horizontal, Spacing.lg)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Launch turn-by-turn directions to a place when it has coordinates.
+    private func openDirections(to place: Place) {
+        guard let lat = place.latitude, let lng = place.longitude else { return }
+        Haptics.selection()
+        DirectionsLauncher.open(
+            to: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+            name: place.name)
     }
 
     // MARK: Category shortcuts
@@ -168,6 +207,10 @@ struct ExploreView: View {
         let sections = ExploreSections(base: areaDeals)
             .curated(interests: app.interests, campus: app.currentCampus, radius: app.radius)
         return VStack(alignment: .leading, spacing: Spacing.xl) {
+            // The local savings feed: enriched local businesses ranked into
+            // sections (cheap eats, hidden gems, student-friendly, …). Sits at
+            // the top — these are the places near the user worth knowing about.
+            placeSectionsFeed
             // Cross-campus trending deals, featured regardless of location.
             TrendingSection(deals: app.trendingDeals) { deal in
                 app.recordOpened(deal.id)

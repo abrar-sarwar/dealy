@@ -96,7 +96,7 @@ final class InteractionRecorderTests: XCTestCase {
         let hit = expectation(description: "hit")
         StubURLProtocol.responder = { _ in hit.fulfill(); return Data("{}".utf8) }
         let provider = MutableTokenProvider("tok-1")
-        let (_, recorder) = RemoteComposition.make(
+        let (_, _, recorder) = RemoteComposition.make(
             baseURL: URL(string: "https://stub.dealy.test")!,
             auth: provider,
             session: Self.stubSession()

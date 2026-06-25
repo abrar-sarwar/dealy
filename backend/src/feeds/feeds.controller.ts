@@ -67,10 +67,24 @@ export class FeedsController {
   @Get('places')
   @ApiOperation({
     summary:
-      'Enriched-place feed sections for a region (cheap eats, hidden gems, etc.) — read-only, no live AI',
+      'Enriched-place feed sections for a region (cheap eats, hidden gems, etc.) — read-only, no live AI. ' +
+      'Pass region, or lat+lng to resolve the nearest region automatically.',
   })
-  places(@Query('region') region: string) {
-    return this.placeFeed.sections(region);
+  async places(
+    @Query('region') region?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ) {
+    let resolved = region;
+    if (!resolved && lat != null && lng != null) {
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+        resolved = (await this.placeFeed.resolveRegion({ latitude, longitude })) ?? undefined;
+      }
+    }
+    if (!resolved) return [];
+    return this.placeFeed.sections(resolved);
   }
 
   @Public()

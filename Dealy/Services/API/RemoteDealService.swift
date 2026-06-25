@@ -4,11 +4,31 @@ import Foundation
 /// `AppState` in place of `MockDealService` (e.g.
 /// `AppState(dealService: RemoteDealService())`) once the API is deployed.
 /// The mock implementation is retained for previews, tests, and offline.
-final class RemoteDealService: DealServicing {
+final class RemoteDealService: DealServicing, PlaceFeedServicing {
     private let client: APIClient
 
     init(client: APIClient = APIClient(baseURL: APIConfig.baseURL)) {
         self.client = client
+    }
+
+    /// Enriched-place feed sections for the user's location. The backend resolves
+    /// `lat`/`lng` to its nearest region and returns a JSON array of sections.
+    /// Failures bubble up as `DealServiceError.unavailable` so callers can degrade
+    /// gracefully (empty feed) without distinguishing transport vs. decode.
+    func fetchPlaceSections(latitude: Double, longitude: Double) async throws -> [PlaceFeedSection] {
+        do {
+            let sections = try await client.get(
+                "/v1/feeds/places",
+                query: [
+                    URLQueryItem(name: "lat", value: String(latitude)),
+                    URLQueryItem(name: "lng", value: String(longitude)),
+                ],
+                as: [PlaceFeedSectionDTO].self
+            )
+            return sections.map { $0.toSection() }
+        } catch {
+            throw DealServiceError.unavailable
+        }
     }
 
     func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
