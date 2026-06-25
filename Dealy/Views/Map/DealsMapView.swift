@@ -77,8 +77,8 @@ struct DealsMapView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                mapArea
                 dealStrip
+                mapArea
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -350,11 +350,17 @@ struct DealsMapView: View {
     private var dealStrip: some View {
         VStack(alignment: .leading, spacing: 2) {
             if !visible.isEmpty {
-                Text("\(visible.count) \(visible.count == 1 ? "deal" : "deals") · \(filter.sort.label)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Theme.mutedText)
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.top, 6)
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill").font(.caption2).foregroundStyle(.orange)
+                    Text("Limited Deals!")
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(Theme.primaryText)
+                    Text("· \(visible.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                }
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, 4)
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -390,7 +396,7 @@ struct DealsMapView: View {
         } label: {
             HStack(spacing: Spacing.xs) {
                 DealImage(deal: deal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 38, height: 38)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(deal.title)
@@ -417,9 +423,9 @@ struct DealsMapView: View {
                     .foregroundStyle(Theme.mutedText)
                     .lineLimit(1)
                 }
-                .frame(width: 124, alignment: .leading)
+                .frame(width: 120, alignment: .leading)
             }
-            .padding(7)
+            .padding(6)
             .background(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(Theme.surface))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
