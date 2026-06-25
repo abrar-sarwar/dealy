@@ -37,9 +37,13 @@ struct DealImage: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
+                    // Fill the container and clip overflow WITHOUT letting the image's
+                    // intrinsic size drive layout (a `Color.clear` accepts the proposed
+                    // size; the image fills it as an overlay). A bare `scaledToFill`
+                    // reports the full pixel size and blows the card past its bounds.
+                    Color.clear
+                        .overlay(image.resizable().scaledToFill())
+                        .clipped()
                 case .failure:
                     CategoryArtwork(category: deal.category, seed: deal.visualSeed,
                                     symbolScale: symbolScale)
