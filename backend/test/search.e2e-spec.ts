@@ -29,7 +29,20 @@ describe('Search (e2e, public)', () => {
 
     // Populate the index from the seeded deals.
     const indexer = app.get(SearchIndexer);
-    if (indexer.enabled) await indexer.reindexAll();
+    if (indexer.enabled) {
+      await indexer.reindexAll();
+      // Meilisearch is eventually consistent: a task can report success before the
+      // documents are queryable. Wait until the index actually serves results so
+      // the assertions below are deterministic across CI runners.
+      for (let i = 0; i < 40; i++) {
+        const res = await app
+          .getHttpAdapter()
+          .getInstance()
+          .inject({ method: 'GET', url: '/v1/search?q=pizza&limit=1' });
+        if (res.statusCode === 200 && (JSON.parse(res.body).items?.length ?? 0) > 0) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
   });
 
   afterAll(async () => {
