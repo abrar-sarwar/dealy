@@ -118,6 +118,9 @@ function deps(
             confidence: 90,
             verification_status: 'pending',
             verified: false,
+            image_url: null as string | null,
+            campus_slug: null as string | null,
+            requires_student_id: false,
           },
         ],
       })),
@@ -175,6 +178,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
           confidence: 90,
           verification_status: 'pending',
           verified: false,
+          image_url: null as string | null,
+          campus_slug: null as string | null,
+          requires_student_id: false,
         },
       ],
     }));
@@ -205,13 +211,17 @@ describe('DiscoveryRunnerService.runRegion', () => {
           confidence: 90,
           verification_status: 'pending',
           verified: false,
-          image_url: 'https://cdn.shop.com/eggs.jpg',
+          image_url: 'https://cdn.shop.com/eggs.jpg' as string | null,
+          campus_slug: null as string | null,
+          requires_student_id: false,
         },
       ],
     }));
     await build(d).runRegion('atlanta');
     const arg = (
-      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: { imageUrl: string | null } }]
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { imageUrl: string | null } },
+      ]
     )[0];
     expect(arg.data.imageUrl).toBe('https://cdn.shop.com/eggs.jpg');
   });
@@ -334,6 +344,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             confidence: 40,
             verification_status: 'pending',
             verified: false,
+            image_url: null as string | null,
+            campus_slug: null as string | null,
+            requires_student_id: false,
           },
         ],
       })
@@ -350,6 +363,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             confidence: 88,
             verification_status: 'pending',
             verified: false,
+            image_url: null as string | null,
+            campus_slug: null as string | null,
+            requires_student_id: false,
           },
         ],
       });
@@ -396,5 +412,97 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(d.firecrawl.scrape).toHaveBeenCalledTimes(1);
     expect(d.firecrawl.scrape).toHaveBeenCalledWith({ url: 'https://shop.com/weekly-ad' });
     expect(d.gemini.planCrawl).toHaveBeenCalledTimes(1);
+  });
+
+  it('sets campusSlug from zoneSlug when zoneSlug is a campus zone and Gemini returns null', async () => {
+    const d = deps({ source: { zoneSlug: 'gsu' } });
+    d.gemini.extractDeals = jest.fn(async () => ({
+      deals: [
+        {
+          title: 'Student Pizza Deal',
+          merchant: 'Rosa',
+          category: 'food',
+          discount: '20%',
+          expiration: null,
+          location: null,
+          summary: 's',
+          confidence: 90,
+          verification_status: 'pending' as const,
+          verified: false,
+          image_url: null as string | null,
+          campus_slug: null as string | null,
+          requires_student_id: true,
+        },
+      ],
+    }));
+    await build(d).runRegion('gsu');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { campusSlug: string | null; requiresStudentId: boolean } },
+      ]
+    )[0];
+    expect(arg.data.campusSlug).toBe('gsu');
+    expect(arg.data.requiresStudentId).toBe(true);
+  });
+
+  it('uses Gemini campus_slug over zoneSlug default when both are present', async () => {
+    const d = deps({ source: { zoneSlug: 'gsu' } });
+    d.gemini.extractDeals = jest.fn(async () => ({
+      deals: [
+        {
+          title: 'Tech Student Deal',
+          merchant: 'BestBuy',
+          category: 'tech',
+          discount: '10%',
+          expiration: null,
+          location: null,
+          summary: 's',
+          confidence: 90,
+          verification_status: 'pending' as const,
+          verified: false,
+          image_url: null,
+          campus_slug: 'gt' as string | null,
+          requires_student_id: true,
+        },
+      ],
+    }));
+    await build(d).runRegion('gsu');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { campusSlug: string | null } },
+      ]
+    )[0];
+    expect(arg.data.campusSlug).toBe('gt');
+  });
+
+  it('leaves campusSlug null for non-campus zones even when Gemini returns null', async () => {
+    const d = deps({ source: { zoneSlug: 'midtown' } });
+    d.gemini.extractDeals = jest.fn(async () => ({
+      deals: [
+        {
+          title: 'Pizza Deal',
+          merchant: 'PizzaPlus',
+          category: 'food',
+          discount: '10%',
+          expiration: null,
+          location: null,
+          summary: 's',
+          confidence: 90,
+          verification_status: 'pending' as const,
+          verified: false,
+          image_url: null as string | null,
+          campus_slug: null as string | null,
+          requires_student_id: false,
+        },
+      ],
+    }));
+    await build(d).runRegion('midtown');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        { data: { campusSlug: string | null; requiresStudentId: boolean } },
+      ]
+    )[0];
+    expect(arg.data.campusSlug).toBeNull();
+    expect(arg.data.requiresStudentId).toBe(false);
   });
 });

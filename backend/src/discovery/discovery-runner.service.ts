@@ -53,6 +53,10 @@ function normalizeConfidence<T extends { confidence: number }>(deals: T[]): T[] 
   }));
 }
 
+/** Campus zone slugs — a source whose zoneSlug is one of these auto-tags its
+ *  deals with that campus even when Gemini returns campus_slug null. */
+const CAMPUS_ZONES = new Set(['gsu', 'gt', 'ksu', 'uga']);
+
 function isGeminiQuotaExhausted(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return (
@@ -288,6 +292,10 @@ export class DiscoveryRunnerService {
                 // Prefer the per-deal product/food image Gemini picked from the page;
                 // fall back to the page-level OG image.
                 imageUrl: validImageUrl(dl.image_url) ?? ogImageUrl,
+                requiresStudentId: dl.requires_student_id ?? false,
+                campusSlug:
+                  dl.campus_slug ??
+                  (CAMPUS_ZONES.has(source.zoneSlug ?? '') ? source.zoneSlug : null),
               },
             });
             queued++;
