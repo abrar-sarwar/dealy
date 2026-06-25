@@ -40,6 +40,11 @@ enum DealRanker {
     /// eye-center referrals) clutter a consumer discovery deck. A bounded penalty
     /// demotes them without hiding them entirely.
     private static let weakCampusPerkPenalty = 30.0
+    /// Weight on the backend deal-quality score (0–100). High enough that a concrete,
+    /// high-quality offer (q≈90) clearly outranks a vague one (q≈14) regardless of the
+    /// other modifiers — this is the primary relevance signal when the backend scored
+    /// the deal.
+    private static let qualityWeight = 0.7
 
     /// A weak / non-consumer "campus perk": a row that isn't a real consumer offer
     /// (generic "other" type) or a faculty/staff-only non-food perk. Exposed for the
@@ -87,10 +92,18 @@ enum DealRanker {
         if deal.isEndingSoon(reference: reference) { score += urgencyBonus }
         score += Double(deal.dealScore) * dealScoreWeight   // small secondary signal
 
-        // Food prominence: restaurants are the hero of local discovery.
-        if deal.category == .food { score += foodProminenceBonus }
-        // Demote weak / non-consumer campus perks without hiding them.
-        if isWeakCampusPerk(deal) { score -= weakCampusPerkPenalty }
+        // Backend deal-quality score is the primary relevance signal when present:
+        // it already encodes concreteness, food/consumer category, location precision,
+        // image, and vagueness, so it subsumes the heuristic food/weak modifiers. Those
+        // apply only as a fallback when the backend hasn't scored the deal (qualityScore 0).
+        if deal.qualityScore > 0 {
+            score += deal.qualityScore * qualityWeight
+        } else {
+            // Food prominence: restaurants are the hero of local discovery.
+            if deal.category == .food { score += foodProminenceBonus }
+            // Demote weak / non-consumer campus perks without hiding them.
+            if isWeakCampusPerk(deal) { score -= weakCampusPerkPenalty }
+        }
 
         if deal.expirationDate <= reference { score -= expiredPenalty }
 

@@ -15,7 +15,8 @@ final class DealRankerTests: XCTestCase {
                       merchant: String = "M",
                       expiresInHours: Double = 240,
                       audience: String = "general",
-                      campusDealType: String? = nil) -> Deal {
+                      campusDealType: String? = nil,
+                      qualityScore: Double = 0) -> Deal {
         var d = Deal(
             id: id, title: id, merchant: merchant, category: category,
             currentPrice: current, originalPrice: original, distanceMiles: distance,
@@ -27,6 +28,7 @@ final class DealRankerTests: XCTestCase {
         )
         d.audience = audience
         d.campusDealType = campusDealType
+        d.qualityScore = qualityScore
         return d
     }
 
@@ -172,6 +174,24 @@ final class DealRankerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(foodInTop10, 2, "at least 2 food deals in the first 10")
         XCTAssertFalse(firstThreeIDs.contains("weak1"), "weak perk must not be in the first 3")
         XCTAssertFalse(firstThreeIDs.contains("weak2"), "weak perk must not be in the first 3")
+    }
+
+    func testHigherQualityScoreOutranksLowerInBest() {
+        // Identical deals except backend qualityScore — higher quality must rank first.
+        let hi = deal("hi", current: 0, original: 0, online: false, distance: 2, tags: ["Atlanta"], qualityScore: 92)
+        let lo = deal("lo", current: 0, original: 0, online: false, distance: 2, tags: ["Atlanta"], qualityScore: 18)
+        XCTAssertGreaterThan(score(hi), score(lo))
+    }
+
+    func testConcreteHighQualityBeatsCloserVagueDeal() {
+        // A concrete, high-quality restaurant deal a bit farther outranks a vague,
+        // low-quality "X Offer" that's closer — quality drives Best, not raw proximity.
+        let concrete = deal("concrete", current: 0, original: 0, online: false, distance: 5,
+                            category: .food, tags: ["Atlanta"], qualityScore: 92)
+        let vague = deal("vague", current: 0, original: 0, online: false, distance: 1,
+                         category: .food, tags: ["Atlanta"], qualityScore: 14)
+        let ranked = DealRanker.rank([vague, concrete], interests: [], campus: campus, radius: radius, reference: ref)
+        XCTAssertEqual(ranked.first?.id, "concrete")
     }
 
     func testReasonsLeadWithDollarsWhenConcrete() {

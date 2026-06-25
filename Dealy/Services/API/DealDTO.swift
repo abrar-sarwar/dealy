@@ -56,6 +56,8 @@ struct DealDTO: Decodable {
     let audience: String?
     /// Finer-grained campus deal type (e.g. "student_discount", "campus_perk").
     let campusDealType: String?
+    /// Backend deal-quality score (0–100): concrete offers high, vague/junk low.
+    let qualityScore: Double?
 
     /// Map to the app's domain model. Unknown category slugs fall back to `.food`.
     func toDeal() -> Deal {
@@ -89,7 +91,8 @@ struct DealDTO: Decodable {
             campusSlug: campusSlug,
             requiresStudentId: requiresStudentId ?? false,
             audience: audience ?? "general",
-            campusDealType: campusDealType
+            campusDealType: campusDealType,
+            qualityScore: qualityScore ?? 0
         )
     }
 }
