@@ -91,6 +91,13 @@ export const envSchema = z
     // Quality floor: candidates below this 0–100 deal-quality score are never
     // promoted ("Purchase a Gift Card"-tier junk). 0 disables the floor.
     DISCOVERY_PUBLISH_MIN_QUALITY: z.coerce.number().min(0).max(100).default(15),
+    // Google Places photos — API-SAFE caps. Photos are fetched ONLY by the capped
+    // `places:photos` batch job (never live on app open). See docs/places-photos.md.
+    GOOGLE_PLACES_PHOTOS_ENABLED: z.coerce.boolean().default(true),
+    PLACES_PHOTO_REFRESH_DAYS: z.coerce.number().int().positive().default(30),
+    MAX_PLACE_PHOTO_LOOKUPS_PER_RUN: z.coerce.number().int().positive().default(50),
+    MAX_PLACE_PHOTOS_PER_REGION: z.coerce.number().int().positive().default(100),
+    PLACE_PHOTO_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
     CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),

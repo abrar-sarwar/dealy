@@ -149,6 +149,12 @@ export class PlaceDiscoveryService {
       regionSlug: region.regionSlug,
       campusSlug: region.campusSlug ?? null,
       source: 'google_places',
+      // Capture the photo reference now so the (capped) photo job can skip a
+      // separate Place Details call later. The resolved URL is set by that job —
+      // discovery never resolves/fetches images.
+      ...(r.photoReference
+        ? { primaryPhotoReference: r.photoReference, photoAttribution: r.photoAttribution ?? null }
+        : {}),
     };
 
     await this.prisma.place.upsert({
@@ -166,6 +172,13 @@ export class PlaceDiscoveryService {
         userRatingsTotal: fields.userRatingsTotal,
         website: fields.website,
         phone: fields.phone,
+        // Only fill the reference when we have a fresh one — never wipe a stored one.
+        ...(r.photoReference
+          ? {
+              primaryPhotoReference: r.photoReference,
+              photoAttribution: r.photoAttribution ?? null,
+            }
+          : {}),
       },
       create: fields,
     });

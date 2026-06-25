@@ -23,6 +23,9 @@ function fp(over: Partial<FeedPlace> = {}): FeedPlace {
     whyRecommended: over.whyRecommended ?? 'why',
     website: 'website' in over ? over.website! : 'https://x.example',
     enrichedAt: over.enrichedAt ?? new Date(),
+    primaryPhotoUrl: 'primaryPhotoUrl' in over ? over.primaryPhotoUrl! : null,
+    imageStatus: over.imageStatus ?? 'none',
+    feedSectionCandidates: over.feedSectionCandidates ?? [],
   };
 }
 
@@ -145,6 +148,125 @@ describe('PlaceFeedService.sections', () => {
       studentValueScore: 0.8,
       confidenceLabel: 'high',
     });
+  });
+
+  it('includes primaryPhotoUrl + imageStatus on ranked places (nullable)', async () => {
+    const withPhoto = fp({
+      id: 'withphoto',
+      cheapEatsScore: 0.95,
+      affordabilityScore: 0.9,
+      rating: 4.4,
+      primaryPhotoUrl: 'https://lh3.googleusercontent.com/x=s1600',
+      imageStatus: 'fetched',
+    });
+    const { prisma } = makePrisma([withPhoto]);
+    const svc = new PlaceFeedService(prisma as never);
+    const place = (await svc.sections('gsu')).find((s) => s.key === 'cheap_eats')!.places[0];
+    expect(place.primaryPhotoUrl).toBe('https://lh3.googleusercontent.com/x=s1600');
+    expect(place.imageStatus).toBe('fetched');
+  });
+});
+
+describe('PlaceFeedService.mapMarkers', () => {
+  function makeMapPrisma(rows: FeedPlace[]) {
+    const findMany = jest.fn(async () => rows);
+    return { findMany, prisma: { place: { findMany } } };
+  }
+
+  it('returns bounded markers (default ~40)', async () => {
+    const rows = Array.from({ length: 100 }, (_, i) =>
+      fp({ id: `p${i}`, latitude: 33.75 + i / 1000, longitude: -84.38 }),
+    );
+    const { prisma } = makeMapPrisma(rows);
+    const svc = new PlaceFeedService(prisma as never);
+    const markers = await svc.mapMarkers('gsu', { center: { latitude: 33.75, longitude: -84.38 } });
+    expect(markers.length).toBe(40);
+  });
+
+  it('respects an explicit limit', async () => {
+    const rows = Array.from({ length: 50 }, (_, i) => fp({ id: `p${i}` }));
+    const { prisma } = makeMapPrisma(rows);
+    const svc = new PlaceFeedService(prisma as never);
+    const markers = await svc.mapMarkers('gsu', { limit: 5 });
+    expect(markers.length).toBe(5);
+  });
+
+  it('includes the map payload fields incl. nullable primaryPhotoUrl + markerKind', async () => {
+    const row = fp({
+      id: 'm1',
+      name: 'Marker Cafe',
+      categorySlug: 'food',
+      latitude: 33.7,
+      longitude: -84.39,
+      priceBucket: '$',
+      rating: 4.6,
+      whyRecommended: 'Great value',
+      primaryPhotoUrl: 'https://lh3.googleusercontent.com/m1=s1600',
+      imageStatus: 'fetched',
+      cheapEatsScore: 0.9,
+    });
+    const { prisma } = makeMapPrisma([row]);
+    const svc = new PlaceFeedService(prisma as never);
+    const [marker] = await svc.mapMarkers('gsu');
+    expect(marker).toMatchObject({
+      id: 'm1',
+      name: 'Marker Cafe',
+      categorySlug: 'food',
+      latitude: 33.7,
+      longitude: -84.39,
+      priceBucket: '$',
+      rating: 4.6,
+      whyRecommended: 'Great value',
+      primaryPhotoUrl: 'https://lh3.googleusercontent.com/m1=s1600',
+      imageStatus: 'fetched',
+    });
+    expect(typeof marker.markerKind).toBe('string');
+  });
+
+  it('derives markerKind from top feed section candidate', async () => {
+    const gem = fp({ id: 'gem', feedSectionCandidates: ['hidden_gem'], categorySlug: 'food' });
+    const student = fp({
+      id: 'student',
+      feedSectionCandidates: ['student_friendly'],
+      categorySlug: 'food',
+    });
+    const deal = fp({
+      id: 'deal',
+      feedSectionCandidates: ['worth_checking_deals'],
+      categorySlug: 'food',
+    });
+    const { prisma } = makeMapPrisma([gem, student, deal]);
+    const svc = new PlaceFeedService(prisma as never);
+    const markers = await svc.mapMarkers('gsu');
+    const byId = Object.fromEntries(markers.map((m) => [m.id, m.markerKind]));
+    expect(byId['gem']).toBe('hidden_gem');
+    expect(byId['student']).toBe('student');
+    expect(byId['deal']).toBe('deal');
+  });
+
+  it('falls back to category-derived markerKind (cafe/food/service)', async () => {
+    const cafe = fp({ id: 'cafe', categorySlug: 'cafe', feedSectionCandidates: [] });
+    const food = fp({ id: 'food', categorySlug: 'food', feedSectionCandidates: [] });
+    const svc = fp({ id: 'svc', categorySlug: 'services', feedSectionCandidates: [] });
+    const { prisma } = makeMapPrisma([cafe, food, svc]);
+    const service = new PlaceFeedService(prisma as never);
+    const markers = await service.mapMarkers('gsu');
+    const byId = Object.fromEntries(markers.map((m) => [m.id, m.markerKind]));
+    expect(byId['cafe']).toBe('cafe');
+    expect(byId['food']).toBe('food');
+    expect(byId['svc']).toBe('service');
+  });
+
+  it('filters by radius when provided', async () => {
+    const near = fp({ id: 'near', latitude: 33.7531, longitude: -84.3857 });
+    const far = fp({ id: 'far', latitude: 34.5, longitude: -84.0 }); // ~50+ miles away
+    const { prisma } = makeMapPrisma([near, far]);
+    const svc = new PlaceFeedService(prisma as never);
+    const markers = await svc.mapMarkers('gsu', {
+      center: { latitude: 33.7531, longitude: -84.3857 },
+      radiusMiles: 5,
+    });
+    expect(markers.map((m) => m.id)).toEqual(['near']);
   });
 });
 
