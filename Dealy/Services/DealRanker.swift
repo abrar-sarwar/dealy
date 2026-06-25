@@ -32,6 +32,22 @@ enum DealRanker {
     private static let urgencyBonus = 10.0
     private static let dealScoreWeight = 0.1
     private static let expiredPenalty = 1000.0
+    /// Local restaurants are the hero of local discovery, so food gets a bounded
+    /// prominence bonus that surfaces it early when present — but it's small enough
+    /// that a genuinely close non-food deal can still compete (not an absolute tier).
+    private static let foodProminenceBonus = 22.0
+    /// Weak / non-consumer "campus perks" (e.g. credit screening, translation,
+    /// eye-center referrals) clutter a consumer discovery deck. A bounded penalty
+    /// demotes them without hiding them entirely.
+    private static let weakCampusPerkPenalty = 30.0
+
+    /// A weak / non-consumer "campus perk": a row that isn't a real consumer offer
+    /// (generic "other" type) or a faculty/staff-only non-food perk. Exposed for the
+    /// ranking penalty, unit tests, and the category filter to reuse.
+    static func isWeakCampusPerk(_ deal: Deal) -> Bool {
+        deal.campusDealType == "other"
+            || (deal.audience == "faculty_staff" && deal.category != .food)
+    }
 
     /// Dollars-saved → a saturating score, monotonic in dollars. When the dollar
     /// amount is unknown (`savingsAmount == 0`, e.g. price-0 student programs or
@@ -70,6 +86,12 @@ enum DealRanker {
         if !Set(deal.locationTags).isDisjoint(with: Set(campus.locationTags)) { score += campusBonus }
         if deal.isEndingSoon(reference: reference) { score += urgencyBonus }
         score += Double(deal.dealScore) * dealScoreWeight   // small secondary signal
+
+        // Food prominence: restaurants are the hero of local discovery.
+        if deal.category == .food { score += foodProminenceBonus }
+        // Demote weak / non-consumer campus perks without hiding them.
+        if isWeakCampusPerk(deal) { score -= weakCampusPerkPenalty }
+
         if deal.expirationDate <= reference { score -= expiredPenalty }
 
         return score

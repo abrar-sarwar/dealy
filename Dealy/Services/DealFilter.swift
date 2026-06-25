@@ -9,6 +9,24 @@ enum DealFilter {
         return deals.filter { $0.category == category }
     }
 
+    /// Keep deals matching a coarse, user-facing `DealCategoryFilter`.
+    static func byCategoryFilter(_ deals: [Deal], _ filter: DealCategoryFilter) -> [Deal] {
+        deals.filter { filter.matches($0) }
+    }
+
+    /// `.all` plus every non-`all` filter that matches at least one deal, so the UI
+    /// can show only the chips that are actually useful for this inventory.
+    static func availableFilters(in deals: [Deal]) -> [DealCategoryFilter] {
+        [.all] + DealCategoryFilter.allCases.filter { filter in
+            filter != .all && deals.contains { filter.matches($0) }
+        }
+    }
+
+    /// Count of deals matching `filter`.
+    static func count(_ deals: [Deal], for filter: DealCategoryFilter) -> Int {
+        deals.filter { filter.matches($0) }.count
+    }
+
     /// A deal is in range for a campus when it's online (always available) OR
     /// it shares a location tag with the campus AND is within the radius.
     static func isInRange(_ deal: Deal, campus: Campus, radius: Int) -> Bool {
