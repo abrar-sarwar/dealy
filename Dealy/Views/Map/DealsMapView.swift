@@ -2,11 +2,12 @@ import SwiftUI
 import MapKit
 import UIKit
 
-/// Local-deal browser BOUNDED to the Dealy service zone. By default it frames the
-/// whole zone and shows EVERY mappable deal in the area — no small default radius.
-/// All filtering (category, radius, precision, sort, student/campus/image toggles)
-/// lives behind a single Filter button + sheet, so the map chrome stays minimal:
-/// a Filter button, a recenter button, a deal-count label, and the bottom strip.
+/// Local-deal browser BOUNDED to the Dealy service zone, built around an
+/// always-visible RADIUS SLIDER as its primary control. Dragging the slider resizes
+/// the live range ring (`MapCircle`), refilters the pins + bottom strip, and
+/// reframes the camera to fit the radius — always capped by the zone box so the
+/// map never opens metro-wide. Everything else (category, precision, sort,
+/// student/campus/image toggles) lives behind the quiet Filters button + sheet.
 /// Tapping a pin selects it and scrolls the strip to the matching card; the two
 /// stay in sync. Pins are category- and precision-aware (exact = solid, approximate
 /// = faded + dashed). The camera cannot pan/zoom out past the metro.
@@ -18,6 +19,12 @@ struct DealsMapView: View {
     @State private var selectedID: String?
     @State private var detailDeal: Deal?
     @State private var isLocating = false
+
+    /// The signature control: a top-level map value (NOT a sheet filter). Drives
+    /// the ring, the visible set, and the camera. Defaults to the widest (show all).
+    @State private var radiusMiles: Int = 5
+    /// Continuous slider backing value; snaps to whole miles in `radiusMiles`.
+    @State private var radiusRaw: Double = 5
 
     @State private var filter = MapFilterState()
     @State private var showingFilters = false
@@ -37,35 +44,41 @@ struct DealsMapView: View {
         DealFilter.availableFilters(in: mappableAll)
     }
 
-    /// The deals matching the active filter, ordered by the active sort.
+    /// Deals matching the sheet filters (category + toggles), BEFORE radius. Used to
+    /// scope the slider's live count to the active filters.
+    private var filteredAll: [Deal] { filter.apply(to: mappableAll) }
+
+    /// The deals shown on the map + strip: sheet filters, then within the slider's
+    /// radius, ordered by the active sort.
     private var visible: [Deal] {
-        let filtered = filter.apply(to: mappableAll)
+        let scoped = MapCameraModel.within(filteredAll, radiusMiles: radiusMiles)
         let ranked = DealRanker.diversified(
-            DealRanker.rank(filtered,
+            DealRanker.rank(scoped,
                             interests: app.interests,
                             campus: app.currentCampus,
-                            radius: filter.radiusMiles))
-        return filter.sort.ordered(filtered, ranked: ranked)
+                            radius: radiusMiles))
+        return filter.sort.ordered(scoped, ranked: ranked)
     }
 
     private var countLabel: MapCameraModel.CountLabel {
         MapCameraModel.countLabel(shown: visible, totalMappable: mappableAll)
     }
 
-    /// Bounds: the camera is locked to the Dealy service-zone box and cannot zoom
-    /// out past the metro.
+    /// Bounds: the camera is locked to the CURRENT RADIUS bubble — the user cannot
+    /// pan or zoom out beyond the selected range. Tighten/widen the slider and the
+    /// allowed area follows. No metro-wide free roaming.
     private var cameraBounds: MapCameraBounds {
         MapCameraBounds(
-            centerCoordinateBounds: MapCameraModel.zoneRegion(center: center),
-            maximumDistance: MapCameraModel.zoneMaxDistanceMeters
+            centerCoordinateBounds: MapCameraModel.spotlightRegion(center: center, radiusMiles: radiusMiles),
+            maximumDistance: MapCameraModel.radiusMeters(radiusMiles) * 5.5
         )
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                mapArea
                 dealStrip
+                mapArea
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,16 +97,32 @@ struct DealsMapView: View {
             .onAppear { resolveLocation(force: false) }
             .task {
                 await app.loadLocalDeals()
-                reframe()
+                frameToRadius()
             }
-            .onChange(of: filter) { _, _ in clampSelection(); reframe() }
+            .onChange(of: filter) { _, _ in clampSelection(); frameToRadius() }
+            // radiusMiles is the single source of truth (shared by the map slider AND
+            // the Filters sheet). The continuous slider writes it; the sheet writes it;
+            // this one handler reframes + re-filters so both stay in lockstep.
+            .onChange(of: radiusRaw) { _, raw in
+                let snapped = MapCameraModel.snapRadius(raw)
+                if snapped != radiusMiles { radiusMiles = snapped }
+            }
+            .onChange(of: radiusMiles) { _, v in
+                if MapCameraModel.snapRadius(radiusRaw) != v { radiusRaw = Double(v) } // sync slider thumb when changed from the sheet
+                Haptics.selection()
+                clampSelection()
+                frameToRadius()
+            }
         }
     }
 
     // MARK: Map
 
     private var mapArea: some View {
-        Map(position: $position, bounds: cameraBounds) {
+        // interactionModes [] LOCKS the camera to the user's location: no manual
+        // pan/zoom, so the centered spotlight bubble always stays on you. The radius
+        // slider is the only thing that changes the view.
+        Map(position: $position, bounds: cameraBounds, interactionModes: []) {
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
@@ -107,11 +136,85 @@ struct DealsMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
+        // Spotlight: dim everything OUTSIDE the radius bubble. The camera frames the
+        // bubble centered (spotlightRegion), so a centered circular cutout aligns with
+        // the range. Sits under the chrome overlays (slider/filters stay bright).
+        .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .topLeading) { filterButton }
         .overlay(alignment: .topTrailing) { countOverlay }
+        .overlay(alignment: .bottom) { radiusSlider }
         .overlay(alignment: .bottomTrailing) { recenterPill }
         .overlay { emptyOverlay }
+    }
+
+    /// Dims everything outside the radius bubble (a centered circular hole) so only
+    /// what's inside reads clearly; bright ring marks the edge. Screen-space, but the
+    /// camera keeps the bubble centered so it lines up with the range.
+    private var spotlightMask: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let diameter = side * 0.62
+            ZStack {
+                // Soft radial fade: clear inside the bubble, gently fading to a light
+                // ~0.3 dim outside (you can still see beyond — just de-emphasized).
+                RadialGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .clear, location: 0.80),
+                        .init(color: .black.opacity(0.30), location: 1.0),
+                    ]),
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: diameter / 2 * 1.18
+                )
+                Circle()
+                    .stroke(Theme.primary.opacity(0.8), lineWidth: 2.5)
+                    .frame(width: diameter, height: diameter)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .allowsHitTesting(false)
+    }
+
+    // MARK: Radius slider — the signature control
+
+    /// Always-visible, compact slider docked at the bottom of the map. Continuous
+    /// 1–15 mi, snapping to whole miles; live label; haptic tick per integer step.
+    private var radiusSlider: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Label(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll),
+                      systemImage: "scope")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+            }
+            HStack(spacing: Spacing.sm) {
+                Text("\(MapCameraModel.minRadiusMiles)")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(Theme.mutedText)
+                Slider(
+                    value: $radiusRaw,
+                    in: Double(MapCameraModel.minRadiusMiles)...Double(MapCameraModel.maxRadiusMiles),
+                    step: 1
+                ) {
+                    Text("Radius")
+                } minimumValueLabel: { EmptyView() } maximumValueLabel: { EmptyView() }
+                    .tint(Theme.primary)
+                Text("\(MapCameraModel.maxRadiusMiles)")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(Theme.mutedText)
+            }
+        }
+        .padding(.vertical, 10).padding(.horizontal, Spacing.md)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+            .stroke(Theme.primary.opacity(0.2), lineWidth: 1))
+        .dealyShadow(.soft)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.bottom, Spacing.sm)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Search radius")
+        .accessibilityValue(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll))
     }
 
     @ViewBuilder private var permissionBanner: some View {
@@ -189,13 +292,13 @@ struct DealsMapView: View {
         }
     }
 
-    /// "Back to Dealy zone" recenter pill — reframes to the zone-fit region (the
-    /// whole area showing all current deals). Never fights manual gestures.
+    /// "Back to my area" recenter pill — reframes to fit the current radius around
+    /// the user. Never fights manual gestures.
     private var recenterPill: some View {
-        Button { reframe(); Haptics.selection() } label: {
+        Button { frameToRadius(); Haptics.selection() } label: {
             HStack(spacing: 6) {
-                Image(systemName: "scope").font(.caption2.weight(.bold))
-                Text("Back to Dealy zone").font(.caption.weight(.semibold))
+                Image(systemName: "location.fill").font(.caption2.weight(.bold))
+                Text("Back to my area").font(.caption.weight(.semibold))
             }
             .foregroundStyle(Theme.primary)
             .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
@@ -204,8 +307,10 @@ struct DealsMapView: View {
             .dealyShadow(.soft)
         }
         .buttonStyle(.plain)
-        .padding(Spacing.sm)
-        .accessibilityLabel("Back to Dealy zone")
+        .padding(.trailing, Spacing.sm)
+        // Sit above the slider so the two don't collide at the bottom edge.
+        .padding(.bottom, 96)
+        .accessibilityLabel("Back to my area")
     }
 
     private var centerPin: some View {
@@ -218,25 +323,45 @@ struct DealsMapView: View {
     }
 
     @ViewBuilder private var emptyOverlay: some View {
-        if visible.isEmpty && !mappableAll.isEmpty {
+        if MapCameraModel.isRadiusEmpty(shown: visible, totalMappable: mappableAll) {
+            // Honest empty state: the radius + filters hide everything, but the area
+            // has inventory. Point at the (still-visible) slider and the Filters sheet.
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text("No deals match these filters")
+                Text("No deals within \(radiusMiles) mi")
                     .font(.headline).foregroundStyle(Theme.primaryText)
                     .multilineTextAlignment(.center)
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { filter = MapFilterState() }
-                    Haptics.selection()
-                } label: {
-                    InfoChip(symbol: "arrow.counterclockwise", text: "Reset filters", filled: true)
+                Text("Drag the slider to widen\(filter.isDefault ? "" : ", or change Filters")")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedText)
+                    .multilineTextAlignment(.center)
+                if radiusMiles < MapCameraModel.maxRadiusMiles {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            radiusRaw = Double(MapCameraModel.maxRadiusMiles)
+                        }
+                    } label: {
+                        InfoChip(symbol: "arrow.left.and.right",
+                                 text: "Widen to \(MapCameraModel.maxRadiusMiles) mi", filled: true)
+                    }
+                    .buttonStyle(.plain)
+                } else if !filter.isDefault {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { filter = MapFilterState() }
+                        Haptics.selection()
+                    } label: {
+                        InfoChip(symbol: "arrow.counterclockwise", text: "Reset filters", filled: true)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .padding(Spacing.lg)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
             .padding(Spacing.lg)
+            // Keep clear of the bottom slider.
+            .padding(.bottom, 120)
         } else if mappableAll.isEmpty {
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
@@ -254,13 +379,19 @@ struct DealsMapView: View {
     // MARK: Deal strip (all filtered deals, lazily rendered, selection-coupled)
 
     private var dealStrip: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             if !visible.isEmpty {
-                Text("\(visible.count) \(visible.count == 1 ? "deal" : "deals") · \(filter.sort.label)")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Theme.primaryText)
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.top, 8)
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill").font(.caption2).foregroundStyle(.orange)
+                    Text("Limited Deals!")
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(Theme.primaryText)
+                    Text("· \(visible.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                }
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, 4)
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -271,14 +402,19 @@ struct DealsMapView: View {
                         }
                     }
                     .padding(.horizontal, Spacing.lg)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                 }
                 .onChange(of: selectedID) { _, id in
                     guard let id else { return }
                     withAnimation(.easeInOut) { proxy.scrollTo(id, anchor: .center) }
                 }
+                // Pin the strip to one card row — without this the horizontal
+                // ScrollView expands to fill all the leftover vertical space (the
+                // "big empty box"). The map takes everything below.
+                .frame(height: 62)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .background(Theme.background)
     }
 
@@ -294,28 +430,38 @@ struct DealsMapView: View {
                 select(deal.id)
             }
         } label: {
-            HStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xs) {
                 DealImage(deal: deal)
-                    .frame(width: 50, height: 50)
+                    .frame(width: 38, height: 38)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(deal.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
                         .lineLimit(1)
-                    Text(deal.merchant)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
-                        .lineLimit(1)
-                    if deal.hasFixedPricing {
-                        Text(Format.price(deal.currentPrice))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Theme.primary)
+                    // One compact info line: merchant · distance (honest) · price, with
+                    // ending-soon / student-ID as trailing icons.
+                    HStack(spacing: 3) {
+                        Text(deal.merchant).lineLimit(1)
+                        if !deal.isOnline {
+                            Text("·")
+                            Text(deal.isExactLocation
+                                 ? Format.distance(deal.distanceMiles, isOnline: false)
+                                 : "Nearby")
+                        }
+                        if deal.hasFixedPricing {
+                            Text(Format.price(deal.currentPrice)).foregroundStyle(Theme.primary)
+                        }
+                        if deal.isEndingSoon() { Image(systemName: "clock.fill").foregroundStyle(.orange) }
+                        if deal.requiresStudentId { Image(systemName: "graduationcap.fill").foregroundStyle(Theme.primary) }
                     }
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedText)
+                    .lineLimit(1)
                 }
-                .frame(width: 116, alignment: .leading)
+                .frame(width: 120, alignment: .leading)
             }
-            .padding(8)
+            .padding(6)
             .background(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(Theme.surface))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
@@ -343,11 +489,11 @@ struct DealsMapView: View {
         }
     }
 
-    /// Reframe to the zone-fit region: the whole area showing every visible deal,
-    /// capped to the zone box.
-    private func reframe() {
-        let region = MapCameraModel.zoneFitRegion(center: center, deals: visible)
-        withAnimation { position = .region(region) }
+    /// Reframe to fit the current slider radius around the user — the camera tracks
+    /// the ring. Span is capped to the zone box by `MapCameraModel.span`.
+    private func frameToRadius() {
+        let region = MapCameraModel.spotlightRegion(center: center, radiusMiles: radiusMiles)
+        withAnimation(.easeInOut(duration: 0.25)) { position = .region(region) }
     }
 
     private func openSettings() {
@@ -365,7 +511,7 @@ struct DealsMapView: View {
             if let center = try? await app.resolveDeviceCenter() {
                 anchor = CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude)
             }
-            reframe()
+            frameToRadius()
         }
     }
 }

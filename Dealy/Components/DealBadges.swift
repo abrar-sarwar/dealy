@@ -125,6 +125,16 @@ struct DealScoreBadge: View {
     }
 }
 
+/// "Ending soon" urgency chip — shown when a deal expires within 12h. Compact,
+/// warning-tinted, clock icon. Distinct from the neutral `ExpiryChip` so the
+/// urgency reads at a glance without crowding the title/price.
+struct EndingSoonBadge: View {
+    var body: some View {
+        InfoChip(symbol: "clock.fill", text: "Ending soon", tint: Theme.warning, filled: true)
+            .accessibilityLabel("Ending soon — expires within 12 hours")
+    }
+}
+
 /// Expiry chip that turns urgent when ending soon / expired.
 struct ExpiryChip: View {
     let date: Date

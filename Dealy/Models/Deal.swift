@@ -120,6 +120,13 @@ extension Deal {
     /// real storefront. Approximate deals must never show precise distances.
     var isApproximateLocation: Bool { locationPrecision != "exact" }
 
+    /// True only when the backend reports exact storefront coordinates AND both
+    /// lat/lng are present. The single gate for offering precise navigation —
+    /// we never fake turn-by-turn directions to an approximate centroid.
+    var isExactLocation: Bool {
+        locationPrecision == "exact" && latitude != nil && longitude != nil
+    }
+
     /// Display tag for the closest matching location, for card chips.
     var primaryLocationTag: String {
         isOnline ? "Online" : (locationTags.first ?? "Nearby")

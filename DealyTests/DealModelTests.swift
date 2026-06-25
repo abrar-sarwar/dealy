@@ -58,6 +58,46 @@ final class DealModelTests: XCTestCase {
         XCTAssertTrue(expired.isExpired)
     }
 
+    func testEndingSoonTrueInTwoHoursFalseInTenDays() {
+        let now = Date()
+        let soon = makeDeal(expiresInHours: 2, reference: now)
+        let far = makeDeal(expiresInHours: 24 * 10, reference: now)
+        XCTAssertTrue(soon.isEndingSoon(reference: now))
+        XCTAssertFalse(far.isEndingSoon(reference: now))
+    }
+
+    // MARK: - isExactLocation
+
+    private func locatedDeal(precision: String,
+                             latitude: Double?,
+                             longitude: Double?) -> Deal {
+        var d = Deal(id: "loc", title: "T", merchant: "M", category: .food,
+                     currentPrice: 5, originalPrice: 10, distanceMiles: 0.4,
+                     expirationDate: .distantFuture, dealScore: 50, isOnline: false,
+                     shortDescription: "s", detailedDescription: "d", terms: "t",
+                     locationTags: [], couponCode: nil, destinationURL: nil,
+                     latitude: latitude, longitude: longitude, visualSeed: 0)
+        d.locationPrecision = precision
+        return d
+    }
+
+    func testIsExactLocationTrueForExactWithCoords() {
+        let d = locatedDeal(precision: "exact", latitude: 33.75, longitude: -84.38)
+        XCTAssertTrue(d.isExactLocation)
+    }
+
+    func testIsExactLocationFalseForApproximate() {
+        let d = locatedDeal(precision: "approximate", latitude: 33.75, longitude: -84.38)
+        XCTAssertFalse(d.isExactLocation)
+    }
+
+    func testIsExactLocationFalseWhenCoordsMissing() {
+        let d = locatedDeal(precision: "exact", latitude: nil, longitude: nil)
+        XCTAssertFalse(d.isExactLocation)
+        let lngOnly = locatedDeal(precision: "exact", latitude: nil, longitude: -84.38)
+        XCTAssertFalse(lngOnly.isExactLocation)
+    }
+
     func testIsExpiredFalseForFutureExpiry() {
         let now = Date()
         let active = makeDeal(expiresInHours: 48, reference: now)
