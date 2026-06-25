@@ -3,6 +3,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { SearchIndexer } from '../src/search/search-indexer.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 interface Hit {
   id: string;
@@ -27,12 +28,48 @@ describe('Search (e2e, public)', () => {
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
 
-    // Populate the index from the seeded deals.
+    // Self-contained fixture: guarantee a published 'pizza' deal exists regardless
+    // of seed state or other e2e specs' cleanup, so the index always has a hit.
+    const prisma = app.get(PrismaService);
+    const cat = await prisma.category.findFirstOrThrow({ where: { slug: 'food' } });
+    await prisma.deal.upsert({
+      where: { externalId: 'e2e-search-pizza' },
+      update: { status: 'published' },
+      create: {
+        externalId: 'e2e-search-pizza',
+        title: 'BOGO Pizza Slices',
+        merchant: "Rosa's Pizza",
+        categoryId: cat.id,
+        source: 'e2e-search',
+        sourceTrust: 'editorial',
+        status: 'published',
+        isOnline: false,
+        latitude: 33.7531,
+        longitude: -84.3857,
+        currentPriceMinor: 599n,
+        originalPriceMinor: 1199n,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+
     const indexer = app.get(SearchIndexer);
-    if (indexer.enabled) await indexer.reindexAll();
+    if (indexer.enabled) {
+      await indexer.reindexAll();
+      // Meilisearch is eventually consistent: a task can report success before the
+      // documents are queryable. Wait until results are served before asserting.
+      for (let i = 0; i < 40; i++) {
+        const res = await app
+          .getHttpAdapter()
+          .getInstance()
+          .inject({ method: 'GET', url: '/v1/search?q=pizza&limit=1' });
+        if (res.statusCode === 200 && (JSON.parse(res.body).items?.length ?? 0) > 0) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
   });
 
   afterAll(async () => {
+    await app.get(PrismaService).deal.deleteMany({ where: { source: 'e2e-search' } });
     await app.close();
   });
 

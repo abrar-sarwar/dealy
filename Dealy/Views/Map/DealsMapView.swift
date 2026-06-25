@@ -197,9 +197,18 @@ struct DealsMapView: View {
         .accessibilityLabel("Your location")
     }
 
+    /// Caption that honestly reflects the precision mix of the pinned deals.
+    private var locationNote: String {
+        let n = mappable.count
+        let approx = mappable.filter { $0.isApproximateLocation }.count
+        if approx == 0 { return "Exact locations · \(n) deals" }
+        if approx == n { return "Approximate locations · \(n) deals" }
+        return "Exact + approximate locations · \(n) deals"
+    }
+
     @ViewBuilder private var topNote: some View {
         if !mappable.isEmpty {
-            Text("Approximate locations · \(mappable.count) deals")
+            Text(locationNote)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Theme.mutedText)
                 .padding(.vertical, 6).padding(.horizontal, Spacing.sm)

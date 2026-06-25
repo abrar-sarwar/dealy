@@ -16,6 +16,7 @@ type Source = {
   dealUrl: null;
   targetPaths: string[];
   sourceType: string;
+  kind: string;
   merchantHint: string;
   defaultCategorySlug: string;
   zoneSlug: string;
@@ -50,6 +51,7 @@ function deps(
     dealUrl: null,
     targetPaths: [],
     sourceType: 'weekly_ad',
+    kind: 'grocery_circular',
     merchantHint: 'Shop',
     defaultCategorySlug: 'groceries',
     zoneSlug: 'atlanta',
@@ -156,6 +158,31 @@ describe('DiscoveryRunnerService.runRegion', () => {
     expect(out.skipped).toBe(true);
     expect(d.firecrawl.scrape).not.toHaveBeenCalled();
     expect(d.gemini.planCrawl).not.toHaveBeenCalled();
+  });
+
+  it('uses the curated source category for grocery circulars even when extraction mislabels items', async () => {
+    const d = deps({ source: { kind: 'grocery_circular', defaultCategorySlug: 'groceries' } });
+    d.gemini.extractDeals = jest.fn(async () => ({
+      deals: [
+        {
+          title: 'Eggs $1.99/dozen',
+          merchant: 'Shop',
+          category: 'food', // model tags grocery lines as food
+          discount: '20%',
+          expiration: null,
+          location: null,
+          summary: 's',
+          confidence: 90,
+          verification_status: 'pending',
+          verified: false,
+        },
+      ],
+    }));
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: { categorySlug: string } }]
+    )[0];
+    expect(arg.data.categorySlug).toBe('groceries');
   });
 
   it('runs the full pipeline and persists a candidate with approximate centroid by default', async () => {
