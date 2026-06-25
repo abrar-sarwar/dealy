@@ -7,7 +7,8 @@ final class DealCategoryFilterTests: XCTestCase {
 
     private func deal(_ id: String, category: DealCategory = .food,
                       campusSlug: String? = nil, requiresStudentId: Bool = false,
-                      audience: String = "general", isStudentOnly: Bool = false) -> Deal {
+                      audience: String = "general", isStudentOnly: Bool = false,
+                      campusDealType: String? = nil) -> Deal {
         var d = Deal(
             id: id, title: id, merchant: "M", category: category,
             currentPrice: 5, originalPrice: 10, distanceMiles: 1,
@@ -21,6 +22,7 @@ final class DealCategoryFilterTests: XCTestCase {
         d.requiresStudentId = requiresStudentId
         d.audience = audience
         d.isStudentOnly = isStudentOnly
+        d.campusDealType = campusDealType
         return d
     }
 
@@ -53,6 +55,26 @@ final class DealCategoryFilterTests: XCTestCase {
         XCTAssertTrue(DealCategoryFilter.student.matches(deal("b", audience: "students")))
         XCTAssertTrue(DealCategoryFilter.student.matches(deal("c", isStudentOnly: true)))
         XCTAssertFalse(DealCategoryFilter.student.matches(deal("d")))
+    }
+
+    func testServicesMatchesNonConsumerUtilityOffers() {
+        XCTAssertTrue(DealCategoryFilter.services.matches(
+            deal("a", category: .home, campusDealType: "other")))
+        XCTAssertTrue(DealCategoryFilter.services.matches(
+            deal("b", category: .home, campusDealType: "transport")))
+    }
+
+    func testServicesDoesNotMatchFoodDeal() {
+        XCTAssertFalse(DealCategoryFilter.services.matches(
+            deal("food", category: .food, campusDealType: nil)))
+        // A food deal that somehow had a consumer campusDealType is still not Services.
+        XCTAssertFalse(DealCategoryFilter.services.matches(
+            deal("food2", category: .food, campusDealType: "student_discount")))
+    }
+
+    func testServicesLabelAndSymbol() {
+        XCTAssertEqual(DealCategoryFilter.services.label, "Services")
+        XCTAssertEqual(DealCategoryFilter.services.symbol, "wrench.and.screwdriver.fill")
     }
 
     func testByCategoryFilter() {

@@ -12,6 +12,7 @@ enum DealCategoryFilter: String, CaseIterable, Identifiable {
     case campus
     case entertainment
     case student
+    case services
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum DealCategoryFilter: String, CaseIterable, Identifiable {
         case .campus: return "Campus"
         case .entertainment: return "Entertainment"
         case .student: return "Student"
+        case .services: return "Services"
         }
     }
 
@@ -34,6 +36,7 @@ enum DealCategoryFilter: String, CaseIterable, Identifiable {
         case .campus: return "graduationcap.fill"
         case .entertainment: return "ticket.fill"
         case .student: return "person.badge.shield.checkmark"
+        case .services: return "wrench.and.screwdriver.fill"
         }
     }
 
@@ -47,6 +50,11 @@ enum DealCategoryFilter: String, CaseIterable, Identifiable {
         case .campus: return deal.campusSlug != nil
         case .student:
             return deal.requiresStudentId || deal.audience == "students" || deal.isStudentOnly
+        case .services:
+            // The non-consumer / utility offers (e.g. transport passes, generic
+            // "other"-type campus perks) — surfaced under their own lane so they
+            // don't clutter Food/Grocery/Entertainment.
+            return deal.campusDealType == "other" || deal.campusDealType == "transport"
         }
     }
 }

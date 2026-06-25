@@ -2,13 +2,14 @@ import SwiftUI
 import MapKit
 import UIKit
 
-/// Polished local-deal browser. A category-chip row + radius control sit above a
-/// zone-locked map of nearby deals; a single strip of the filtered deals runs
-/// underneath. The map frames the *selected radius* (never the farthest outlier)
-/// and centers on the device location once resolved, else the discovery center.
+/// Local-deal browser BOUNDED to the Dealy service zone. By default it frames the
+/// whole zone and shows EVERY mappable deal in the area — no small default radius.
+/// All filtering (category, radius, precision, sort, student/campus/image toggles)
+/// lives behind a single Filter button + sheet, so the map chrome stays minimal:
+/// a Filter button, a recenter button, a deal-count label, and the bottom strip.
 /// Tapping a pin selects it and scrolls the strip to the matching card; the two
 /// stay in sync. Pins are category- and precision-aware (exact = solid, approximate
-/// = faded + dashed). Nothing decorative — chips, radius, caption, recenter, strip.
+/// = faded + dashed). The camera cannot pan/zoom out past the metro.
 struct DealsMapView: View {
     @Environment(AppState.self) private var app
 
@@ -18,11 +19,8 @@ struct DealsMapView: View {
     @State private var detailDeal: Deal?
     @State private var isLocating = false
 
-    @State private var categoryFilter: DealCategoryFilter = .all
-    /// Display radius (miles). Initialized once the feed loads to the smallest
-    /// radius with a useful count (see `MapCameraModel.defaultRadius`).
-    @State private var displayRadius: Int = 5
-    @State private var didInitRadius = false
+    @State private var filter = MapFilterState()
+    @State private var showingFilters = false
 
     /// Map center / pin anchor: the real device location once resolved, else the
     /// current discovery center as a fallback.
@@ -34,26 +32,38 @@ struct DealsMapView: View {
     /// All physical, active deals from the curated local feed, nearest-first.
     private var mappableAll: [Deal] { MapCameraModel.mappable(app.localDeals) }
 
-    /// The deals actually drawn / listed: category + radius filtered.
-    private var visible: [Deal] {
-        MapCameraModel.filtered(mappableAll, category: categoryFilter, radiusMiles: displayRadius)
-    }
-
-    /// Chips to show for this inventory (only filters that match ≥1 mappable deal).
-    private var availableFilters: [DealCategoryFilter] {
+    /// Filter lanes worth offering (only those matching ≥1 mappable deal), plus All.
+    private var availableCategories: [DealCategoryFilter] {
         DealFilter.availableFilters(in: mappableAll)
     }
 
-    private var radiusMeters: CLLocationDistance { MapCameraModel.radiusMeters(displayRadius) }
+    /// The deals matching the active filter, ordered by the active sort.
+    private var visible: [Deal] {
+        let filtered = filter.apply(to: mappableAll)
+        let ranked = DealRanker.diversified(
+            DealRanker.rank(filtered,
+                            interests: app.interests,
+                            campus: app.currentCampus,
+                            radius: filter.radiusMiles))
+        return filter.sort.ordered(filtered, ranked: ranked)
+    }
 
-    private func region() -> MKCoordinateRegion {
-        MapCameraModel.region(center: center, radiusMiles: displayRadius)
+    private var countLabel: MapCameraModel.CountLabel {
+        MapCameraModel.countLabel(shown: visible, totalMappable: mappableAll)
+    }
+
+    /// Bounds: the camera is locked to the Dealy service-zone box and cannot zoom
+    /// out past the metro.
+    private var cameraBounds: MapCameraBounds {
+        MapCameraBounds(
+            centerCoordinateBounds: MapCameraModel.zoneRegion(center: center),
+            maximumDistance: MapCameraModel.zoneMaxDistanceMeters
+        )
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                controls
                 mapArea
                 dealStrip
             }
@@ -67,96 +77,23 @@ struct DealsMapView: View {
                     .accessibilityLabel("Center on my location")
                 }
             }
+            .sheet(isPresented: $showingFilters) {
+                MapFilterSheet(state: $filter, availableCategories: availableCategories)
+            }
             .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
             .onAppear { resolveLocation(force: false) }
             .task {
                 await app.loadLocalDeals()
-                initRadiusIfNeeded()
                 reframe()
             }
-            .onChange(of: categoryFilter) { _, _ in clampSelection(); reframe() }
-            .onChange(of: displayRadius) { _, _ in clampSelection(); reframe() }
+            .onChange(of: filter) { _, _ in clampSelection(); reframe() }
         }
-    }
-
-    // MARK: Controls (category chips + radius)
-
-    private var controls: some View {
-        VStack(spacing: Spacing.xs) {
-            categoryChips
-            radiusControl
-        }
-        .padding(.top, Spacing.xs)
-        .padding(.bottom, Spacing.xs)
-        .background(Theme.background)
-    }
-
-    private var categoryChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.xs) {
-                ForEach(availableFilters) { filter in
-                    let n = MapCameraModel.count(for: mappableAll, radiusMiles: displayRadius, category: filter)
-                    chip(
-                        symbol: filter.symbol,
-                        text: "\(filter.label) · \(n)",
-                        selected: categoryFilter == filter
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.2)) { categoryFilter = filter }
-                        Haptics.selection()
-                    }
-                }
-            }
-            .padding(.horizontal, Spacing.lg)
-        }
-    }
-
-    private var radiusControl: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.xs) {
-                ForEach(MapCameraModel.radiusOptions, id: \.self) { r in
-                    let n = MapCameraModel.count(for: mappableAll, radiusMiles: r, category: categoryFilter)
-                    chip(
-                        symbol: "scope",
-                        text: "\(r) mi · \(n)",
-                        selected: displayRadius == r
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.2)) { displayRadius = r }
-                        Haptics.selection()
-                    }
-                }
-            }
-            .padding(.horizontal, Spacing.lg)
-        }
-    }
-
-    /// Pill chip used by both control rows. Selected = solid Theme.primary.
-    private func chip(symbol: String, text: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: symbol).font(.caption2.weight(.bold))
-                Text(text).font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(selected ? .white : Theme.primary)
-            .padding(.vertical, 6)
-            .padding(.horizontal, Spacing.sm)
-            .background(
-                Capsule().fill(selected ? AnyShapeStyle(Theme.primary) : AnyShapeStyle(Theme.primary.opacity(0.12)))
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     // MARK: Map
 
     private var mapArea: some View {
-        Map(position: $position) {
-            MapCircle(center: center, radius: radiusMeters)
-                .foregroundStyle(Theme.primary.opacity(0.10))
-                .stroke(Theme.primary.opacity(0.7), lineWidth: 2.5)
-
+        Map(position: $position, bounds: cameraBounds) {
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
@@ -171,7 +108,8 @@ struct DealsMapView: View {
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
         .overlay(alignment: .top) { permissionBanner }
-        .overlay(alignment: .topLeading) { caption }
+        .overlay(alignment: .topLeading) { filterButton }
+        .overlay(alignment: .topTrailing) { countOverlay }
         .overlay(alignment: .bottomTrailing) { recenterPill }
         .overlay { emptyOverlay }
     }
@@ -194,25 +132,70 @@ struct DealsMapView: View {
         }
     }
 
-    /// Honest precision caption for the visible deals.
-    @ViewBuilder private var caption: some View {
-        if let text = MapCameraModel.caption(for: visible) {
-            Text(text)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Theme.primaryText)
-                .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(Spacing.sm)
+    /// The single Filter entry point. Its label reflects the active filter state
+    /// ("Filters" by default, else a summary like "Food" / "5 mi" / "3 filters").
+    private var filterButton: some View {
+        Button {
+            showingFilters = true
+            Haptics.selection()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: filter.isDefault
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+                    .font(.caption.weight(.bold))
+                Text(filter.summary).font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(filter.isDefault ? Theme.primary : .white)
+            .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
+            .background(
+                Capsule().fill(filter.isDefault
+                               ? AnyShapeStyle(.ultraThinMaterial)
+                               : AnyShapeStyle(Theme.primary))
+            )
+            .overlay(Capsule().stroke(Theme.primary.opacity(0.25), lineWidth: filter.isDefault ? 1 : 0))
+            .dealyShadow(.soft)
+        }
+        .buttonStyle(.plain)
+        .padding(Spacing.sm)
+        .accessibilityLabel("Filters")
+        .accessibilityValue(filter.isDefault ? "None active" : filter.summary)
+    }
+
+    /// Deal-count label over the map, reflecting the active filter.
+    @ViewBuilder private var countOverlay: some View {
+        if !mappableAll.isEmpty {
+            let label = countLabel
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(label.primary)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                if let breakdown = label.breakdown {
+                    Text(breakdown)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                }
+                if let hint = label.hint {
+                    Text(hint)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.primary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
+            .padding(.vertical, 6).padding(.horizontal, Spacing.sm)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            .padding(Spacing.sm)
+            .frame(maxWidth: 220, alignment: .trailing)
         }
     }
 
-    /// "Deals near me" pill — reframes to current center + radius after the user
-    /// has panned/zoomed away. Never fights manual gestures; just offers a reset.
+    /// "Back to Dealy zone" recenter pill — reframes to the zone-fit region (the
+    /// whole area showing all current deals). Never fights manual gestures.
     private var recenterPill: some View {
         Button { reframe(); Haptics.selection() } label: {
             HStack(spacing: 6) {
-                Image(systemName: "location.fill").font(.caption2.weight(.bold))
-                Text("Deals near me").font(.caption.weight(.semibold))
+                Image(systemName: "scope").font(.caption2.weight(.bold))
+                Text("Back to Dealy zone").font(.caption.weight(.semibold))
             }
             .foregroundStyle(Theme.primary)
             .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
@@ -222,7 +205,7 @@ struct DealsMapView: View {
         }
         .buttonStyle(.plain)
         .padding(Spacing.sm)
-        .accessibilityLabel("Recenter on deals near me")
+        .accessibilityLabel("Back to Dealy zone")
     }
 
     private var centerPin: some View {
@@ -240,10 +223,16 @@ struct DealsMapView: View {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text(emptyTitle)
+                Text("No deals match these filters")
                     .font(.headline).foregroundStyle(Theme.primaryText)
                     .multilineTextAlignment(.center)
-                emptyAction
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { filter = MapFilterState() }
+                    Haptics.selection()
+                } label: {
+                    InfoChip(symbol: "arrow.counterclockwise", text: "Reset filters", filled: true)
+                }
+                .buttonStyle(.plain)
             }
             .padding(Spacing.lg)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
@@ -262,34 +251,12 @@ struct DealsMapView: View {
         }
     }
 
-    private var emptyTitle: String {
-        let label = categoryFilter == .all ? "deals" : "\(categoryFilter.label.lowercased()) deals"
-        return "No \(label) within \(displayRadius) mi"
-    }
-
-    /// Directional recovery: widen the radius, or clear the category back to All.
-    @ViewBuilder private var emptyAction: some View {
-        let widerRadius = MapCameraModel.radiusOptions.first { $0 > displayRadius }
-        HStack(spacing: Spacing.xs) {
-            if let wider = widerRadius {
-                chip(symbol: "scope", text: "Try \(wider) mi", selected: false) {
-                    withAnimation(.easeInOut(duration: 0.2)) { displayRadius = wider }
-                }
-            }
-            if categoryFilter != .all {
-                chip(symbol: "square.grid.2x2", text: "Show All", selected: false) {
-                    withAnimation(.easeInOut(duration: 0.2)) { categoryFilter = .all }
-                }
-            }
-        }
-    }
-
-    // MARK: Deal strip (single, filtered, selection-coupled)
+    // MARK: Deal strip (all filtered deals, lazily rendered, selection-coupled)
 
     private var dealStrip: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !visible.isEmpty {
-                Text("\(visible.count) nearby")
+                Text("\(visible.count) \(visible.count == 1 ? "deal" : "deals") · \(filter.sort.label)")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(Theme.primaryText)
                     .padding(.horizontal, Spacing.lg)
@@ -297,7 +264,7 @@ struct DealsMapView: View {
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.sm) {
+                    LazyHStack(spacing: Spacing.sm) {
                         ForEach(visible) { deal in
                             stripCard(deal)
                                 .id(deal.id)
@@ -369,21 +336,18 @@ struct DealsMapView: View {
         Haptics.selection()
     }
 
-    /// Drop a stale selection when the filter/radius hides the selected deal.
+    /// Drop a stale selection when the filter hides the selected deal.
     private func clampSelection() {
         if let id = selectedID, !visible.contains(where: { $0.id == id }) {
             selectedID = nil
         }
     }
 
+    /// Reframe to the zone-fit region: the whole area showing every visible deal,
+    /// capped to the zone box.
     private func reframe() {
-        withAnimation { position = .region(region()) }
-    }
-
-    private func initRadiusIfNeeded() {
-        guard !didInitRadius else { return }
-        didInitRadius = true
-        displayRadius = MapCameraModel.defaultRadius(for: app.localDeals)
+        let region = MapCameraModel.zoneFitRegion(center: center, deals: visible)
+        withAnimation { position = .region(region) }
     }
 
     private func openSettings() {

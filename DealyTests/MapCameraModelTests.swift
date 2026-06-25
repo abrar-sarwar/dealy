@@ -11,7 +11,10 @@ final class MapCameraModelTests: XCTestCase {
                       distance: Double = 1,
                       precision: String = "exact",
                       online: Bool = false,
-                      expiresInHours: Double = 48) -> Deal {
+                      expiresInHours: Double = 48,
+                      latitude: Double? = 33.75,
+                      longitude: Double? = -84.39,
+                      campusSlug: String? = nil) -> Deal {
         var d = Deal(
             id: id, title: id, merchant: "M", category: category,
             currentPrice: 5, originalPrice: 10, distanceMiles: distance,
@@ -19,11 +22,14 @@ final class MapCameraModelTests: XCTestCase {
             dealScore: 50, isOnline: online,
             shortDescription: "s", detailedDescription: "d", terms: "t",
             locationTags: ["Atlanta"], couponCode: nil, destinationURL: nil,
-            latitude: 33.75, longitude: -84.39, visualSeed: 0, publishedAt: ref
+            latitude: latitude, longitude: longitude, visualSeed: 0, publishedAt: ref
         )
         d.locationPrecision = precision
+        d.campusSlug = campusSlug
         return d
     }
+
+    private let atlanta = CLLocationCoordinate2D(latitude: 33.7490, longitude: -84.3880)
 
     // MARK: Mappable / filtering
 
@@ -122,6 +128,79 @@ final class MapCameraModelTests: XCTestCase {
         XCTAssertEqual(region.center.latitude, 33.749, accuracy: 1e-9)
         XCTAssertEqual(region.center.longitude, -84.388, accuracy: 1e-9)
         XCTAssertLessThanOrEqual(region.span.latitudeDelta, MapCameraModel.maxSpanDegrees + 1e-9)
+    }
+
+    // MARK: Zone-fit camera
+
+    func testZoneFitNeverExceedsZoneBox() {
+        // A deal far outside the zone must NOT widen the frame past the zone box.
+        let near = deal("near", latitude: 33.75, longitude: -84.39)
+        let wayOut = deal("out", latitude: 34.50, longitude: -85.20)  // ~60mi NW
+        let region = MapCameraModel.zoneFitRegion(center: atlanta, deals: [near, wayOut])
+        XCTAssertLessThanOrEqual(region.span.latitudeDelta, MapCameraModel.zoneSpanDegrees + 1e-9)
+        XCTAssertLessThanOrEqual(region.span.longitudeDelta, MapCameraModel.zoneSpanDegrees + 1e-9)
+    }
+
+    func testZoneFitCoversAllProvidedDealsWithinZone() {
+        // A spread of deals within the zone — the frame must contain each of them.
+        let deals = [
+            deal("a", latitude: 33.78, longitude: -84.41),
+            deal("b", latitude: 33.72, longitude: -84.36),
+            deal("c", latitude: 33.75, longitude: -84.39)
+        ]
+        let region = MapCameraModel.zoneFitRegion(center: atlanta, deals: deals)
+        let halfLat = region.span.latitudeDelta / 2
+        let halfLon = region.span.longitudeDelta / 2
+        for d in deals {
+            XCTAssertLessThanOrEqual(abs(d.latitude! - region.center.latitude), halfLat + 1e-6,
+                                     "deal \(d.id) outside frame lat")
+            XCTAssertLessThanOrEqual(abs(d.longitude! - region.center.longitude), halfLon + 1e-6,
+                                     "deal \(d.id) outside frame lon")
+        }
+    }
+
+    func testZoneFitEmptyFallsBackToZoneBox() {
+        let region = MapCameraModel.zoneFitRegion(center: atlanta, deals: [])
+        XCTAssertEqual(region.span.latitudeDelta, MapCameraModel.zoneSpanDegrees, accuracy: 1e-6)
+        XCTAssertEqual(region.center.latitude, atlanta.latitude, accuracy: 1e-9)
+    }
+
+    func testZoneRegionCenteredAndSizedToBox() {
+        let region = MapCameraModel.zoneRegion(center: atlanta)
+        XCTAssertEqual(region.center.latitude, atlanta.latitude, accuracy: 1e-9)
+        XCTAssertEqual(region.span.latitudeDelta, MapCameraModel.zoneSpanDegrees, accuracy: 1e-3)
+    }
+
+    // MARK: Count label
+
+    func testCountLabelPrimaryAndBreakdown() {
+        let shown = [
+            deal("f1", category: .food), deal("f2", category: .food),
+            deal("g1", category: .groceries),
+            deal("c1", category: .home, campusSlug: "gsu")
+        ]
+        let label = MapCameraModel.countLabel(shown: shown, totalMappable: shown)
+        XCTAssertEqual(label.primary, "4 deals in this area")
+        XCTAssertEqual(label.breakdown, "2 food · 1 grocery · 1 campus")
+        XCTAssertNil(label.hint)   // nothing hidden
+    }
+
+    func testCountLabelHintShownWhenFilterHidesDeals() {
+        let total = (0..<28).map { deal("d\($0)") }
+        let shown = Array(total.prefix(9))
+        let label = MapCameraModel.countLabel(shown: shown, totalMappable: total)
+        XCTAssertEqual(label.hint, "Showing 9 of 28 — tap Filters to widen.")
+    }
+
+    func testCountLabelSingularUnit() {
+        let label = MapCameraModel.countLabel(shown: [deal("a")], totalMappable: [deal("a")])
+        XCTAssertEqual(label.primary, "1 deal in this area")
+    }
+
+    func testCountLabelOmitsZeroBuckets() {
+        let shown = [deal("f1", category: .food)]
+        let label = MapCameraModel.countLabel(shown: shown, totalMappable: shown)
+        XCTAssertEqual(label.breakdown, "1 food")
     }
 
     // MARK: Caption

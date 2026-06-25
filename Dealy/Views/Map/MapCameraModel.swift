@@ -16,6 +16,28 @@ enum MapCameraModel {
     /// the selected radius is wide or a stray outlier is present.
     static let maxSpanDegrees: Double = 12.0 / 69.0
 
+    // MARK: Dealy zone (bounded camera)
+
+    /// Half-width of the Dealy service zone box (miles). The full box spans ~2× this
+    /// (~24mi) so the user can frame the whole metro but never pan out to the state.
+    static let zoneHalfMiles: Double = 12.0
+
+    /// Maximum camera distance (meters) — caps zoom-out so the metro can't shrink to
+    /// a state/country view. ≈ 60km.
+    static let zoneMaxDistanceMeters: CLLocationDistance = 60_000
+
+    /// The Dealy service-zone region: a ~24mi box centered on `center`. Used both as
+    /// the camera-bounds box and as the cap for the fit-to-deals default frame.
+    static func zoneRegion(center: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        let latMeters = zoneHalfMiles * 2 * 1609.34
+        return MKCoordinateRegion(center: center,
+                                  latitudinalMeters: latMeters,
+                                  longitudinalMeters: latMeters)
+    }
+
+    /// Degrees-of-latitude span of the zone box (its hard outer cap).
+    static var zoneSpanDegrees: Double { (zoneHalfMiles * 2) / 69.0 }
+
     // MARK: Distance / filtering
 
     /// Physical (non-online), still-active deals — the universe the map draws from.
@@ -105,6 +127,46 @@ enum MapCameraModel {
         Double(radiusMiles) * 1609.34
     }
 
+    /// Default camera frame: fit ALL provided `deals` (with a little margin),
+    /// centered on `center`, but never larger than the zone box and never smaller
+    /// than a comfortable minimum. This is the "show everything in the area" frame
+    /// — NOT a small default radius.
+    ///
+    /// Empty input → the full zone box (so the user still sees the whole zone).
+    static func zoneFitRegion(
+        center: CLLocationCoordinate2D,
+        deals: [Deal]
+    ) -> MKCoordinateRegion {
+        let zoneSpan = zoneSpanDegrees
+        let coords = deals.compactMap { deal -> CLLocationCoordinate2D? in
+            DealGeo.coordinate(for: deal, around: center)
+        }
+        guard !coords.isEmpty else {
+            return MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: zoneSpan, longitudeDelta: zoneSpan)
+            )
+        }
+        // Max distance from center to any deal, in degrees, on each axis.
+        let lonScale = max(cos(center.latitude * .pi / 180), 0.01)
+        var maxLat = 0.0
+        var maxLon = 0.0
+        for c in coords {
+            maxLat = max(maxLat, abs(c.latitude - center.latitude))
+            maxLon = max(maxLon, abs(c.longitude - center.longitude) * lonScale)
+        }
+        let minSpan = 0.02          // ~1.4mi floor so a single near deal isn't absurdly tight
+        let margin = 1.4            // breathing room around the farthest pin
+        // Use the larger axis so a roughly-square frame contains every deal.
+        let needed = max(maxLat, maxLon / lonScale) * 2 * margin
+        let lat = min(max(needed, minSpan), zoneSpan)
+        let lon = min(max(needed, minSpan), zoneSpan)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: lat, longitudeDelta: lon)
+        )
+    }
+
     // MARK: Caption
 
     /// Honest precision caption for the currently-visible deals.
@@ -120,6 +182,42 @@ enum MapCameraModel {
         if approx == 0 { return "Exact locations · \(n) \(unit)" }
         if approx == n { return "Approximate areas · \(n) \(unit)" }
         return "Exact + approximate · \(n) \(unit)"
+    }
+
+    // MARK: Count label
+
+    /// The deal-count overlay text, reflecting the active filter against the full
+    /// mappable area.
+    /// - primary: "N deals in this area" (N = currently shown count)
+    /// - breakdown: "X food · Y grocery · Z campus" (omits zero buckets; nil if none)
+    /// - hint: "Showing X of Y — tap Filters to widen." — present ONLY when the
+    ///   active filter/radius is hiding deals (shown < total mappable). nil otherwise.
+    struct CountLabel: Equatable {
+        let primary: String
+        let breakdown: String?
+        let hint: String?
+    }
+
+    static func countLabel(shown: [Deal], totalMappable: [Deal]) -> CountLabel {
+        let n = shown.count
+        let unit = n == 1 ? "deal" : "deals"
+        let primary = "\(n) \(unit) in this area"
+
+        let food = shown.filter { $0.category == .food }.count
+        let grocery = shown.filter { $0.category == .groceries }.count
+        let campus = shown.filter { $0.campusSlug != nil }.count
+        var parts: [String] = []
+        if food > 0 { parts.append("\(food) food") }
+        if grocery > 0 { parts.append("\(grocery) grocery") }
+        if campus > 0 { parts.append("\(campus) campus") }
+        let breakdown = parts.isEmpty ? nil : parts.joined(separator: " · ")
+
+        let total = totalMappable.count
+        let hint = n < total
+            ? "Showing \(n) of \(total) — tap Filters to widen."
+            : nil
+
+        return CountLabel(primary: primary, breakdown: breakdown, hint: hint)
     }
 
     // MARK: Pins
