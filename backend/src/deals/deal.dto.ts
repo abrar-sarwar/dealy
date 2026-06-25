@@ -23,6 +23,9 @@ export interface DealDto {
   trustLevel: FeedTier;
   /** Crawler confidence (0–100) for curated deals; null otherwise. */
   confidenceScore: number | null;
+  /** Area-aware deal-quality score (0–100). 0 for non-discovery deals; the
+   * frontend may rank curated surfaces by it. */
+  qualityScore: number;
   isOnline: boolean;
   isStudentOnly: boolean;
   /** Derived: an exceptional (high-value or urgent) verified deal, featured

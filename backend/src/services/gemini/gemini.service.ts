@@ -1,11 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import type { GeminiConfig } from '../../config/gemini';
+import type { AreaDiscoveryContext } from '../../discovery/area-context';
 import type { GeminiClient } from './gemini.client';
 import type {
   GeminiCrawlPlan,
   GeminiDealExtraction,
   GeminiVerificationReasoning,
 } from './gemini.types';
+
+/**
+ * Render area context as a prompt block. This makes Gemini SMARTER about the REAL
+ * scraped content (planning + relevance scoring) — it NEVER licenses inventing
+ * deals or browsing. Returns '' when no context is supplied.
+ */
+function areaContextBlock(ctx?: AreaDiscoveryContext): string {
+  if (!ctx) return '';
+  const coords =
+    ctx.latitude != null && ctx.longitude != null
+      ? `, centred at (${ctx.latitude}, ${ctx.longitude}) within ~${ctx.radiusMiles} miles`
+      : '';
+  const campus = ctx.campusSlug
+    ? ` This is the ${ctx.campusName ?? ctx.campusSlug} campus area.`
+    : '';
+  return (
+    `\n\nTARGET AREA: ${ctx.regionName} (${ctx.regionType})${coords}.${campus}\n` +
+    `Audience focus: ${ctx.audienceFocus}. Source goal: ${ctx.sourceGoal}.\n` +
+    `Desired categories for this area: ${ctx.desiredCategories.join(', ')}.\n`
+  );
+}
 
 const dealExtractionSchema = {
   type: 'object',
@@ -47,6 +69,9 @@ const dealExtractionSchema = {
               'other',
             ],
           },
+          area_relevance: { type: 'number' },
+          concrete_offer_score: { type: 'number' },
+          is_vague: { type: 'boolean' },
         },
         required: [
           'title',
@@ -64,6 +89,9 @@ const dealExtractionSchema = {
           'requires_student_id',
           'audience',
           'campus_deal_type',
+          'area_relevance',
+          'concrete_offer_score',
+          'is_vague',
         ],
       },
     },
@@ -93,6 +121,7 @@ export class GeminiService {
     merchantHint?: string;
     sourceUrl: string;
     model?: string;
+    areaContext?: AreaDiscoveryContext;
   }): Promise<GeminiDealExtraction> {
     this.assertEnabled();
     return this.client.generateJson<GeminiDealExtraction>({
@@ -100,6 +129,9 @@ export class GeminiService {
       schema: dealExtractionSchema,
       prompt:
         'Extract concrete user-facing deals from the extracted page content. ' +
+        'Extract ONLY concrete, user-facing offers actually present in the content — ' +
+        'NEVER invent deals, and never infer offers from outside knowledge. If the page ' +
+        'has no concrete offers, return an empty list. ' +
         'Return only offers with clear discount, promotion, or special value. ' +
         'For each deal set image_url to the single most relevant product / food / ' +
         'merchant image for that specific deal — an absolute https image URL that ' +
@@ -117,6 +149,12 @@ export class GeminiService {
         'is required — never for faculty/staff/alumni. ' +
         'Set campus_deal_type to the best fit (ticket, dining, transport, campus_perk, ' +
         'student_discount, restaurant_lead, or other). ' +
+        'For each deal also set: area_relevance (0..1, how relevant this offer is to the ' +
+        'target area and its desired categories); concrete_offer_score (0..1, where 1 is a ' +
+        'specific discount like "20% off" or "$5 burger" and 0 is no concrete terms); and ' +
+        'is_vague (true for "Special Offer" / "Purchase a Gift Card" / any offer with no ' +
+        'concrete benefit). ' +
+        areaContextBlock(input.areaContext) +
         `Source URL: ${input.sourceUrl}\nMerchant hint: ${input.merchantHint ?? ''}\n\nCONTENT:\n${input.content.slice(0, 12_000)}`,
     });
   }
@@ -128,6 +166,8 @@ export class GeminiService {
     reliabilityScore: number;
     averageDealsFound: number;
     lastSuccessAt: Date | null;
+    operatorVerified?: boolean;
+    areaContext?: AreaDiscoveryContext;
   }): Promise<GeminiCrawlPlan> {
     this.assertEnabled();
     return this.client.generateJson<GeminiCrawlPlan>({
@@ -144,7 +184,12 @@ export class GeminiService {
       prompt:
         'You decide whether crawling this curated source right now is worth a paid Firecrawl fetch. ' +
         'Favour sources likely to hold fresh, concrete user-facing deals; skip ones unlikely to have changed or to yield offers. ' +
+        'Decide crawl true/false on AREA + CATEGORY relevance — NOT a blanket "looks like a ' +
+        'directory → skip". A page that lists merchant offers, specials, or student discounts ' +
+        'relevant to the target area is worth crawling even if it looks like a directory. ' +
         'Return crawl (boolean), reason (short), priority 1-10.\n' +
+        `Operator-verified source: ${input.operatorVerified ? 'yes' : 'no'}.\n` +
+        areaContextBlock(input.areaContext) +
         `Source type: ${input.sourceType}\nURL: ${input.url}\nCategory: ${input.category ?? ''}\n` +
         `Reliability score (0-100): ${input.reliabilityScore}\nAverage deals found per crawl: ${input.averageDealsFound}\n` +
         `Last successful crawl: ${input.lastSuccessAt?.toISOString() ?? 'never'}`,

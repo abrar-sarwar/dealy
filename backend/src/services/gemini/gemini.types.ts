@@ -36,6 +36,12 @@ export interface GeminiDeal {
     | 'transport'
     | 'restaurant_lead'
     | 'other';
+  /** 0..1 — how relevant this offer is to the target area/category goal. */
+  area_relevance: number;
+  /** 0..1 — 1 = a specific discount ("20% off"); 0 = vague/no concrete terms. */
+  concrete_offer_score: number;
+  /** true for "Special Offer"/"Purchase a Gift Card"/no concrete benefit. */
+  is_vague: boolean;
 }
 
 export interface GeminiDealExtraction {
