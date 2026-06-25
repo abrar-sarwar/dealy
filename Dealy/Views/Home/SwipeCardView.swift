@@ -63,12 +63,23 @@ struct SwipeCardView: View {
                 Spacer(minLength: Spacing.sm)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(Format.price(deal.currentPrice))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                    if deal.savingsPercentage > 0 {
+                    // Many discovered deals carry no concrete price (a grocery item
+                    // or "Happy Hour Special"). Don't render a misleading "$0.00" —
+                    // lead with the discount when known, else a clear call to action.
+                    if deal.hasFixedPricing {
+                        Text(Format.price(deal.currentPrice))
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                        if deal.savingsPercentage > 0 {
+                            Text("\(deal.savingsPercentage)% off")
+                                .font(.caption.weight(.semibold))
+                                .opacity(0.82)
+                        }
+                    } else if deal.savingsPercentage > 0 {
                         Text("\(deal.savingsPercentage)% off")
-                            .font(.caption.weight(.semibold))
-                            .opacity(0.82)
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                    } else {
+                        Text("See deal")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
                     }
                 }
             }
