@@ -87,6 +87,7 @@ describe('Discovery promotion → local feed (e2e)', () => {
         longitude: GSU.lng,
         summary: 'A promoted discovery deal that must reach the local feed.',
         confidence: 95,
+        qualityScore: 90, // concrete, promotable — must clear the publish quality floor
         verificationStatus: 'pending',
         fingerprint: FINGERPRINT,
         regionalInventoryId: inventory.id,
@@ -139,6 +140,7 @@ describe('Discovery promotion → local feed (e2e)', () => {
         longitude: GSU.lng,
         summary: 'A promoted deal with a real OG image.',
         confidence: 95,
+        qualityScore: 90, // concrete, promotable — must clear the publish quality floor
         verificationStatus: 'pending',
         fingerprint: FINGERPRINT_IMG,
         regionalInventoryId: inventory!.id,
@@ -182,6 +184,7 @@ describe('Discovery promotion → local feed (e2e)', () => {
         longitude: GSU.lng,
         summary: 'A campus-tagged student deal.',
         confidence: 95,
+        qualityScore: 90, // concrete, promotable — must clear the publish quality floor
         verificationStatus: 'pending',
         fingerprint: FINGERPRINT_CAMPUS,
         regionalInventoryId: inventory!.id,
@@ -227,6 +230,7 @@ describe('Discovery promotion → local feed (e2e)', () => {
         longitude: GSU.lng,
         summary: 'A faculty/staff perk from the campus deal pipeline.',
         confidence: 95,
+        qualityScore: 90, // concrete, promotable — must clear the publish quality floor
         verificationStatus: 'pending',
         fingerprint: FINGERPRINT_AUDIENCE,
         regionalInventoryId: inventory!.id,
