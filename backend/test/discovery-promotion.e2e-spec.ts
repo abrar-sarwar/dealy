@@ -10,6 +10,7 @@ const GSU = { lat: 33.7531, lng: -84.3857 };
 const REGION = 'e2e-promo';
 const FINGERPRINT = 'e2e-promo-fingerprint';
 const FINGERPRINT_IMG = 'e2e-promo-fingerprint-img';
+const FINGERPRINT_CAMPUS = 'e2e-promo-fingerprint-campus';
 const OG_IMAGE_URL = 'https://cdn.example.com/og-deal-hero.jpg';
 
 /**
@@ -43,10 +44,10 @@ describe('Discovery promotion → local feed (e2e)', () => {
 
   async function cleanup() {
     await prisma.deal.deleteMany({
-      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG] } },
+      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS] } },
     });
     await prisma.dealCandidate.deleteMany({
-      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG] } },
+      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS] } },
     });
     await prisma.regionalInventory.deleteMany({ where: { regionSlug: REGION } });
   }
@@ -151,5 +152,51 @@ describe('Discovery promotion → local feed (e2e)', () => {
     const promoted = items.find((d) => d.title === 'E2E Promoted Local Deal With Image');
     expect(promoted).toBeTruthy();
     expect(promoted!.imageUrl).toBe(OG_IMAGE_URL);
+  });
+
+  it('carries campusSlug and requiresStudentId from candidate through promotion to /v1/feeds/local', async () => {
+    const category = await prisma.category.findFirst({ select: { slug: true } });
+    expect(category).toBeTruthy();
+
+    // Reuse the inventory created in the first test (cleanup runs in afterAll).
+    const inventory = await prisma.regionalInventory.findFirst({ where: { regionSlug: REGION } });
+    expect(inventory).toBeTruthy();
+
+    await prisma.dealCandidate.create({
+      data: {
+        sourceUrl: 'https://example.test/e2e-campus',
+        title: 'E2E Campus Student Deal',
+        merchant: 'E2E Campus Merchant',
+        categorySlug: category!.slug,
+        locationText: 'Near GSU',
+        latitude: GSU.lat + 0.01,
+        longitude: GSU.lng,
+        summary: 'A campus-tagged student deal.',
+        confidence: 95,
+        verificationStatus: 'pending',
+        fingerprint: FINGERPRINT_CAMPUS,
+        regionalInventoryId: inventory!.id,
+        campusSlug: 'gsu',
+        requiresStudentId: true,
+      },
+    });
+
+    const result = await promotion.promoteRegion(REGION);
+    expect(result.promoted).toBeGreaterThanOrEqual(1);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/feeds/local?lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=15&limit=50`,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{
+      title: string;
+      campusSlug: string | null;
+      requiresStudentId: boolean;
+    }>;
+    const promoted = items.find((d) => d.title === 'E2E Campus Student Deal');
+    expect(promoted).toBeTruthy();
+    expect(promoted!.campusSlug).toBe('gsu');
+    expect(promoted!.requiresStudentId).toBe(true);
   });
 });
