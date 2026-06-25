@@ -62,6 +62,9 @@ final class AppState {
     /// Curated local deals (restaurants, student discounts, …) within ~15mi of
     /// the active discovery center. Curated trust; its own discovery surface.
     private(set) var localDeals: [Deal] = []
+    /// Recently-expired local deals (last 7 days), most-recently-expired first.
+    /// These must NEVER be redeemable (expiresAt is always in the past).
+    private(set) var missedDeals: [Deal] = []
     private(set) var dealsByID: [String: Deal] = [:]
     private(set) var loadState: LoadState = .idle
     /// Server density-first coverage for the last Nearby load (nil for Anywhere).
@@ -154,6 +157,22 @@ final class AppState {
             for deal in page.items { dealsByID[deal.id] = deal }
         } catch {
             localDeals = []
+        }
+    }
+
+    /// Load recently-expired local deals within `radiusMiles` (default 15) of
+    /// the active discovery center. Independent of the deck; failures leave it
+    /// empty and never block. Loaded deals are merged into `dealsByID` for detail
+    /// lookups but must never be redeemable (expiresAt is always in the past).
+    @MainActor
+    func loadMissedDeals(radiusMiles: Int = 15) async {
+        do {
+            let page = try await dealService.fetchDeals(
+                for: .missed(center: persisted.discovery.center, radiusMiles: radiusMiles))
+            missedDeals = page.items
+            for deal in page.items { dealsByID[deal.id] = deal }
+        } catch {
+            missedDeals = []
         }
     }
 

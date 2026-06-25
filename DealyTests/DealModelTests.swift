@@ -58,6 +58,28 @@ final class DealModelTests: XCTestCase {
         XCTAssertTrue(expired.isExpired)
     }
 
+    func testIsExpiredFalseForFutureExpiry() {
+        let now = Date()
+        let active = makeDeal(expiresInHours: 48, reference: now)
+        XCTAssertFalse(active.isExpired)
+    }
+
+    func testIsRedeemableFalseWhenExpired() {
+        let now = Date()
+        let expired = makeDeal(expiresInHours: -1, reference: now)
+        XCTAssertTrue(expired.isExpired)
+        XCTAssertFalse(expired.isRedeemable,
+                       "an expired deal must not be redeemable")
+    }
+
+    func testIsRedeemableTrueWhenNotExpired() {
+        let now = Date()
+        let active = makeDeal(expiresInHours: 24, reference: now)
+        XCTAssertFalse(active.isExpired)
+        XCTAssertTrue(active.isRedeemable,
+                      "an active deal must be redeemable")
+    }
+
     func testMockDatasetHasEnoughDeals() {
         XCTAssertGreaterThanOrEqual(MockDeals.dataset(reference: Date()).count, 36)
     }

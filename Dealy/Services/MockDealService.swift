@@ -48,6 +48,31 @@ final class MockDealService: DealServicing {
             return DealPage(items: Array(local.prefix(8)), nextCursor: nil)
         }
 
+        // Recently-expired local deals (offline double): take physical deals and
+        // back-date expirationDate to simulate expired inventory.
+        if case .missed = request {
+            let physical = all.filter { !$0.isOnline }
+            let expired = physical.prefix(5).map { deal -> Deal in
+                var d = deal
+                // Force expiry 1 day in the past so isExpired == true.
+                d = Deal(
+                    id: "missed-\(d.id)", title: d.title, merchant: d.merchant,
+                    category: d.category, currentPrice: d.currentPrice,
+                    originalPrice: d.originalPrice, distanceMiles: d.distanceMiles,
+                    expirationDate: reference.addingTimeInterval(-86_400),
+                    dealScore: d.dealScore, isOnline: false,
+                    shortDescription: d.shortDescription,
+                    detailedDescription: d.detailedDescription,
+                    terms: d.terms, locationTags: d.locationTags,
+                    couponCode: d.couponCode, destinationURL: d.destinationURL,
+                    latitude: d.latitude, longitude: d.longitude,
+                    visualSeed: d.visualSeed, publishedAt: d.publishedAt
+                )
+                return d
+            }
+            return DealPage(items: Array(expired), nextCursor: nil)
+        }
+
         // Mirror the production contract: return already-eligible inventory so
         // view models never re-apply location filtering.
         let preference: DiscoveryPreference
@@ -57,6 +82,7 @@ final class MockDealService: DealServicing {
         case .student: preference = .default.switching(to: .anywhere) // handled by the early return above
         case .trending: preference = .default.switching(to: .anywhere) // handled by the early return above
         case .local: preference = .default.switching(to: .anywhere) // handled by the early return above
+        case .missed: preference = .default.switching(to: .anywhere) // handled by the early return above
         }
         // Mock inventory is curated/trusted, so it stands in for verified deals.
         let items = DealFilter.byDiscovery(all, preference: preference, reference: reference)

@@ -12,6 +12,9 @@ enum DealFeedRequest: Equatable, Sendable {
     /// Curated local deals (restaurants, student discounts, …) within a radius
     /// of a coordinate. Curated trust; its own discovery surface.
     case local(center: DiscoveryCenter, radiusMiles: Int)
+    /// Recently-expired local deals (expired within the last 7 days), most-recently-
+    /// expired first. Items are NEVER redeemable — expiresAt is always in the past.
+    case missed(center: DiscoveryCenter, radiusMiles: Int)
 }
 
 /// Density-first Nearby coverage status from the server. `qualified == false`

@@ -54,6 +54,8 @@ private final class StubDealService: DealServicing {
             return DealPage(items: [], nextCursor: nil)
         case .trending:
             return DealPage(items: [], nextCursor: nil)
+        case .missed:
+            return DealPage(items: [], nextCursor: nil)
         }
     }
 }

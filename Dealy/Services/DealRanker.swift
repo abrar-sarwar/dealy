@@ -89,6 +89,53 @@ enum DealRanker {
         }
     }
 
+    // Diversity caps for the early deck (a first-time user should see variety, not
+    // 10 produce items from one store). Applied per window of `window` cards.
+    private static let diversityWindow = 10
+    private static let diversityMaxPerMerchant = 3
+    private static let diversityMaxGrocery = 5
+
+    /// Reorder a score-ranked list for early-deck variety. Within each window of
+    /// `window` cards, cap any single merchant at `maxPerMerchant`, and — only when
+    /// other categories exist — cap grocery at `maxGrocery`, pulling the next-best
+    /// non-grocery deal forward. When no remaining deal satisfies the caps it falls
+    /// back to the best remaining, so nothing is dropped or hidden — variety is
+    /// surfaced, not enforced at the cost of coverage. Input MUST be score-ranked.
+    static func diversified(_ ranked: [Deal],
+                            window: Int = diversityWindow,
+                            maxPerMerchant: Int = diversityMaxPerMerchant,
+                            maxGrocery: Int = diversityMaxGrocery) -> [Deal] {
+        let hasNonGrocery = ranked.contains { $0.category != .groceries }
+        var remaining = ranked
+        var result: [Deal] = []
+        result.reserveCapacity(ranked.count)
+        while !remaining.isEmpty {
+            let windowStart = (result.count / window) * window
+            let slice = result[windowStart...]
+            var perMerchant: [String: Int] = [:]
+            var grocery = 0
+            for d in slice {
+                perMerchant[d.merchant, default: 0] += 1
+                if d.category == .groceries { grocery += 1 }
+            }
+            // Avoid 3 cards of the same category in a row so variety shows from the
+            // top of the deck (only when another category is actually available).
+            let lastTwoSameCat = result.count >= 2
+                && result[result.count - 1].category == result[result.count - 2].category
+            let runCategory = lastTwoSameCat ? result.last?.category : nil
+            let idx = remaining.firstIndex { d in
+                perMerchant[d.merchant, default: 0] < maxPerMerchant
+                    && !(d.category == .groceries && hasNonGrocery && grocery >= maxGrocery)
+                    && d.category != runCategory
+            } ?? remaining.firstIndex { d in
+                perMerchant[d.merchant, default: 0] < maxPerMerchant
+                    && !(d.category == .groceries && hasNonGrocery && grocery >= maxGrocery)
+            } ?? 0
+            result.append(remaining.remove(at: idx))
+        }
+        return result
+    }
+
     /// Up to a few explainable reasons for the detail/info UI, dollars-led.
     static func reasons(for deal: Deal,
                         interests: Set<DealCategory>,

@@ -524,6 +524,35 @@ final class AppStateTests: XCTestCase {
         XCTAssertNotNil(app.deal(id: app.localDeals[0].id))
     }
 
+    // MARK: - Missed Deals
+
+    func testLoadMissedDealsPopulatesWithExpiredDeals() async {
+        let app = makeApp()
+        await app.loadMissedDeals()
+        XCTAssertFalse(app.missedDeals.isEmpty, "missedDeals should be non-empty after load")
+        // Every missed deal must be expired (backend contract: expiresAt always in the past)
+        XCTAssertTrue(app.missedDeals.allSatisfy(\.isExpired),
+                      "all missed deals must have expirationDate in the past")
+    }
+
+    func testLoadMissedDealsMergesIntoDealsByID() async {
+        let app = makeApp()
+        await app.loadMissedDeals()
+        XCTAssertFalse(app.missedDeals.isEmpty)
+        let firstID = app.missedDeals[0].id
+        XCTAssertNotNil(app.deal(id: firstID),
+                        "missed deals should be resolvable via deal(id:)")
+    }
+
+    func testLoadMissedDealsFailureLeavesArrayEmpty() async {
+        let service = FailingDealService()
+        let app = AppState(store: InMemoryPreferencesStore(),
+                           dealService: service,
+                           locationProvider: MockLocationProvider())
+        await app.loadMissedDeals()
+        XCTAssertTrue(app.missedDeals.isEmpty, "failure must leave missedDeals empty (never throws)")
+    }
+
     // MARK: - Campus assignment & manual override
 
     func testCampusAssignmentReflectsDeviceCenterOnCampus() {
@@ -667,7 +696,15 @@ final class ControllableDealService: DealServicing {
         case .student: return "student"
         case .trending: return "trending"
         case .local: return "local"
+        case .missed: return "missed"
         }
+    }
+}
+
+/// Always throws `DealServiceError.unavailable` for any request.
+final class FailingDealService: DealServicing {
+    func fetchDeals(for request: DealFeedRequest) async throws -> DealPage {
+        throw DealServiceError.unavailable
     }
 }
 
