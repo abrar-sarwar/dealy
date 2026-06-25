@@ -3,10 +3,13 @@ import SwiftUI
 /// The filter sheet behind the map's Filter button. Edits a bound `MapFilterState`
 /// live (the map updates as selections change) and offers a Reset back to defaults.
 /// Category/sort are single-select; precision + the trailing toggles are booleans.
-/// Radius is NOT here — it's the always-visible slider on the map itself.
+/// Radius is shown here too, bound to the SAME `radiusMiles` source of truth as the
+/// map's always-visible slider — changing it in either place updates one value.
 /// `availableCategories` lets the caller hide lanes with no inventory.
 struct MapFilterSheet: View {
     @Binding var state: MapFilterState
+    /// Shared search radius (miles) — the same value the map's slider drives.
+    @Binding var radiusMiles: Int
     /// Categories worth offering for the current inventory (always includes `.all`).
     var availableCategories: [DealCategoryFilter] = DealCategoryFilter.allCases
 
@@ -15,6 +18,7 @@ struct MapFilterSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                radiusSection
                 categorySection
                 dealTypeSection
                 sortSection
@@ -40,6 +44,32 @@ struct MapFilterSheet: View {
     }
 
     // MARK: Sections
+
+    private var radiusSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Search radius").font(.subheadline.weight(.medium))
+                    Spacer()
+                    Text("\(radiusMiles) mi")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.primary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(radiusMiles) },
+                        set: { radiusMiles = Int($0.rounded()) }
+                    ),
+                    in: Double(MapCameraModel.minRadiusMiles)...Double(MapCameraModel.maxRadiusMiles),
+                    step: 1
+                )
+            }
+        } header: {
+            Text("Search range")
+        } footer: {
+            Text("Deals shown are within this radius — the same control as the slider on the map.")
+        }
+    }
 
     private var categorySection: some View {
         Section("Category") {

@@ -90,7 +90,7 @@ struct DealsMapView: View {
                 }
             }
             .sheet(isPresented: $showingFilters) {
-                MapFilterSheet(state: $filter, availableCategories: availableCategories)
+                MapFilterSheet(state: $filter, radiusMiles: $radiusMiles, availableCategories: availableCategories)
             }
             .sheet(item: $detailDeal) { DealDetailView(deal: $0) }
             .onAppear { resolveLocation(force: false) }
@@ -99,10 +99,15 @@ struct DealsMapView: View {
                 frameToRadius()
             }
             .onChange(of: filter) { _, _ in clampSelection(); frameToRadius() }
+            // radiusMiles is the single source of truth (shared by the map slider AND
+            // the Filters sheet). The continuous slider writes it; the sheet writes it;
+            // this one handler reframes + re-filters so both stay in lockstep.
             .onChange(of: radiusRaw) { _, raw in
                 let snapped = MapCameraModel.snapRadius(raw)
-                guard snapped != radiusMiles else { return }
-                radiusMiles = snapped
+                if snapped != radiusMiles { radiusMiles = snapped }
+            }
+            .onChange(of: radiusMiles) { _, v in
+                if MapCameraModel.snapRadius(radiusRaw) != v { radiusRaw = Double(v) } // sync slider thumb when changed from the sheet
                 Haptics.selection()
                 clampSelection()
                 frameToRadius()
