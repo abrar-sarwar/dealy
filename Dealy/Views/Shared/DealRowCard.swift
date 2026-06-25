@@ -43,6 +43,8 @@ struct DealRowCard: View {
                             InfoChip(symbol: "clock", text: Format.expiryShort(deal.expirationDate),
                                      tint: Theme.warning, filled: true)
                         }
+                        if deal.requiresStudentId { StudentIDBadge() }
+                        if let campus = deal.campusBadge { CampusBadge(label: campus) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

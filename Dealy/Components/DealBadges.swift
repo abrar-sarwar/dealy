@@ -32,6 +32,39 @@ struct VerifiedBadge: View {
     }
 }
 
+/// "Student ID" chip — the offer requires a valid student ID at redemption.
+/// Distinct from `VerifiedBadge`: this is an eligibility signal, not a trust claim.
+struct StudentIDBadge: View {
+    var body: some View {
+        InfoChip(symbol: "graduationcap.fill", text: "Student ID", tint: Theme.primary)
+            .accessibilityLabel("Requires a valid student ID")
+    }
+}
+
+/// Campus chip (GSU / GT / KSU / UGA) for deals tied to a specific campus.
+struct CampusBadge: View {
+    let label: String
+    var body: some View {
+        InfoChip(symbol: "building.columns.fill", text: label, tint: Theme.primary)
+            .accessibilityLabel("\(label) campus deal")
+    }
+}
+
+/// Renders the student-ID and campus chips for a deal — and nothing at all for a
+/// normal (non-campus, non-student) grocery/restaurant deal.
+struct StudentDealBadges: View {
+    let deal: Deal
+
+    var body: some View {
+        if deal.requiresStudentId || deal.campusBadge != nil {
+            HStack(spacing: 6) {
+                if deal.requiresStudentId { StudentIDBadge() }
+                if let campus = deal.campusBadge { CampusBadge(label: campus) }
+            }
+        }
+    }
+}
+
 /// Deal score badge with an explainer affordance handled by the parent.
 struct DealScoreBadge: View {
     let score: Int

@@ -46,6 +46,13 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Server-reported coordinate precision. "exact" = real storefront coordinates;
     /// anything else (default "approximate") means we only know the region centroid.
     var locationPrecision: String = "approximate"
+    /// Campus this deal is tied to (gsu/gt/ksu/uga); nil for non-campus deals.
+    var campusSlug: String? = nil
+    /// Whether redeeming requires a valid student ID. Server-controlled.
+    var requiresStudentId: Bool = false
+
+    /// Campus badge label (e.g. "GSU") when this deal is tied to a campus, else nil.
+    var campusBadge: String? { campusSlug.map { $0.uppercased() } }
 
     // MARK: Computed money
 
