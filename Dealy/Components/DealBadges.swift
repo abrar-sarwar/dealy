@@ -32,6 +32,71 @@ struct VerifiedBadge: View {
     }
 }
 
+/// "Student ID" chip — the offer requires a valid student ID at redemption.
+/// Distinct from `VerifiedBadge`: this is an eligibility signal, not a trust claim.
+struct StudentIDBadge: View {
+    var body: some View {
+        InfoChip(symbol: "graduationcap.fill", text: "Student ID", tint: Theme.primary)
+            .accessibilityLabel("Requires a valid student ID")
+    }
+}
+
+/// Campus chip (GSU / GT / KSU / UGA) for deals tied to a specific campus.
+struct CampusBadge: View {
+    let label: String
+    var body: some View {
+        InfoChip(symbol: "building.columns.fill", text: label, tint: Theme.primary)
+            .accessibilityLabel("\(label) campus deal")
+    }
+}
+
+/// "Campus Perk" chip — the offer is open to the wider campus community (no ID required).
+struct CampusPerkBadge: View {
+    var body: some View {
+        InfoChip(symbol: "building.2.fill", text: "Campus Perk", tint: Theme.primary)
+            .accessibilityLabel("Campus perk — open to campus community")
+    }
+}
+
+/// "Faculty/Staff" chip — the offer targets faculty and staff members.
+struct FacultyStaffBadge: View {
+    var body: some View {
+        InfoChip(symbol: "briefcase.fill", text: "Faculty/Staff", tint: Theme.primary)
+            .accessibilityLabel("Faculty and staff offer")
+    }
+}
+
+/// "Alumni" chip — the offer targets alumni.
+struct AlumniBadge: View {
+    var body: some View {
+        InfoChip(symbol: "graduationcap.circle", text: "Alumni", tint: Theme.primary)
+            .accessibilityLabel("Alumni offer")
+    }
+}
+
+/// Renders eligibility and campus chips for a deal — and nothing at all for a
+/// normal (non-campus, non-student) grocery/restaurant deal.
+struct StudentDealBadges: View {
+    let deal: Deal
+
+    var body: some View {
+        let badge = deal.eligibilityBadge
+        let campus = deal.campusBadge
+        if badge != nil || campus != nil {
+            HStack(spacing: 6) {
+                if let campus { CampusBadge(label: campus) }
+                switch badge {
+                case .studentID: StudentIDBadge()
+                case .campusPerk: CampusPerkBadge()
+                case .facultyStaff: FacultyStaffBadge()
+                case .alumni: AlumniBadge()
+                case nil: EmptyView()
+                }
+            }
+        }
+    }
+}
+
 /// Deal score badge with an explainer affordance handled by the parent.
 struct DealScoreBadge: View {
     let score: Int

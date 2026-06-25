@@ -60,6 +60,13 @@ export const crawlSources = [
   { url: 'https://techdining.gatech.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://dining.kennesaw.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'KSU Dining', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/specials', '/deals'], crawlIntervalHours: 72 },
   { url: 'https://dining.uga.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'UGA Dining', defaultCategorySlug: 'food', zoneSlug: 'uga', dealUrl: null, targetPaths: ['/specials'], crawlIntervalHours: 72 },
+  // Campus student-newspaper / perk sources — seeded DISABLED.
+  // NOTE: needs a verified article dealUrl before enabling; content lives in articles.
+  // targetPaths: ['/student-discounts'] ensures resolveCrawlTargets returns a non-bare URL.
+  { url: 'https://www.ksusentinel.com/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'KSU Sentinel', defaultCategorySlug: 'studentSupplies', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://studentcenter.gsu.edu/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gsu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://nique.net/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT Nique', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://www.redandblack.com/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Red & Black', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
   // Restaurants / local promos — seeded URLs already point at /restaurants, /deals, /events.
   { url: 'https://poncecitymarket.com/restaurants/', sourceType: 'merchant_site', kind: 'happy_hour' as const, merchantHint: 'Ponce City Market', defaultCategorySlug: 'food', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://buckhead.com/explore/deals/', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Buckhead ATL', defaultCategorySlug: 'entertainment', zoneSlug: 'buckhead', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
@@ -80,6 +87,17 @@ export const crawlSources = [
   { url: 'https://www.greatclips.com/offers', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Great Clips', defaultCategorySlug: 'beauty', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   // Retail / supplies
   { url: 'https://www.macys.com/shop/deals', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: "Macy's", defaultCategorySlug: 'clothing', zoneSlug: 'buckhead', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  // Campus student-discount LIST pages — verified public pages (HTTP 200) that explicitly
+  // list current student discounts (see docs/campus-source-intel.md). dealUrl = the page so
+  // resolveCrawlTargets keeps the deep link. Seeded DISABLED until a trial discovery run
+  // proves Gemini extracts ≥1 concrete offer. Eligibility (student vs faculty/staff/alumni)
+  // is set per-offer by extraction → requiresStudentId, NOT assumed here.
+  { url: 'https://engagement.gsu.edu/student-center/foodandretail/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'entertainment', zoneSlug: 'gsu', dealUrl: 'https://engagement.gsu.edu/student-center/foodandretail/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT BuzzCard', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://benefits.hr.gatech.edu/perks-and-programs/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT Perks & Programs', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: 'https://benefits.hr.gatech.edu/perks-and-programs/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'KSU Perks & Discounts', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://alumni.uga.edu/benefits/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Benefits', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: 'https://alumni.uga.edu/benefits/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://pac.uga.edu/discounts/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Performing Arts Center', defaultCategorySlug: 'entertainment', zoneSlug: 'uga', dealUrl: 'https://pac.uga.edu/discounts/', targetPaths: [], crawlIntervalHours: 72 },
 ];
 
 async function seedCrawlSources(): Promise<void> {

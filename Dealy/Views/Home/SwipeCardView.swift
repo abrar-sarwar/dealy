@@ -58,6 +58,7 @@ struct SwipeCardView: View {
                         .opacity(0.9)
                         .accessibilityLabel("Verified — recently confirmed with the source")
                     }
+                    StudentDealBadges(deal: deal)
                 }
 
                 Spacer(minLength: Spacing.sm)

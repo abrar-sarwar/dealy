@@ -109,6 +109,107 @@ describe('curated source category balance', () => {
   });
 });
 
+describe('campus student-discount lane sources', () => {
+  it('every campus (gsu, gt, ksu, uga) has at least one student_discount source', () => {
+    const campuses = ['gsu', 'gt', 'ksu', 'uga'];
+    for (const campus of campuses) {
+      const found = crawlSources.some(
+        (s) => s.zoneSlug === campus && s.kind === 'student_discount',
+      );
+      expect(found).toBe(true);
+    }
+  });
+
+  it('all campus student-discount newspaper sources resolve to a non-bare URL', () => {
+    const studentNewspapers = crawlSources.filter(
+      (s) =>
+        ['gsu', 'gt', 'ksu', 'uga'].includes(s.zoneSlug) &&
+        s.kind === 'student_discount' &&
+        ['ksusentinel.com', 'studentcenter.gsu.edu', 'nique.net', 'redandblack.com'].some((d) =>
+          s.url.includes(d),
+        ),
+    );
+    expect(studentNewspapers.length).toBe(4);
+    for (const s of studentNewspapers) {
+      const targets = resolveCrawlTargets({
+        websiteUrl: s.url,
+        dealUrl: s.dealUrl,
+        targetPaths: s.targetPaths,
+        allowedPaths: allowed,
+      });
+      expect(targets.length).toBeGreaterThan(0);
+      for (const t of targets) expect(t).not.toMatch(/^https?:\/\/[^/]+\/?$/);
+    }
+  });
+
+  // Verified public student-discount LIST pages from the operator intel docs
+  // (docs/campus-source-intel.md). All seeded disabled with dealUrl = the page.
+  const verifiedHosts: Record<string, string[]> = {
+    gsu: ['engagement.gsu.edu'],
+    gt: ['buzzcard.gatech.edu', 'benefits.hr.gatech.edu'],
+    ksu: ['campus.kennesaw.edu'],
+    uga: ['alumni.uga.edu', 'pac.uga.edu'],
+  };
+  const verifiedSources = () =>
+    crawlSources.filter((s) =>
+      Object.values(verifiedHosts)
+        .flat()
+        .some((h) => s.url.includes(h)),
+    );
+
+  it('seeds a verified student-discount list page for each campus', () => {
+    for (const [campus, hosts] of Object.entries(verifiedHosts)) {
+      for (const host of hosts) {
+        const s = crawlSources.find((c) => c.url.includes(host));
+        expect(s).toBeDefined();
+        expect(s!.zoneSlug).toBe(campus);
+        expect(s!.kind).toBe('student_discount');
+      }
+    }
+  });
+
+  it('verified list pages carry a dealUrl and resolve to a non-bare URL', () => {
+    const sources = verifiedSources();
+    expect(sources.length).toBe(6);
+    for (const s of sources) {
+      expect(Boolean(s.dealUrl)).toBe(true); // dealUrl wins so the list page is crawlable
+      const targets = resolveCrawlTargets({
+        websiteUrl: s.url,
+        dealUrl: s.dealUrl,
+        targetPaths: s.targetPaths,
+        allowedPaths: allowed,
+      });
+      expect(targets).toEqual([s.dealUrl]);
+      for (const t of targets) expect(t).not.toMatch(/^https?:\/\/[^/]+\/?$/);
+    }
+  });
+
+  it('verified list pages use valid category slugs', () => {
+    const ok = new Set([
+      'food',
+      'groceries',
+      'tech',
+      'studentSupplies',
+      'clothing',
+      'entertainment',
+      'beauty',
+      'automotive',
+      'home',
+      'books',
+    ]);
+    for (const s of verifiedSources()) expect(ok.has(s.defaultCategorySlug)).toBe(true);
+  });
+
+  it('no crawl source is pre-enabled in the seed array (all seeded disabled)', () => {
+    // The seed array carries no `enabled` field; seedCrawlSources() creates every
+    // source disabled. Guard that nothing sneaks in a pre-enabled flag (which would
+    // let an unverified source crawl on first seed).
+    for (const s of crawlSources) {
+      expect((s as { enabled?: boolean }).enabled).toBeUndefined();
+    }
+  });
+});
+
 describe('regionalInventories seed', () => {
   it('seeds an inventory for every pilot zone so promotion has a region to attach to', () => {
     const slugs = new Set(regionalInventories.map((r) => r.regionSlug));

@@ -249,6 +249,10 @@ model Deal {
   fingerprint         String?
   confidenceScore     Int?             @map("confidence_score")
   imageUrl            String?          @map("image_url")
+  campusSlug          String?          @map("campus_slug")
+  requiresStudentId   Boolean          @default(false) @map("requires_student_id")
+  audience            String           @default("general") @map("audience")
+  campusDealType      String?          @map("campus_deal_type")
   crawlSourceId       String?          @map("crawl_source_id") @db.Uuid
   crawlSource         CrawlSource?     @relation(fields: [crawlSourceId], references: [id], onDelete: SetNull)
   startAt             DateTime?        @map("start_at")
@@ -826,6 +830,10 @@ model DealCandidate {
   fingerprint        String?
   raw                Json?
   imageUrl           String?   @map("image_url")
+  campusSlug         String?   @map("campus_slug")
+  requiresStudentId  Boolean   @default(false) @map("requires_student_id")
+  audience           String    @default("general") @map("audience")
+  campusDealType     String?   @map("campus_deal_type")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
   promotedAt         DateTime? @map("promoted_at")

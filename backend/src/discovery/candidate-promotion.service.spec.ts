@@ -20,6 +20,10 @@ type Candidate = {
   longitude: number | null;
   locationPrecision: string;
   imageUrl: string | null;
+  campusSlug: string | null;
+  requiresStudentId: boolean;
+  audience: string;
+  campusDealType: string | null;
 };
 
 function deps(
@@ -47,6 +51,10 @@ function deps(
     longitude: -84.388,
     locationPrecision: 'approximate',
     imageUrl: null,
+    campusSlug: null,
+    requiresStudentId: false,
+    audience: 'general',
+    campusDealType: null,
     ...over.candidate,
   };
   return {
@@ -136,5 +144,63 @@ describe('CandidatePromotionService.promoteRegion', () => {
     expect(d.prisma.deal.upsert).not.toHaveBeenCalled();
     expect(d.prisma.dealCandidate.update).not.toHaveBeenCalled();
     expect(out.skipped).toBe(1);
+  });
+
+  it('carries campusSlug and requiresStudentId from the candidate to the created deal', async () => {
+    const d = deps({ candidate: { campusSlug: 'gsu', requiresStudentId: true } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        campusSlug: 'gsu',
+        requiresStudentId: true,
+      }),
+    );
+  });
+
+  it('carries null campusSlug and false requiresStudentId when candidate has no campus', async () => {
+    const d = deps({ candidate: { campusSlug: null, requiresStudentId: false } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        campusSlug: null,
+        requiresStudentId: false,
+      }),
+    );
+  });
+
+  it('carries audience and campusDealType from candidate to the created deal', async () => {
+    const d = deps({
+      candidate: { audience: 'campus_community', campusDealType: 'dining' },
+    });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        audience: 'campus_community',
+        campusDealType: 'dining',
+      }),
+    );
+  });
+
+  it('carries general audience and null campusDealType for non-campus deals', async () => {
+    const d = deps({ candidate: { audience: 'general', campusDealType: null } });
+    await build(d).promoteRegion('atlanta');
+    const arg = (
+      d.prisma.deal.upsert.mock.calls[0] as unknown as [{ create: Record<string, unknown> }]
+    )[0];
+    expect(arg.create).toEqual(
+      expect.objectContaining({
+        audience: 'general',
+        campusDealType: null,
+      }),
+    );
   });
 });

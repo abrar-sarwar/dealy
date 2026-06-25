@@ -46,6 +46,39 @@ struct Deal: Identifiable, Codable, Hashable {
     /// Server-reported coordinate precision. "exact" = real storefront coordinates;
     /// anything else (default "approximate") means we only know the region centroid.
     var locationPrecision: String = "approximate"
+    /// Campus this deal is tied to (gsu/gt/ksu/uga); nil for non-campus deals.
+    var campusSlug: String? = nil
+    /// Whether redeeming requires a valid student ID. Server-controlled.
+    var requiresStudentId: Bool = false
+    /// Audience segment for this deal. One of "students", "campus_community",
+    /// "faculty_staff", "alumni", "general". Defaults to "general".
+    var audience: String = "general"
+    /// Finer-grained campus deal type (e.g. "student_discount", "campus_perk").
+    var campusDealType: String? = nil
+
+    /// Campus badge label (e.g. "GSU") when this deal is tied to a campus, else nil.
+    var campusBadge: String? { campusSlug.map { $0.uppercased() } }
+
+    // MARK: Eligibility badge
+
+    /// The eligibility chip to display for this deal, if any.
+    /// Student-ID wins over all other audience signals — the backend guarantees
+    /// `requiresStudentId == false` for non-student audiences, so there is no
+    /// false-positive risk.
+    enum EligibilityBadge: Equatable {
+        case studentID
+        case campusPerk
+        case facultyStaff
+        case alumni
+    }
+
+    var eligibilityBadge: EligibilityBadge? {
+        if requiresStudentId { return .studentID }
+        if audience == "campus_community" || campusDealType == "campus_perk" { return .campusPerk }
+        if audience == "faculty_staff" { return .facultyStaff }
+        if audience == "alumni" { return .alumni }
+        return nil
+    }
 
     // MARK: Computed money
 

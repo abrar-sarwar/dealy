@@ -53,6 +53,10 @@ function normalizeConfidence<T extends { confidence: number }>(deals: T[]): T[] 
   }));
 }
 
+/** Campus zone slugs — a source whose zoneSlug is one of these auto-tags its
+ *  deals with that campus even when Gemini returns campus_slug null. */
+const CAMPUS_ZONES = new Set(['gsu', 'gt', 'ksu', 'uga']);
+
 function isGeminiQuotaExhausted(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return (
@@ -136,35 +140,41 @@ export class DiscoveryRunnerService {
           continue;
         }
 
-        // Gemini plans whether the source is worth a paid fetch (cached per source/day).
-        const plan = await this.aiCache.getOrGenerate(
-          {
-            task: 'crawl_plan',
-            model: this.config.gemini.model,
-            schemaVersion: 'v1',
-            prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
-          },
-          () =>
-            this.gemini.planCrawl({
-              sourceType: source.sourceType,
-              url: source.url,
-              category: source.defaultCategorySlug ?? undefined,
-              reliabilityScore: source.reliabilityScore,
-              averageDealsFound: source.averageDealsFound,
-              lastSuccessAt: source.lastSuccessAt,
-            }),
-        );
-        if (!plan.value.crawl) continue;
+        // Operator-verified sources (dealUrl set) are already confirmed to hold
+        // deals — skip the Gemini cost gate and proceed directly to scraping.
+        if (source.dealUrl) {
+          this.logger.log({ source: source.id }, 'discovery.planCrawl.bypass.verified_source');
+        } else {
+          // Gemini plans whether the source is worth a paid fetch (cached per source/day).
+          const plan = await this.aiCache.getOrGenerate(
+            {
+              task: 'crawl_plan',
+              model: this.config.gemini.model,
+              schemaVersion: 'v1',
+              prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
+            },
+            () =>
+              this.gemini.planCrawl({
+                sourceType: source.sourceType,
+                url: source.url,
+                category: source.defaultCategorySlug ?? undefined,
+                reliabilityScore: source.reliabilityScore,
+                averageDealsFound: source.averageDealsFound,
+                lastSuccessAt: source.lastSuccessAt,
+              }),
+          );
+          if (!plan.value.crawl) continue;
+        }
 
         run = await this.prisma.crawlRun.create({ data: { sourceId: source.id } });
         const doc = await this.firecrawl.scrape({ url });
         pages++;
         summary.pagesFetched++;
         const text = doc.markdown ?? '';
-        // Capture OG image from Firecrawl metadata. Different Firecrawl versions
-        // use `ogImage` (camelCase) or `og:image` (colon-separated key).
+        // Page-level OG image, used as a fallback when a deal has no per-item image.
+        // Different Firecrawl versions use `ogImage` or `og:image`.
         const meta = doc.metadata as Record<string, unknown> | undefined;
-        const imageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
+        const ogImageUrl = validImageUrl(meta?.ogImage ?? meta?.['og:image']);
         const hash = contentHash(text);
 
         const prior = await this.prisma.contentHash.findUnique({
@@ -285,7 +295,19 @@ export class DiscoveryRunnerService {
                 verificationStatus: dl.verification_status,
                 fingerprint,
                 raw: dl as object,
-                imageUrl,
+                // Prefer the per-deal product/food image Gemini picked from the page;
+                // fall back to the page-level OG image.
+                imageUrl: validImageUrl(dl.image_url) ?? ogImageUrl,
+                // Eligibility guard: only students audience may set requiresStudentId.
+                // Faculty/staff/alumni/general NEVER get requiresStudentId true even if
+                // the model mistakenly returned true.
+                requiresStudentId:
+                  dl.audience === 'students' ? (dl.requires_student_id ?? false) : false,
+                campusSlug:
+                  dl.campus_slug ??
+                  (CAMPUS_ZONES.has(source.zoneSlug ?? '') ? source.zoneSlug : null),
+                audience: dl.audience ?? 'general',
+                campusDealType: dl.campus_deal_type ?? null,
               },
             });
             queued++;

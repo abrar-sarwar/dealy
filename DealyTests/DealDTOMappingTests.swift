@@ -116,4 +116,49 @@ final class DealDTOMappingTests: XCTestCase {
         let page2 = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: withoutBrand)
         XCTAssertNil(page2.items[0].toDeal().redemptionBrand)
     }
+
+    // MARK: - campus / student-discount mapping + badges
+
+    func testCampusAndStudentIdMapThroughAndDriveBadges() throws {
+        let json = #"{"items":[{"id":"cs","title":"Panther Dining Special","merchant":"GSU Dining","category":"food","currentPrice":0,"originalPrice":0,"currency":"USD","dealScore":60,"isOnline":false,"isStudentOnly":false,"campusSlug":"gsu","requiresStudentId":true,"shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":null,"latitude":33.75,"longitude":-84.38,"locationTags":["gsu"],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let deal = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: json).items[0].toDeal()
+        XCTAssertEqual(deal.campusSlug, "gsu")
+        XCTAssertTrue(deal.requiresStudentId)
+        XCTAssertEqual(deal.campusBadge, "GSU") // uppercased campus chip label
+    }
+
+    func testNonCampusDealHasNoCampusOrStudentBadge() throws {
+        // sampleJSON (a normal Rosa's Pizza deal) has neither field present.
+        let deal = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: sampleJSON).items[0].toDeal()
+        XCTAssertNil(deal.campusSlug)
+        XCTAssertNil(deal.campusBadge)
+        XCTAssertFalse(deal.requiresStudentId)
+    }
+
+    // MARK: - audience / campusDealType / eligibilityBadge mapping
+
+    /// DTO with audience:"campus_community", campusDealType:"campus_perk", requiresStudentId:false,
+    /// campusSlug:"gt" → eligibilityBadge == .campusPerk, campusBadge == "GT", requiresStudentId == false.
+    func testCampusCommunityPerkMapsToCorrectBadge() throws {
+        let json = #"{"items":[{"id":"cp1","title":"Perk Deal","merchant":"GT Store","category":"food","currentPrice":0,"originalPrice":0,"currency":"USD","dealScore":70,"isOnline":false,"isStudentOnly":false,"campusSlug":"gt","requiresStudentId":false,"audience":"campus_community","campusDealType":"campus_perk","shortDescription":"s","detailedDescription":"d","terms":"","couponCode":null,"destinationUrl":null,"latitude":33.77,"longitude":-84.39,"locationTags":["gt"],"visualSeed":0,"publishedAt":"2026-06-18T12:00:00Z","startAt":null,"expiresAt":"2099-06-20T00:00:00Z"}],"nextCursor":null}"#.data(using: .utf8)!
+        let deal = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: json).items[0].toDeal()
+        XCTAssertEqual(deal.audience, "campus_community")
+        XCTAssertEqual(deal.campusDealType, "campus_perk")
+        XCTAssertFalse(deal.requiresStudentId)
+        XCTAssertEqual(deal.campusBadge, "GT")
+        XCTAssertEqual(deal.eligibilityBadge, .campusPerk)
+        // Must NOT surface studentID badge when requiresStudentId is false.
+        XCTAssertNotEqual(deal.eligibilityBadge, .studentID)
+    }
+
+    /// A deal with no audience/campus fields in JSON → audience == "general",
+    /// eligibilityBadge == nil, campusBadge == nil.
+    func testNormalDealDefaultsToGeneralAudienceAndNilBadge() throws {
+        // sampleJSON (Rosa's Pizza) has no audience/campusDealType/campusSlug fields.
+        let deal = try APIClient.jsonDecoder.decode(DealPageDTO.self, from: sampleJSON).items[0].toDeal()
+        XCTAssertEqual(deal.audience, "general")
+        XCTAssertNil(deal.campusDealType)
+        XCTAssertNil(deal.eligibilityBadge)
+        XCTAssertNil(deal.campusBadge)
+    }
 }

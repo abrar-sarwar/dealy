@@ -88,4 +88,44 @@ final class DealModelTests: XCTestCase {
         let deals = MockDeals.dataset(reference: Date())
         XCTAssertEqual(Set(deals.map(\.id)).count, deals.count)
     }
+
+    // MARK: - eligibilityBadge priority rules
+
+    private func dealWith(requiresStudentId: Bool = false,
+                          audience: String = "general",
+                          campusDealType: String? = nil) -> Deal {
+        var d = makeDeal(reference: Date())
+        d.requiresStudentId = requiresStudentId
+        d.audience = audience
+        d.campusDealType = campusDealType
+        return d
+    }
+
+    func testStudentIdWinsRegardlessOfAudience() {
+        // requiresStudentId true → .studentID even if audience has other values.
+        let d = dealWith(requiresStudentId: true, audience: "campus_community")
+        XCTAssertEqual(d.eligibilityBadge, .studentID)
+    }
+
+    func testFacultyStaffAudienceWithoutStudentId() {
+        let d = dealWith(requiresStudentId: false, audience: "faculty_staff")
+        XCTAssertEqual(d.eligibilityBadge, .facultyStaff)
+        // Must NOT return studentID.
+        XCTAssertNotEqual(d.eligibilityBadge, .studentID)
+    }
+
+    func testAlumniAudienceReturnsAlumniBadge() {
+        let d = dealWith(requiresStudentId: false, audience: "alumni")
+        XCTAssertEqual(d.eligibilityBadge, .alumni)
+    }
+
+    func testGeneralAudienceNoCampusReturnsNil() {
+        let d = dealWith(requiresStudentId: false, audience: "general")
+        XCTAssertNil(d.eligibilityBadge)
+    }
+
+    func testCampusPerkDealTypeWithoutRequiresStudentId() {
+        let d = dealWith(requiresStudentId: false, audience: "general", campusDealType: "campus_perk")
+        XCTAssertEqual(d.eligibilityBadge, .campusPerk)
+    }
 }

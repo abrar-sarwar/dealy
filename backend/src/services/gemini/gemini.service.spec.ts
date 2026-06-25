@@ -119,3 +119,66 @@ describe('GeminiService.extractDeals model override', () => {
     expect(generateJson).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini-2.5-pro' }));
   });
 });
+
+describe('GeminiService.extractDeals — schema includes campus_slug + requires_student_id + audience + campus_deal_type', () => {
+  it('dealExtractionSchema includes all campus/audience fields in item properties and required', () => {
+    let capturedSchema: Record<string, unknown> | undefined;
+    const client = {
+      generateJson: jest.fn(async (req: { schema: Record<string, unknown> }) => {
+        capturedSchema = req.schema;
+        return { deals: [] };
+      }),
+    };
+    const svc = new GeminiService(client as never, {
+      enabled: true,
+      model: 'gemini-2.5-flash',
+      reasoningModel: 'gemini-2.5-pro',
+      cacheTtlHours: 24,
+      escalationMaxConfidence: 60,
+      escalationMinReliability: 80,
+    });
+    return svc
+      .extractDeals({ content: 'x', sourceUrl: 'https://t.test/s', merchantHint: 'M' })
+      .then(() => {
+        const items = (
+          capturedSchema as {
+            properties: {
+              deals: { items: { properties: Record<string, unknown>; required: string[] } };
+            };
+          }
+        ).properties.deals.items;
+        expect(Object.keys(items.properties)).toContain('campus_slug');
+        expect(Object.keys(items.properties)).toContain('requires_student_id');
+        expect(Object.keys(items.properties)).toContain('audience');
+        expect(Object.keys(items.properties)).toContain('campus_deal_type');
+        expect(items.required).toContain('campus_slug');
+        expect(items.required).toContain('requires_student_id');
+        expect(items.required).toContain('audience');
+        expect(items.required).toContain('campus_deal_type');
+      });
+  });
+
+  it('extraction prompt instructs Gemini to detect student requirements and campus tags', async () => {
+    let capturedPrompt = '';
+    const client = {
+      generateJson: jest.fn(async (req: { prompt: string }) => {
+        capturedPrompt = req.prompt;
+        return { deals: [] };
+      }),
+    };
+    const svc = new GeminiService(client as never, {
+      enabled: true,
+      model: 'gemini-2.5-flash',
+      reasoningModel: 'gemini-2.5-pro',
+      cacheTtlHours: 24,
+      escalationMaxConfidence: 60,
+      escalationMinReliability: 80,
+    });
+    await svc.extractDeals({ content: 'x', sourceUrl: 'https://t.test/s' });
+    expect(capturedPrompt).toContain('requires_student_id');
+    expect(capturedPrompt).toContain('campus_slug');
+    expect(capturedPrompt).toContain('audience');
+    expect(capturedPrompt).toContain('faculty_staff');
+    expect(capturedPrompt).toContain('campus_community');
+  });
+});

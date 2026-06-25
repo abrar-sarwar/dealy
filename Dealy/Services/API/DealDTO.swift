@@ -48,6 +48,14 @@ struct DealDTO: Decodable {
     let expiresAt: Date
     /// OG image from the deal's source page; nil when not available.
     let imageUrl: String?
+    /// Campus this deal is tied to (gsu/gt/ksu/uga), or nil for non-campus deals.
+    let campusSlug: String?
+    /// Whether redeeming requires a valid student ID.
+    let requiresStudentId: Bool?
+    /// Audience segment: "students", "campus_community", "faculty_staff", "alumni", "general".
+    let audience: String?
+    /// Finer-grained campus deal type (e.g. "student_discount", "campus_perk").
+    let campusDealType: String?
 
     /// Map to the app's domain model. Unknown category slugs fall back to `.food`.
     func toDeal() -> Deal {
@@ -77,7 +85,11 @@ struct DealDTO: Decodable {
             isTrending: isTrending ?? false,
             imageURL: imageUrl,
             redemptionBrand: redemptionBrand,
-            locationPrecision: locationPrecision ?? "approximate"
+            locationPrecision: locationPrecision ?? "approximate",
+            campusSlug: campusSlug,
+            requiresStudentId: requiresStudentId ?? false,
+            audience: audience ?? "general",
+            campusDealType: campusDealType
         )
     }
 }

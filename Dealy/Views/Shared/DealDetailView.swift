@@ -122,6 +122,8 @@ struct DealDetailView: View {
             if deal.verified {
                 VerifiedBadge()
             }
+            if deal.requiresStudentId { StudentIDBadge() }
+            if let campus = deal.campusBadge { CampusBadge(label: campus) }
             InfoChip(symbol: deal.isOnline ? "globe" : "location.fill",
                      text: Format.distance(deal.distanceMiles, isOnline: deal.isOnline),
                      tint: Theme.primary)

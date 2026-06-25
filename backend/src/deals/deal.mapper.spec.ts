@@ -36,6 +36,8 @@ function fakeDeal(over: Partial<FakeDeal> = {}): FakeDeal {
     status: 'published',
     confidenceScore: null,
     imageUrl: null,
+    audience: 'general',
+    campusDealType: null,
     ...over,
   } as FakeDeal;
 }
@@ -212,6 +214,8 @@ describe('mapPrismaDeal isTrending', () => {
       status: 'published',
       confidenceScore: null,
       imageUrl: null,
+      audience: 'general',
+      campusDealType: null,
       ...over,
     };
   }
@@ -226,5 +230,29 @@ describe('mapPrismaDeal isTrending', () => {
     expect(
       mapPrismaDeal(lowValue as unknown as Deal & { category: Category }, null).isTrending,
     ).toBe(false);
+  });
+});
+
+describe('mapPrismaDeal audience + campusDealType', () => {
+  it('passes audience and campusDealType through to the DTO', () => {
+    const dto = mapPrismaDeal(
+      fakeDeal({ audience: 'campus_community', campusDealType: 'dining' }) as unknown as Deal & {
+        category: Category;
+      },
+      null,
+    );
+    expect(dto.audience).toBe('campus_community');
+    expect(dto.campusDealType).toBe('dining');
+  });
+
+  it('defaults audience to general and campusDealType to null', () => {
+    const dto = mapPrismaDeal(
+      fakeDeal({ audience: 'general', campusDealType: null }) as unknown as Deal & {
+        category: Category;
+      },
+      null,
+    );
+    expect(dto.audience).toBe('general');
+    expect(dto.campusDealType).toBeNull();
   });
 });
