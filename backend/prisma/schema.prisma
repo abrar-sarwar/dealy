@@ -820,12 +820,30 @@ model Place {
   discoveredAt     DateTime @default(now()) @map("discovered_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
+  // P3 — Gemini-generated feed metadata (all nullable / defaulted), so the
+  // place is feed-ready even when scraped deals are sparse.
+  priceBucket           String?   @map("price_bucket")
+  studentValueScore     Float?    @map("student_value_score")
+  affordabilityScore    Float?    @map("affordability_score")
+  bestFor               String?   @map("best_for")
+  vibeTags              String[]  @default([]) @map("vibe_tags")
+  categoryTags          String[]  @default([]) @map("category_tags")
+  whyRecommended        String?   @map("why_recommended")
+  confidenceLabel       String?   @map("confidence_label")
+  dealLikelihoodScore   Float?    @map("deal_likelihood_score")
+  hiddenGemScore        Float?    @map("hidden_gem_score")
+  cheapEatsScore        Float?    @map("cheap_eats_score")
+  feedSectionCandidates String[]  @default([]) @map("feed_section_candidates")
+  enrichedAt            DateTime? @map("enriched_at")
+  enrichmentHash        String?   @map("enrichment_hash")
+
   crawlSources   CrawlSource[]
   dealCandidates DealCandidate[]
   deals          Deal[]
 
   @@index([regionSlug, categorySlug])
   @@index([latitude, longitude])
+  @@index([enrichedAt])
   @@map("places")
 }
 

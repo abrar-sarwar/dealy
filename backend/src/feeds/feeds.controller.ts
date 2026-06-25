@@ -6,6 +6,7 @@ import { NearbyFeedQuery, OnlineFeedQuery } from '../deals/deal.dto';
 import { FeedsService } from './feeds.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { FeedPageQuery } from '../recommendations/recommendations.dto';
+import { PlaceFeedService } from '../discovery/place-feed.service';
 
 @ApiTags('feeds')
 @Controller({ path: 'feeds', version: '1' })
@@ -13,6 +14,7 @@ export class FeedsController {
   constructor(
     private readonly feeds: FeedsService,
     private readonly recs: RecommendationsService,
+    private readonly placeFeed: PlaceFeedService,
   ) {}
 
   // Public deal browsing.
@@ -59,6 +61,16 @@ export class FeedsController {
   @ApiOperation({ summary: 'Personalized, explainable recommendations (with reasons)' })
   recommended(@CurrentUser() user: AuthUser, @Query() q: FeedPageQuery) {
     return this.recs.recommended(user.id, q.limit ?? 20, q.offset ?? 0);
+  }
+
+  @Public()
+  @Get('places')
+  @ApiOperation({
+    summary:
+      'Enriched-place feed sections for a region (cheap eats, hidden gems, etc.) — read-only, no live AI',
+  })
+  places(@Query('region') region: string) {
+    return this.placeFeed.sections(region);
   }
 
   @Public()
