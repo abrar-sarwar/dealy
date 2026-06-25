@@ -125,6 +125,9 @@ function deps(
               requires_student_id: false,
               audience: 'general',
               campus_deal_type: 'other',
+              area_relevance: 0.8,
+              concrete_offer_score: 0.9,
+              is_vague: false,
             },
           ],
         }),
@@ -189,6 +192,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'general' as const,
             campus_deal_type: 'dining' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -226,6 +232,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'general' as const,
             campus_deal_type: 'dining' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -362,6 +371,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'general' as const,
             campus_deal_type: 'other' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       })
@@ -383,6 +395,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'general' as const,
             campus_deal_type: 'other' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       });
@@ -452,6 +467,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: true,
             audience: 'students' as const,
             campus_deal_type: 'student_discount' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -487,6 +505,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: true,
             audience: 'students' as const,
             campus_deal_type: 'student_discount' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -521,6 +542,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'general' as const,
             campus_deal_type: 'restaurant_lead' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -575,6 +599,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: true, // model wrongly set this
             audience: 'faculty_staff' as const,
             campus_deal_type: 'campus_perk' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -610,6 +637,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: true,
             audience: 'students' as const,
             campus_deal_type: 'ticket' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -648,6 +678,9 @@ describe('DiscoveryRunnerService.runRegion', () => {
             requires_student_id: false,
             audience: 'campus_community' as const,
             campus_deal_type: 'dining' as const,
+            area_relevance: 0.8,
+            concrete_offer_score: 0.9,
+            is_vague: false,
           },
         ],
       }),
@@ -660,5 +693,89 @@ describe('DiscoveryRunnerService.runRegion', () => {
     )[0];
     expect(arg.data.audience).toBe('campus_community');
     expect(arg.data.campusDealType).toBe('dining');
+  });
+
+  // --- area-aware quality score ---
+
+  it('computes + persists qualityScore, areaRelevance, concreteOfferScore on the candidate', async () => {
+    const d = deps();
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [
+        {
+          data: { qualityScore: number; areaRelevance: number; concreteOfferScore: number };
+        },
+      ]
+    )[0];
+    expect(arg.data.areaRelevance).toBe(0.8);
+    expect(arg.data.concreteOfferScore).toBe(0.9);
+    expect(arg.data.qualityScore).toBeGreaterThan(50);
+  });
+
+  it('scores a vague gift-card offer LOW', async () => {
+    const d = deps();
+    d.gemini.extractDeals = jest.fn(
+      async (): Promise<GeminiDealExtraction> => ({
+        deals: [
+          {
+            title: 'Purchase a Gift Card',
+            merchant: 'Shop',
+            category: 'services',
+            discount: null,
+            expiration: null,
+            location: null,
+            summary: 's',
+            confidence: 90,
+            verification_status: 'pending',
+            verified: false,
+            image_url: null,
+            campus_slug: null,
+            requires_student_id: false,
+            audience: 'general',
+            campus_deal_type: 'other',
+            area_relevance: 0.2,
+            concrete_offer_score: 0,
+            is_vague: true,
+          },
+        ],
+      }),
+    );
+    await build(d).runRegion('atlanta');
+    const arg = (
+      d.prisma.dealCandidate.create.mock.calls[0] as unknown as [{ data: { qualityScore: number } }]
+    )[0];
+    expect(arg.data.qualityScore).toBeLessThan(15);
+  });
+
+  // --- area context threading ---
+
+  it('passes area context to extractDeals (smarter ranking, never fabricates supply)', async () => {
+    const d = deps({ source: { zoneSlug: 'gsu' } });
+    await build(d).runRegion('gsu');
+    const call = (d.gemini.extractDeals.mock.calls as unknown[][])[0]?.[0] as
+      | { areaContext?: { regionType: string; campusSlug?: string } }
+      | undefined;
+    expect(call?.areaContext?.regionType).toBe('campus');
+    expect(call?.areaContext?.campusSlug).toBe('gsu');
+  });
+
+  it('passes operatorVerified + area context to planCrawl', async () => {
+    const d = deps();
+    await build(d).runRegion('atlanta');
+    const call = (d.gemini.planCrawl.mock.calls as unknown[][])[0]?.[0] as
+      | { operatorVerified?: boolean; areaContext?: { regionName: string } }
+      | undefined;
+    expect(call?.operatorVerified).toBe(false);
+    expect(call?.areaContext?.regionName).toBeDefined();
+  });
+
+  it('appends the area-context hash to the extraction cache key (busts cache on context change)', async () => {
+    const d = deps();
+    await build(d).runRegion('atlanta');
+    const extractionCacheKey = d.aiCache.getOrGenerate.mock.calls.find(
+      (c: unknown[]) => (c[0] as { task: string }).task === 'deal_extraction',
+    )?.[0] as { prompt: string } | undefined;
+    // url:hash:areaCtxHash → three colon-separated segments.
+    expect(extractionCacheKey?.prompt.split(':').length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -84,6 +84,9 @@ export const envSchema = z
         '/deals,/coupons,/promotions,/offers,/weekly-ad,/weeklyad,/weekly-specials,/specials,/student-discounts,/events,/restaurants',
       ),
     DISCOVERY_PUBLISH_MIN_CONFIDENCE: z.coerce.number().int().min(0).max(100).default(80),
+    // Quality floor: candidates below this 0–100 deal-quality score are never
+    // promoted ("Purchase a Gift Card"-tier junk). 0 disables the floor.
+    DISCOVERY_PUBLISH_MIN_QUALITY: z.coerce.number().min(0).max(100).default(15),
     // Crawler / curated pipeline.
     GEOCODER_KEY: optionalString,
     CRAWLER_AUTOPUBLISH_THRESHOLD: z.coerce.number().int().min(1).max(100).optional(),

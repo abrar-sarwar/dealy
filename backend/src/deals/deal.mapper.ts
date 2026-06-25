@@ -65,6 +65,7 @@ interface NormalizedDeal {
   moderationStatus: string;
   status: string;
   confidenceScore: number | null;
+  qualityScore: number;
   imageUrl: string | null;
   campusSlug: string | null;
   requiresStudentId: boolean;
@@ -125,6 +126,7 @@ function toDealDto(n: NormalizedDeal, distanceMiles: number | null): DealDto {
       isOnline: n.isOnline,
     }),
     confidenceScore: n.confidenceScore,
+    qualityScore: n.qualityScore,
     isTrending: deriveTrending({
       sourceTrust: n.sourceTrust,
       verificationStatus: n.verificationStatus,
@@ -168,6 +170,7 @@ export function mapPrismaDeal(deal: Deal & { category: Category }, distanceMiles
       moderationStatus: deal.moderationStatus,
       status: deal.status,
       confidenceScore: deal.confidenceScore,
+      qualityScore: deal.qualityScore ?? 0,
       imageUrl: deal.imageUrl ?? null,
       campusSlug: deal.campusSlug ?? null,
       requiresStudentId: deal.requiresStudentId,
@@ -213,6 +216,7 @@ export interface NearbyRow {
   moderation_status: string;
   status: string;
   confidence_score: number | null;
+  quality_score: number;
   image_url: string | null;
   campus_slug: string | null;
   requires_student_id: boolean;
@@ -260,6 +264,7 @@ export function mapNearbyRow(row: NearbyRow) {
       moderationStatus: row.moderation_status,
       status: row.status,
       confidenceScore: row.confidence_score,
+      qualityScore: row.quality_score ?? 0,
       imageUrl: row.image_url,
       campusSlug: row.campus_slug,
       requiresStudentId: row.requires_student_id,

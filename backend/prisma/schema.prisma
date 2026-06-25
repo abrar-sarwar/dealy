@@ -248,6 +248,8 @@ model Deal {
   /// Cross-source dedup fingerprint (merchant+title+location+price+category).
   fingerprint         String?
   confidenceScore     Int?             @map("confidence_score")
+  /// Area-aware deal-quality score (0..100) copied from the promoted candidate.
+  qualityScore        Float            @default(0) @map("quality_score")
   imageUrl            String?          @map("image_url")
   campusSlug          String?          @map("campus_slug")
   requiresStudentId   Boolean          @default(false) @map("requires_student_id")
@@ -826,6 +828,13 @@ model DealCandidate {
   locationPrecision  String    @default("approximate") @map("location_precision")
   summary            String
   confidence         Float     @default(0)
+  /// Area-aware deal-quality score (0..100): concreteness-dominant blend used to
+  /// rank promotion. Higher = a more concrete, area-relevant, locatable offer.
+  qualityScore       Float     @default(0) @map("quality_score")
+  /// Gemini's per-deal area relevance (0..1) — input to qualityScore. Null when unscored.
+  areaRelevance      Float?    @map("area_relevance")
+  /// Gemini's per-deal concreteness (0..1) — input to qualityScore. Null when unscored.
+  concreteOfferScore Float?    @map("concrete_offer_score")
   verificationStatus VerificationStatus @default(pending) @map("verification_status")
   fingerprint        String?
   raw                Json?
