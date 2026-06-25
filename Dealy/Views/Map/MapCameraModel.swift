@@ -127,6 +127,34 @@ enum MapCameraModel {
         Double(radiusMiles) * 1609.34
     }
 
+    // MARK: Radius slider
+
+    /// Hard slider bounds (miles). The slider is continuous between these and snaps
+    /// to integer miles. 15 ≈ the loaded local feed's outer edge.
+    static let minRadiusMiles: Int = 1
+    static let maxRadiusMiles: Int = 15
+
+    /// Clamp + snap an arbitrary slider value to a whole mile in [min, max].
+    static func snapRadius(_ raw: Double) -> Int {
+        Int(min(max(raw.rounded(), Double(minRadiusMiles)), Double(maxRadiusMiles)))
+    }
+
+    /// Live "Within N mi · M deals" label for the slider, given the deals already
+    /// scoped by the sheet filters (category/toggles) — radius applied here.
+    static func radiusLabel(radiusMiles: Int, filtered: [Deal]) -> String {
+        let count = within(filtered, radiusMiles: radiusMiles).count
+        let unit = count == 1 ? "deal" : "deals"
+        return "Within \(radiusMiles) mi · \(count) \(unit)"
+    }
+
+    /// Empty-state predicate: true when the radius + sheet filters yield zero deals
+    /// even though the area has mappable inventory. Drives the "widen the slider /
+    /// change Filters" message (vs. the genuinely-no-inventory case where
+    /// `totalMappable` is empty).
+    static func isRadiusEmpty(shown: [Deal], totalMappable: [Deal]) -> Bool {
+        shown.isEmpty && !totalMappable.isEmpty
+    }
+
     /// Default camera frame: fit ALL provided `deals` (with a little margin),
     /// centered on `center`, but never larger than the zone box and never smaller
     /// than a comfortable minimum. This is the "show everything in the area" frame

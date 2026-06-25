@@ -60,16 +60,18 @@ enum MapSort: String, CaseIterable, Identifiable, Equatable {
     }
 }
 
-/// All map filter selections in one observable, testable value. The view holds
-/// one of these; `MapFilterSheet` mutates it; `predicate`/`summary`/`isDefault`
+/// The sheet's filter selections in one observable, testable value. The view holds
+/// one of these; `MapFilterSheet` mutates it; `togglesPass`/`summary`/`isDefault`
 /// drive the pins, strip, and the Filter button label. Pure — no SwiftUI here.
+///
+/// NOTE: radius is intentionally NOT here. It's a top-level map value (the
+/// always-visible slider), separate from these sheet filters, so the Filters
+/// button label reflects only category/toggles/sort — not how wide the ring is.
 struct MapFilterState: Equatable {
-    /// Radius options (miles) offered in the sheet. Default is the widest = show all.
-    static let radiusOptions: [Int] = [1, 3, 5, 10, 15]
-    static let defaultRadius = 15
+    /// Sort options offered in the sheet, in display order.
+    static let sortOptions: [MapSort] = [.best, .nearest, .endingSoon]
 
     var category: DealCategoryFilter = .all
-    var radiusMiles: Int = defaultRadius
     var sort: MapSort = .best
 
     /// Deal-type precision toggle. true = exact storefronts only.
@@ -85,10 +87,10 @@ struct MapFilterState: Equatable {
     var isDefault: Bool { self == MapFilterState() }
 
     /// Count of non-default toggles + selections, used to build `summary`.
-    private var activeCount: Int {
+    /// Radius is excluded — it's not a sheet filter.
+    var activeCount: Int {
         var n = 0
         if category != .all { n += 1 }
-        if radiusMiles != Self.defaultRadius { n += 1 }
         if sort != .best { n += 1 }
         if exactOnly { n += 1 }
         if studentIDRequired { n += 1 }
@@ -97,17 +99,16 @@ struct MapFilterState: Equatable {
         return n
     }
 
-    /// Label for the Filter button.
+    /// Label for the Filter button (reflects the sheet filters only, never radius).
     /// - default → "Filters"
-    /// - exactly one active → a readable summary ("Food", "5 mi", "Food · 5 mi"…)
-    /// - two or more active → "N filters"
+    /// - exactly one active → a readable summary ("Food", "Nearest", "Exact only"…)
+    /// - two or more active → "Filters · N"
     var summary: String {
         let n = activeCount
         if n == 0 { return "Filters" }
-        if n >= 2 { return "\(n) filters" }
+        if n >= 2 { return "Filters · \(n)" }
         // Exactly one active selection — describe it directly.
         if category != .all { return category.label }
-        if radiusMiles != Self.defaultRadius { return "\(radiusMiles) mi" }
         if sort != .best { return sort.label }
         if exactOnly { return "Exact only" }
         if studentIDRequired { return "Student ID" }
@@ -116,8 +117,8 @@ struct MapFilterState: Equatable {
         return "Filters"
     }
 
-    /// Whether `deal` passes the non-radius, non-category toggles. Category and
-    /// radius are applied separately (they also drive counts), so this is the
+    /// Whether `deal` passes the boolean toggles. Category is applied separately,
+    /// and radius is the top-level map value (not a sheet filter), so this is the
     /// composable predicate for the boolean toggles only.
     func togglesPass(_ deal: Deal) -> Bool {
         if exactOnly && deal.isApproximateLocation { return false }
@@ -127,11 +128,10 @@ struct MapFilterState: Equatable {
         return true
     }
 
-    /// Apply category + radius + toggles to a mappable (already non-online) set.
-    /// Ordering is NOT applied here — see `MapSort.ordered`.
+    /// Apply category + toggles to a mappable (already non-online) set. Radius is
+    /// applied by the caller (the slider), and ordering by `MapSort.ordered`.
     func apply(to mappable: [Deal]) -> [Deal] {
         DealFilter.byCategoryFilter(mappable, category)
-            .filter { $0.distanceMiles <= Double(radiusMiles) }
             .filter { togglesPass($0) }
     }
 }

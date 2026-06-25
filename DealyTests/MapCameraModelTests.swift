@@ -105,6 +105,66 @@ final class MapCameraModelTests: XCTestCase {
         XCTAssertEqual(MapCameraModel.defaultRadius(for: deals, target: 6, reference: ref), 3)
     }
 
+    // MARK: Radius slider — drives the visible set + ring
+
+    func testRadiusDrivesFilteredSet() {
+        // The set of deals within radius N is exactly what the slider should show;
+        // widening the radius can only add deals, never remove them.
+        let deals = [
+            deal("a", distance: 0.5),
+            deal("b", distance: 2.5),
+            deal("c", distance: 7.0),
+            deal("d", distance: 12.0)
+        ]
+        let m = MapCameraModel.mappable(deals, reference: ref)
+        XCTAssertEqual(MapCameraModel.within(m, radiusMiles: 1).map(\.id), ["a"])
+        XCTAssertEqual(MapCameraModel.within(m, radiusMiles: 3).map(\.id), ["a", "b"])
+        XCTAssertEqual(MapCameraModel.within(m, radiusMiles: 8).map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(MapCameraModel.within(m, radiusMiles: 15).map(\.id), ["a", "b", "c", "d"])
+    }
+
+    func testRadiusMetersTracksRadius() {
+        // The MapCircle ring radius (meters) grows linearly with the slider value.
+        XCTAssertEqual(MapCameraModel.radiusMeters(1), 1609.34, accuracy: 0.01)
+        XCTAssertEqual(MapCameraModel.radiusMeters(5), 5 * 1609.34, accuracy: 0.01)
+        XCTAssertGreaterThan(MapCameraModel.radiusMeters(10), MapCameraModel.radiusMeters(5))
+    }
+
+    func testSnapRadiusClampsAndRounds() {
+        XCTAssertEqual(MapCameraModel.snapRadius(4.6), 5)
+        XCTAssertEqual(MapCameraModel.snapRadius(4.2), 4)
+        XCTAssertEqual(MapCameraModel.snapRadius(0.1), MapCameraModel.minRadiusMiles)  // clamp low
+        XCTAssertEqual(MapCameraModel.snapRadius(99), MapCameraModel.maxRadiusMiles)   // clamp high
+    }
+
+    func testRadiusLabelIsLiveCountWithinRadius() {
+        let m = MapCameraModel.mappable(
+            [deal("a", distance: 0.5), deal("b", distance: 2.0), deal("c", distance: 9.0)],
+            reference: ref)
+        XCTAssertEqual(MapCameraModel.radiusLabel(radiusMiles: 3, filtered: m), "Within 3 mi · 2 deals")
+        XCTAssertEqual(MapCameraModel.radiusLabel(radiusMiles: 1, filtered: m), "Within 1 mi · 1 deal")
+        XCTAssertEqual(MapCameraModel.radiusLabel(radiusMiles: 15, filtered: m), "Within 15 mi · 3 deals")
+    }
+
+    // MARK: Empty-state predicate
+
+    func testIsRadiusEmptyWhenFiltersYieldZeroButAreaHasDeals() {
+        let total = [deal("a", distance: 9.0)]
+        let shownAt1mi = MapCameraModel.within(total, radiusMiles: 1)  // empty
+        XCTAssertTrue(MapCameraModel.isRadiusEmpty(shown: shownAt1mi, totalMappable: total))
+    }
+
+    func testIsRadiusEmptyFalseWhenSomethingShown() {
+        let total = [deal("a", distance: 0.5)]
+        XCTAssertFalse(MapCameraModel.isRadiusEmpty(shown: total, totalMappable: total))
+    }
+
+    func testIsRadiusEmptyFalseWhenNoInventoryAtAll() {
+        // No mappable deals at all is a *different* (no-inventory) state, not the
+        // "widen the slider" empty state.
+        XCTAssertFalse(MapCameraModel.isRadiusEmpty(shown: [], totalMappable: []))
+    }
+
     // MARK: Camera span cap
 
     func testSpanNeverExceedsMaxCap() {

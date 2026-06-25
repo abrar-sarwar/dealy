@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The filter sheet behind the map's Filter button. Edits a bound `MapFilterState`
 /// live (the map updates as selections change) and offers a Reset back to defaults.
-/// Category/radius/sort are single-select; precision + the trailing toggles are
-/// booleans. `availableCategories` lets the caller hide lanes with no inventory.
+/// Category/sort are single-select; precision + the trailing toggles are booleans.
+/// Radius is NOT here — it's the always-visible slider on the map itself.
+/// `availableCategories` lets the caller hide lanes with no inventory.
 struct MapFilterSheet: View {
     @Binding var state: MapFilterState
     /// Categories worth offering for the current inventory (always includes `.all`).
@@ -15,7 +16,6 @@ struct MapFilterSheet: View {
         NavigationStack {
             Form {
                 categorySection
-                radiusSection
                 dealTypeSection
                 sortSection
                 togglesSection
@@ -53,17 +53,6 @@ struct MapFilterSheet: View {
         }
     }
 
-    private var radiusSection: some View {
-        Section("Distance") {
-            Picker("Radius", selection: $state.radiusMiles) {
-                ForEach(MapFilterState.radiusOptions, id: \.self) { r in
-                    Text("\(r) mi").tag(r)
-                }
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
     private var dealTypeSection: some View {
         Section {
             Picker("Deal type", selection: $state.exactOnly) {
@@ -81,7 +70,7 @@ struct MapFilterSheet: View {
     private var sortSection: some View {
         Section("Sort") {
             Picker("Sort", selection: $state.sort) {
-                ForEach(MapSort.allCases) { s in
+                ForEach(MapFilterState.sortOptions) { s in
                     Label(s.label, systemImage: s.symbol).tag(s)
                 }
             }

@@ -43,9 +43,19 @@ final class MapFilterStateTests: XCTestCase {
     func testDefaultsAreShowAll() {
         let s = MapFilterState()
         XCTAssertEqual(s.category, .all)
-        XCTAssertEqual(s.radiusMiles, 15)
         XCTAssertEqual(s.sort, .best)
         XCTAssertFalse(s.exactOnly)
+    }
+
+    /// Radius is no longer a sheet filter — `MapFilterState` must not expose it,
+    /// and adding/removing the slider value must never affect `isDefault`/`summary`.
+    func testRadiusIsNotASheetFilter() {
+        // A default state is "default" regardless of any external radius value;
+        // there is simply no radius member to mutate here.
+        let s = MapFilterState()
+        XCTAssertTrue(s.isDefault)
+        XCTAssertEqual(s.summary, "Filters")
+        XCTAssertEqual(s.activeCount, 0)
     }
 
     func testNotDefaultAfterChange() {
@@ -66,25 +76,31 @@ final class MapFilterStateTests: XCTestCase {
         XCTAssertEqual(s.summary, "Food")
     }
 
-    func testSummarySingleRadius() {
+    func testSummarySingleSort() {
         var s = MapFilterState()
-        s.radiusMiles = 5
-        XCTAssertEqual(s.summary, "5 mi")
+        s.sort = .nearest
+        XCTAssertEqual(s.summary, "Nearest")
+    }
+
+    func testSummarySingleToggle() {
+        var s = MapFilterState()
+        s.exactOnly = true
+        XCTAssertEqual(s.summary, "Exact only")
     }
 
     func testSummaryTwoOrMore() {
         var s = MapFilterState()
         s.category = .food
-        s.radiusMiles = 5
-        XCTAssertEqual(s.summary, "2 filters")
+        s.sort = .nearest
+        XCTAssertEqual(s.summary, "Filters · 2")
     }
 
     func testSummaryThreeFilters() {
         var s = MapFilterState()
         s.category = .food
-        s.radiusMiles = 5
+        s.sort = .nearest
         s.exactOnly = true
-        XCTAssertEqual(s.summary, "3 filters")
+        XCTAssertEqual(s.summary, "Filters · 3")
     }
 
     // MARK: toggles compose into predicate
@@ -120,22 +136,24 @@ final class MapFilterStateTests: XCTestCase {
 
     // MARK: apply (category + radius + toggles compose)
 
-    func testApplyComposesCategoryRadiusToggles() {
+    func testApplyComposesCategoryAndToggles() {
+        // Radius is NOT applied here anymore — only category + toggles. Both food
+        // deals are exact, so the far one survives `apply` (radius is the slider's job).
         let deals = [
             deal("food-near-exact", category: .food, distance: 2, precision: "exact"),
-            deal("food-far", category: .food, distance: 9, precision: "exact"),
+            deal("food-far-exact", category: .food, distance: 9, precision: "exact"),
             deal("food-near-approx", category: .food, distance: 2, precision: "approximate"),
             deal("groc-near", category: .groceries, distance: 1, precision: "exact")
         ]
         var s = MapFilterState()
         s.category = .food
-        s.radiusMiles = 5
         s.exactOnly = true
         let result = s.apply(to: deals)
-        XCTAssertEqual(result.map(\.id), ["food-near-exact"])
+        XCTAssertEqual(Set(result.map(\.id)), ["food-near-exact", "food-far-exact"])
     }
 
-    func testApplyDefaultKeepsEverythingInRadius() {
+    func testApplyDoesNotFilterByDistance() {
+        // No radius member → distance is irrelevant to `apply`.
         let deals = [
             deal("a", distance: 1), deal("b", category: .groceries, distance: 4),
             deal("c", category: .entertainment, distance: 14)
