@@ -156,7 +156,7 @@ struct DealsMapView: View {
             let diameter = min(geo.size.width, geo.size.height) * 0.62
             ZStack {
                 Rectangle()
-                    .fill(.black.opacity(0.5))
+                    .fill(.black.opacity(0.78))
                     .mask {
                         Rectangle()
                             .overlay {
