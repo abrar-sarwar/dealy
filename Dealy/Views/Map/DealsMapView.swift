@@ -69,8 +69,8 @@ struct DealsMapView: View {
     /// allowed area follows. No metro-wide free roaming.
     private var cameraBounds: MapCameraBounds {
         MapCameraBounds(
-            centerCoordinateBounds: MapCameraModel.region(center: center, radiusMiles: radiusMiles),
-            maximumDistance: MapCameraModel.radiusMeters(radiusMiles) * 2.6
+            centerCoordinateBounds: MapCameraModel.spotlightRegion(center: center, radiusMiles: radiusMiles),
+            maximumDistance: MapCameraModel.radiusMeters(radiusMiles) * 5.5
         )
     }
 
@@ -120,11 +120,6 @@ struct DealsMapView: View {
 
     private var mapArea: some View {
         Map(position: $position, bounds: cameraBounds) {
-            // Live range ring — resizes with the slider.
-            MapCircle(center: center, radius: MapCameraModel.radiusMeters(radiusMiles))
-                .foregroundStyle(Theme.primary.opacity(0.10))
-                .stroke(Theme.primary.opacity(0.6), lineWidth: 2)
-
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
@@ -138,12 +133,43 @@ struct DealsMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
+        // Spotlight: dim everything OUTSIDE the radius bubble. The camera frames the
+        // bubble centered (spotlightRegion), so a centered circular cutout aligns with
+        // the range. Sits under the chrome overlays (slider/filters stay bright).
+        .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .topLeading) { filterButton }
         .overlay(alignment: .topTrailing) { countOverlay }
         .overlay(alignment: .bottom) { radiusSlider }
         .overlay(alignment: .bottomTrailing) { recenterPill }
         .overlay { emptyOverlay }
+    }
+
+    /// Dims everything outside the radius bubble (a centered circular hole) so only
+    /// what's inside reads clearly; bright ring marks the edge. Screen-space, but the
+    /// camera keeps the bubble centered so it lines up with the range.
+    private var spotlightMask: some View {
+        GeometryReader { geo in
+            let diameter = min(geo.size.width, geo.size.height) * 0.62
+            ZStack {
+                Rectangle()
+                    .fill(.black.opacity(0.5))
+                    .mask {
+                        Rectangle()
+                            .overlay {
+                                Circle()
+                                    .frame(width: diameter, height: diameter)
+                                    .blendMode(.destinationOut)
+                            }
+                            .compositingGroup()
+                    }
+                Circle()
+                    .stroke(Theme.primary, lineWidth: 3)
+                    .frame(width: diameter, height: diameter)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: Radius slider — the signature control
@@ -461,7 +487,7 @@ struct DealsMapView: View {
     /// Reframe to fit the current slider radius around the user — the camera tracks
     /// the ring. Span is capped to the zone box by `MapCameraModel.span`.
     private func frameToRadius() {
-        let region = MapCameraModel.region(center: center, radiusMiles: radiusMiles)
+        let region = MapCameraModel.spotlightRegion(center: center, radiusMiles: radiusMiles)
         withAnimation(.easeInOut(duration: 0.25)) { position = .region(region) }
     }
 

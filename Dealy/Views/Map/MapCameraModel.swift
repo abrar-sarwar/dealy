@@ -11,6 +11,20 @@ enum MapCameraModel {
     /// triggers a refetch; it only reframes + filters.
     static let radiusOptions: [Int] = [1, 3, 5, 10]
 
+    // MARK: Spotlight camera
+
+    /// Camera frame for the spotlight: ~2× the bubble diameter (4× radius across), so
+    /// the circle sits centered with dimmed area visible around it. Capped so it never
+    /// opens absurdly wide.
+    static func spotlightRegion(center: CLLocationCoordinate2D, radiusMiles: Int) -> MKCoordinateRegion {
+        let acrossMiles = min(Double(radiusMiles) * 4.0, 44.0)
+        let delta = acrossMiles / 69.0
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta)
+        )
+    }
+
     /// Hard ceiling on the camera span's diagonal (≈ degrees of latitude). 12 miles
     /// ≈ 0.174° — this guarantees the map never opens at full-metro scale even when
     /// the selected radius is wide or a stray outlier is present.
