@@ -109,6 +109,40 @@ describe('curated source category balance', () => {
   });
 });
 
+describe('campus student-discount lane sources', () => {
+  it('every campus (gsu, gt, ksu, uga) has at least one student_discount source', () => {
+    const campuses = ['gsu', 'gt', 'ksu', 'uga'];
+    for (const campus of campuses) {
+      const found = crawlSources.some(
+        (s) => s.zoneSlug === campus && s.kind === 'student_discount',
+      );
+      expect(found).toBe(true);
+    }
+  });
+
+  it('all campus student-discount newspaper sources resolve to a non-bare URL', () => {
+    const studentNewspapers = crawlSources.filter(
+      (s) =>
+        ['gsu', 'gt', 'ksu', 'uga'].includes(s.zoneSlug) &&
+        s.kind === 'student_discount' &&
+        ['ksusentinel.com', 'studentcenter.gsu.edu', 'nique.net', 'redandblack.com'].some((d) =>
+          s.url.includes(d),
+        ),
+    );
+    expect(studentNewspapers.length).toBe(4);
+    for (const s of studentNewspapers) {
+      const targets = resolveCrawlTargets({
+        websiteUrl: s.url,
+        dealUrl: s.dealUrl,
+        targetPaths: s.targetPaths,
+        allowedPaths: allowed,
+      });
+      expect(targets.length).toBeGreaterThan(0);
+      for (const t of targets) expect(t).not.toMatch(/^https?:\/\/[^/]+\/?$/);
+    }
+  });
+});
+
 describe('regionalInventories seed', () => {
   it('seeds an inventory for every pilot zone so promotion has a region to attach to', () => {
     const slugs = new Set(regionalInventories.map((r) => r.regionSlug));

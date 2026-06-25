@@ -60,6 +60,13 @@ export const crawlSources = [
   { url: 'https://techdining.gatech.edu/specials/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'Georgia Tech Dining', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://dining.kennesaw.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'KSU Dining', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/specials', '/deals'], crawlIntervalHours: 72 },
   { url: 'https://dining.uga.edu/', sourceType: 'merchant_site', kind: 'student_discount' as const, merchantHint: 'UGA Dining', defaultCategorySlug: 'food', zoneSlug: 'uga', dealUrl: null, targetPaths: ['/specials'], crawlIntervalHours: 72 },
+  // Campus student-newspaper / perk sources — seeded DISABLED.
+  // NOTE: needs a verified article dealUrl before enabling; content lives in articles.
+  // targetPaths: ['/student-discounts'] ensures resolveCrawlTargets returns a non-bare URL.
+  { url: 'https://www.ksusentinel.com/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'KSU Sentinel', defaultCategorySlug: 'studentSupplies', zoneSlug: 'ksu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://studentcenter.gsu.edu/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gsu', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://nique.net/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT Nique', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
+  { url: 'https://www.redandblack.com/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Red & Black', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: null, targetPaths: ['/student-discounts'], crawlIntervalHours: 72 },
   // Restaurants / local promos — seeded URLs already point at /restaurants, /deals, /events.
   { url: 'https://poncecitymarket.com/restaurants/', sourceType: 'merchant_site', kind: 'happy_hour' as const, merchantHint: 'Ponce City Market', defaultCategorySlug: 'food', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://buckhead.com/explore/deals/', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Buckhead ATL', defaultCategorySlug: 'entertainment', zoneSlug: 'buckhead', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
