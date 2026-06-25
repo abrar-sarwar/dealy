@@ -298,4 +298,10 @@ final class MapCameraModelTests: XCTestCase {
         d.campusSlug = "gsu"
         XCTAssertEqual(MapCameraModel.pinSymbol(for: d), "graduationcap.fill")
     }
+
+    func testRouteSummaryFormatsEtaAndDistance() {
+        XCTAssertEqual(MapCameraModel.routeSummary(distanceMeters: 3218.7, etaSeconds: 600), "10 min · 2.0 mi")
+        XCTAssertEqual(MapCameraModel.routeSummary(distanceMeters: 80, etaSeconds: 40), "1 min · <0.1 mi")
+    }
+
 }

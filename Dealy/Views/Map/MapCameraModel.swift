@@ -11,6 +11,16 @@ enum MapCameraModel {
     /// triggers a refetch; it only reframes + filters.
     static let radiusOptions: [Int] = [1, 3, 5, 10]
 
+    // MARK: In-app route
+
+    /// "{N} min · {D} mi" summary for an in-app directions route (ETA + distance).
+    static func routeSummary(distanceMeters: Double, etaSeconds: Double) -> String {
+        let miles = distanceMeters / 1609.34
+        let mins = max(1, Int((etaSeconds / 60).rounded()))
+        let dist = miles < 0.1 ? "<0.1 mi" : String(format: "%.1f mi", miles)
+        return "\(mins) min · \(dist)"
+    }
+
     // MARK: Spotlight camera
 
     /// Camera frame for the spotlight: ~2× the bubble diameter (4× radius across), so

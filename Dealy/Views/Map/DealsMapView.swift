@@ -22,6 +22,11 @@ struct DealsMapView: View {
     @State private var selectedPlaceID: String?
     @State private var detailDeal: Deal?
     @State private var isLocating = false
+    /// In-app directions route drawn on the map (no app switch). Set by tapping a
+    /// place's Directions; cleared by the route banner's close.
+    @State private var route: MKRoute?
+    @State private var routeName: String?
+    @State private var routeDestination: CLLocationCoordinate2D?
 
     /// The signature control: a top-level map value (NOT a sheet filter). Drives
     /// the ring, the visible set, and the camera. Defaults to the widest (show all).
@@ -159,6 +164,20 @@ struct DealsMapView: View {
                 }
                 .annotationTitles(.hidden)
             }
+
+            // In-app directions: the route drawn right on the Dealy map.
+            if let route {
+                MapPolyline(route.polyline)
+                    .stroke(Theme.primary, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+            }
+            if let dest = routeDestination {
+                Annotation("Destination", coordinate: dest) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.title2).foregroundStyle(Theme.primary)
+                        .background(Circle().fill(.white).padding(2))
+                }
+                .annotationTitles(.hidden)
+            }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
@@ -167,6 +186,7 @@ struct DealsMapView: View {
         // the range. Sits under the chrome overlays (slider/filters stay bright).
         .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
+        .overlay(alignment: .top) { routeBanner }
         .overlay(alignment: .topLeading) { filterButton }
         .overlay(alignment: .topTrailing) { countOverlay }
         .overlay(alignment: .bottom) { placePreviewCard }
@@ -368,7 +388,7 @@ struct DealsMapView: View {
             PlacePreviewCard(
                 marker: place,
                 onDirections: {
-                    DirectionsLauncher.open(to: place.coordinate, name: place.name)
+                    showRoute(to: place.coordinate, name: place.name)
                     Haptics.selection()
                 },
                 onClose: { dismissPlace() }
@@ -377,6 +397,39 @@ struct DealsMapView: View {
             // Clear the bottom slider (its docked height + padding ≈ 108pt).
             .padding(.bottom, 112)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// In-app directions banner: ETA + distance to the routed place, an "Open in Maps"
+    /// hand-off, and a close that clears the drawn route.
+    @ViewBuilder private var routeBanner: some View {
+        if let route, let name = routeName {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .foregroundStyle(Theme.primary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(MapCameraModel.routeSummary(distanceMeters: route.distance,
+                                                     etaSeconds: route.expectedTravelTime))
+                        .font(.subheadline.weight(.bold)).foregroundStyle(Theme.primaryText)
+                    Text("to \(name)").font(.caption2).foregroundStyle(Theme.mutedText).lineLimit(1)
+                }
+                Spacer()
+                if let dest = routeDestination {
+                    Button { DirectionsLauncher.open(to: dest, name: name); Haptics.selection() } label: {
+                        Text("Open in Maps").font(.caption.weight(.semibold))
+                    }.buttonStyle(.plain).foregroundStyle(Theme.primary)
+                }
+                Button { clearRoute() } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.mutedText)
+                }.buttonStyle(.plain)
+            }
+            .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).stroke(Theme.primary.opacity(0.25), lineWidth: 1))
+            .dealyShadow(.soft)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.xs)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
@@ -554,6 +607,31 @@ struct DealsMapView: View {
 
     private func dismissPlace() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selectedPlaceID = nil }
+    }
+
+    /// Compute an in-app driving route from the user's location to the place and draw
+    /// it on the Dealy map — no app switch. "Open in Maps" in the banner is the hand-off.
+    private func showRoute(to dest: CLLocationCoordinate2D, name: String) {
+        routeName = name
+        routeDestination = dest
+        dismissPlace()
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: center))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: dest))
+        request.transportType = .automobile
+        MKDirections(request: request).calculate { response, _ in
+            guard let first = response?.routes.first else { return }
+            withAnimation(.easeInOut) { route = first }
+        }
+    }
+
+    private func clearRoute() {
+        withAnimation(.easeInOut) {
+            route = nil
+            routeName = nil
+            routeDestination = nil
+        }
+        Haptics.selection()
     }
 
     /// Drop a stale selection when the filter/radius hides the selected deal or place.
