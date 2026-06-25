@@ -236,6 +236,13 @@ export class DiscoveryRunnerService {
           });
 
           for (const dl of deals) {
+            // Grocery circulars list food items, so Gemini tends to tag every line
+            // 'food'; trust the curated source category for those. Otherwise prefer
+            // the model's per-deal category, falling back to the source default.
+            const categorySlug =
+              source.kind === 'grocery_circular'
+                ? (source.defaultCategorySlug ?? 'groceries')
+                : dl.category || source.defaultCategorySlug || 'food';
             const fingerprint = dealFingerprint({
               merchant: dl.merchant || source.merchantHint || 'Unknown',
               title: dl.title,
@@ -244,7 +251,7 @@ export class DiscoveryRunnerService {
               latitude: null,
               longitude: null,
               currentPriceMinor: null,
-              categorySlug: dl.category || source.defaultCategorySlug || 'food',
+              categorySlug,
             });
             if (await this.prisma.dealCandidate.findFirst({ where: { fingerprint } })) continue;
 
@@ -267,7 +274,7 @@ export class DiscoveryRunnerService {
                 title: dl.title,
                 merchant: dl.merchant || source.merchantHint || 'Unknown',
                 discount: dl.discount,
-                categorySlug: dl.category || source.defaultCategorySlug || 'food',
+                categorySlug,
                 expiration: dl.expiration ? new Date(dl.expiration) : null,
                 locationText: loc.locationText,
                 latitude: loc.latitude,
