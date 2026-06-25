@@ -7,9 +7,15 @@ struct DealyApp: App {
     private var appearanceRawValue = AppearancePreference.defaultValue.rawValue
 
     init() {
-        // Use the live API only when DEALY_API_ENV is set (local/staging/production);
-        // otherwise mock data powers previews and offline/local development.
-        let useRemote = ProcessInfo.processInfo.environment["DEALY_API_ENV"] != nil
+        // Debug/simulator builds default to the live local backend so the app shows
+        // real discovered deals (opt into mock data with DEALY_API_ENV=mock). Release
+        // builds stay on mock unless DEALY_API_ENV selects a live environment.
+        let apiEnv = ProcessInfo.processInfo.environment["DEALY_API_ENV"]
+        #if DEBUG
+        let useRemote = apiEnv != "mock"
+        #else
+        let useRemote = apiEnv != nil
+        #endif
         let service: DealServicing
         let recorder: DealInteractionRecording
         if useRemote {

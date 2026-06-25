@@ -200,10 +200,11 @@ describe('campus student-discount lane sources', () => {
     for (const s of verifiedSources()) expect(ok.has(s.defaultCategorySlug)).toBe(true);
   });
 
-  it('only the trial-verified GSU/UGA campus sources are pre-enabled on seed', () => {
-    // Only sources verified (via a discovery trial) to yield real, correctly-classified
-    // offers may opt into enabled-on-seed. Everything else stays disabled so an
-    // unverified source never crawls on first seed.
+  it('only the verified image-rich sources are pre-enabled on seed', () => {
+    // Only sources verified (via a discovery trial) to yield real, correctly-classified,
+    // image-bearing offers may opt into enabled-on-seed. Everything else stays disabled
+    // so an unverified source (or one that yields no product images, e.g. Publix) never
+    // crawls on first seed.
     const preEnabled = crawlSources
       .filter((s) => (s as { enabled?: boolean }).enabled === true)
       .map((s) => s.url)
@@ -213,6 +214,9 @@ describe('campus student-discount lane sources', () => {
         'https://alumni.uga.edu/benefits/',
         'https://engagement.gsu.edu/student-center/foodandretail/',
         'https://pac.uga.edu/discounts/',
+        'https://www.aldi.us/weekly-specials/',
+        'https://www.applebees.com/en/specials',
+        'https://www.chilis.com/specials',
       ].sort(),
     );
     for (const s of crawlSources) {

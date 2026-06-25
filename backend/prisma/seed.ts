@@ -46,7 +46,7 @@ export const crawlSources = [
   { url: 'https://www.publix.com/savings/weekly-ad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Publix', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.kroger.com/weeklyad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.kroger.com/coupons', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
-  { url: 'https://www.aldi.us/weekly-specials/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Aldi', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.aldi.us/weekly-specials/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Aldi', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168, enabled: true },
   { url: 'https://www.foodcity.com/coupons/', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.foodcity.com/weekly-ad/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'cartersville', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   // Walmart homepage-ish — needs a targeted path (operator should confirm dealUrl).
@@ -77,8 +77,8 @@ export const crawlSources = [
   // Firecrawl-crawlable before enabling. A curl-403 at seed time does NOT mean Firecrawl
   // cannot crawl (it uses rotating proxies) — see the discovery runbook for status.
   // Restaurants / food specials
-  { url: 'https://www.chilis.com/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Chili's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://www.applebees.com/en/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Applebee's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://www.chilis.com/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Chili's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72, enabled: true },
+  { url: 'https://www.applebees.com/en/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Applebee's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72, enabled: true },
   // Entertainment
   { url: 'https://www.foxtheatre.org/events', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Fox Theatre', defaultCategorySlug: 'entertainment', zoneSlug: 'downtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://www.regmovies.com/movies/promotions', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Regal Cinemas', defaultCategorySlug: 'entertainment', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
