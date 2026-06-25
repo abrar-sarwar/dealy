@@ -126,5 +126,7 @@ export function searchDocToDealDto(doc: SearchDoc): DealDto {
     // Campus lane fields are not indexed in the search doc yet.
     campusSlug: null,
     requiresStudentId: false,
+    audience: 'general',
+    campusDealType: null,
   };
 }

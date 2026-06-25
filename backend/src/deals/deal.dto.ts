@@ -47,6 +47,10 @@ export interface DealDto {
   campusSlug: string | null;
   /** True when the offer requires a valid student ID at redemption. */
   requiresStudentId: boolean;
+  /** Intended audience: students | campus_community | faculty_staff | alumni | general. */
+  audience: string;
+  /** Type of campus deal: student_discount | campus_perk | dining | ticket | transport | restaurant_lead | other. Null for non-campus deals. */
+  campusDealType: string | null;
   publishedAt: string;
   startAt: string | null;
   expiresAt: string;

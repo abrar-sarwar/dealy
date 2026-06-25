@@ -118,6 +118,8 @@ export class CandidatePromotionService {
           imageUrl: c.imageUrl,
           campusSlug: c.campusSlug,
           requiresStudentId: c.requiresStudentId,
+          audience: c.audience,
+          campusDealType: c.campusDealType,
           crawlSourceId: c.sourceId,
           fingerprint: c.fingerprint,
           startAt: null,

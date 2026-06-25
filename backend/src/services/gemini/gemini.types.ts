@@ -27,6 +27,15 @@ export interface GeminiDeal {
   image_url: string | null;
   campus_slug: string | null;
   requires_student_id: boolean;
+  audience: 'students' | 'campus_community' | 'faculty_staff' | 'alumni' | 'general';
+  campus_deal_type:
+    | 'student_discount'
+    | 'campus_perk'
+    | 'dining'
+    | 'ticket'
+    | 'transport'
+    | 'restaurant_lead'
+    | 'other';
 }
 
 export interface GeminiDealExtraction {

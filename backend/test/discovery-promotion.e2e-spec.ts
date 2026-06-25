@@ -12,6 +12,7 @@ const FINGERPRINT = 'e2e-promo-fingerprint';
 const FINGERPRINT_IMG = 'e2e-promo-fingerprint-img';
 const FINGERPRINT_CAMPUS = 'e2e-promo-fingerprint-campus';
 const OG_IMAGE_URL = 'https://cdn.example.com/og-deal-hero.jpg';
+const FINGERPRINT_AUDIENCE = 'e2e-promo-fingerprint-audience';
 
 /**
  * Regression guard for the discovery contract that unit tests alone missed: a
@@ -44,10 +45,18 @@ describe('Discovery promotion → local feed (e2e)', () => {
 
   async function cleanup() {
     await prisma.deal.deleteMany({
-      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS] } },
+      where: {
+        fingerprint: {
+          in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS, FINGERPRINT_AUDIENCE],
+        },
+      },
     });
     await prisma.dealCandidate.deleteMany({
-      where: { fingerprint: { in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS] } },
+      where: {
+        fingerprint: {
+          in: [FINGERPRINT, FINGERPRINT_IMG, FINGERPRINT_CAMPUS, FINGERPRINT_AUDIENCE],
+        },
+      },
     });
     await prisma.regionalInventory.deleteMany({ where: { regionSlug: REGION } });
   }
@@ -198,5 +207,52 @@ describe('Discovery promotion → local feed (e2e)', () => {
     expect(promoted).toBeTruthy();
     expect(promoted!.campusSlug).toBe('gsu');
     expect(promoted!.requiresStudentId).toBe(true);
+  });
+
+  it('carries audience and campusDealType from candidate through promotion to /v1/feeds/local', async () => {
+    const category = await prisma.category.findFirst({ select: { slug: true } });
+    expect(category).toBeTruthy();
+
+    const inventory = await prisma.regionalInventory.findFirst({ where: { regionSlug: REGION } });
+    expect(inventory).toBeTruthy();
+
+    await prisma.dealCandidate.create({
+      data: {
+        sourceUrl: 'https://example.test/e2e-audience',
+        title: 'E2E Faculty Staff Perk',
+        merchant: 'E2E Campus Merchant',
+        categorySlug: category!.slug,
+        locationText: 'Near GSU',
+        latitude: GSU.lat + 0.01,
+        longitude: GSU.lng,
+        summary: 'A faculty/staff perk from the campus deal pipeline.',
+        confidence: 95,
+        verificationStatus: 'pending',
+        fingerprint: FINGERPRINT_AUDIENCE,
+        regionalInventoryId: inventory!.id,
+        campusSlug: 'gsu',
+        requiresStudentId: false,
+        audience: 'faculty_staff',
+        campusDealType: 'campus_perk',
+      },
+    });
+
+    const result = await promotion.promoteRegion(REGION);
+    expect(result.promoted).toBeGreaterThanOrEqual(1);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/feeds/local?lat=${GSU.lat}&lng=${GSU.lng}&radiusMiles=15&limit=50`,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{
+      title: string;
+      audience: string;
+      campusDealType: string | null;
+    }>;
+    const promoted = items.find((d) => d.title === 'E2E Faculty Staff Perk');
+    expect(promoted).toBeTruthy();
+    expect(promoted!.audience).toBe('faculty_staff');
+    expect(promoted!.campusDealType).toBe('campus_perk');
   });
 });

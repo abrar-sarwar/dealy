@@ -140,25 +140,31 @@ export class DiscoveryRunnerService {
           continue;
         }
 
-        // Gemini plans whether the source is worth a paid fetch (cached per source/day).
-        const plan = await this.aiCache.getOrGenerate(
-          {
-            task: 'crawl_plan',
-            model: this.config.gemini.model,
-            schemaVersion: 'v1',
-            prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
-          },
-          () =>
-            this.gemini.planCrawl({
-              sourceType: source.sourceType,
-              url: source.url,
-              category: source.defaultCategorySlug ?? undefined,
-              reliabilityScore: source.reliabilityScore,
-              averageDealsFound: source.averageDealsFound,
-              lastSuccessAt: source.lastSuccessAt,
-            }),
-        );
-        if (!plan.value.crawl) continue;
+        // Operator-verified sources (dealUrl set) are already confirmed to hold
+        // deals — skip the Gemini cost gate and proceed directly to scraping.
+        if (source.dealUrl) {
+          this.logger.log({ source: source.id }, 'discovery.planCrawl.bypass.verified_source');
+        } else {
+          // Gemini plans whether the source is worth a paid fetch (cached per source/day).
+          const plan = await this.aiCache.getOrGenerate(
+            {
+              task: 'crawl_plan',
+              model: this.config.gemini.model,
+              schemaVersion: 'v1',
+              prompt: `${source.id}:${startOfUtcDay(now).toISOString()}`,
+            },
+            () =>
+              this.gemini.planCrawl({
+                sourceType: source.sourceType,
+                url: source.url,
+                category: source.defaultCategorySlug ?? undefined,
+                reliabilityScore: source.reliabilityScore,
+                averageDealsFound: source.averageDealsFound,
+                lastSuccessAt: source.lastSuccessAt,
+              }),
+          );
+          if (!plan.value.crawl) continue;
+        }
 
         run = await this.prisma.crawlRun.create({ data: { sourceId: source.id } });
         const doc = await this.firecrawl.scrape({ url });
@@ -292,10 +298,16 @@ export class DiscoveryRunnerService {
                 // Prefer the per-deal product/food image Gemini picked from the page;
                 // fall back to the page-level OG image.
                 imageUrl: validImageUrl(dl.image_url) ?? ogImageUrl,
-                requiresStudentId: dl.requires_student_id ?? false,
+                // Eligibility guard: only students audience may set requiresStudentId.
+                // Faculty/staff/alumni/general NEVER get requiresStudentId true even if
+                // the model mistakenly returned true.
+                requiresStudentId:
+                  dl.audience === 'students' ? (dl.requires_student_id ?? false) : false,
                 campusSlug:
                   dl.campus_slug ??
                   (CAMPUS_ZONES.has(source.zoneSlug ?? '') ? source.zoneSlug : null),
+                audience: dl.audience ?? 'general',
+                campusDealType: dl.campus_deal_type ?? null,
               },
             });
             queued++;

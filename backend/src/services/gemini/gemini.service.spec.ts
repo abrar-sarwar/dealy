@@ -120,8 +120,8 @@ describe('GeminiService.extractDeals model override', () => {
   });
 });
 
-describe('GeminiService.extractDeals — schema includes campus_slug + requires_student_id', () => {
-  it('dealExtractionSchema includes campus_slug and requires_student_id in item properties and required', () => {
+describe('GeminiService.extractDeals — schema includes campus_slug + requires_student_id + audience + campus_deal_type', () => {
+  it('dealExtractionSchema includes all campus/audience fields in item properties and required', () => {
     let capturedSchema: Record<string, unknown> | undefined;
     const client = {
       generateJson: jest.fn(async (req: { schema: Record<string, unknown> }) => {
@@ -149,8 +149,12 @@ describe('GeminiService.extractDeals — schema includes campus_slug + requires_
         ).properties.deals.items;
         expect(Object.keys(items.properties)).toContain('campus_slug');
         expect(Object.keys(items.properties)).toContain('requires_student_id');
+        expect(Object.keys(items.properties)).toContain('audience');
+        expect(Object.keys(items.properties)).toContain('campus_deal_type');
         expect(items.required).toContain('campus_slug');
         expect(items.required).toContain('requires_student_id');
+        expect(items.required).toContain('audience');
+        expect(items.required).toContain('campus_deal_type');
       });
   });
 
@@ -173,5 +177,8 @@ describe('GeminiService.extractDeals — schema includes campus_slug + requires_
     await svc.extractDeals({ content: 'x', sourceUrl: 'https://t.test/s' });
     expect(capturedPrompt).toContain('requires_student_id');
     expect(capturedPrompt).toContain('campus_slug');
+    expect(capturedPrompt).toContain('audience');
+    expect(capturedPrompt).toContain('faculty_staff');
+    expect(capturedPrompt).toContain('campus_community');
   });
 });
