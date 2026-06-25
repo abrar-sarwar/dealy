@@ -17,12 +17,20 @@ enum APIEnvironment {
 }
 
 enum APIConfig {
-    /// Build-time environment. Override via the `DEALY_API_ENV` env var (local/staging/production).
+    /// Build-time environment. Override via the `DEALY_API_ENV` env var
+    /// (local/staging/production). Debug/simulator builds default to `.local` so the
+    /// app talks to the local backend; release defaults to production.
     static let environment: APIEnvironment = {
         switch ProcessInfo.processInfo.environment["DEALY_API_ENV"] {
         case "local": return .local
         case "staging": return .staging
-        default: return .production
+        case "production": return .production
+        default:
+            #if DEBUG
+            return .local
+            #else
+            return .production
+            #endif
         }
     }()
 

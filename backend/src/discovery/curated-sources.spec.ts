@@ -200,12 +200,29 @@ describe('campus student-discount lane sources', () => {
     for (const s of verifiedSources()) expect(ok.has(s.defaultCategorySlug)).toBe(true);
   });
 
-  it('no crawl source is pre-enabled in the seed array (all seeded disabled)', () => {
-    // The seed array carries no `enabled` field; seedCrawlSources() creates every
-    // source disabled. Guard that nothing sneaks in a pre-enabled flag (which would
-    // let an unverified source crawl on first seed).
+  it('only the verified image-rich sources are pre-enabled on seed', () => {
+    // Only sources verified (via a discovery trial) to yield real, correctly-classified,
+    // image-bearing offers may opt into enabled-on-seed. Everything else stays disabled
+    // so an unverified source (or one that yields no product images, e.g. Publix) never
+    // crawls on first seed.
+    const preEnabled = crawlSources
+      .filter((s) => (s as { enabled?: boolean }).enabled === true)
+      .map((s) => s.url)
+      .sort();
+    expect(preEnabled).toEqual(
+      [
+        'https://alumni.uga.edu/benefits/',
+        'https://engagement.gsu.edu/student-center/foodandretail/',
+        'https://pac.uga.edu/discounts/',
+        'https://www.aldi.us/weekly-specials/',
+        'https://www.applebees.com/en/specials',
+        'https://www.chilis.com/specials',
+      ].sort(),
+    );
     for (const s of crawlSources) {
-      expect((s as { enabled?: boolean }).enabled).toBeUndefined();
+      if (!preEnabled.includes(s.url)) {
+        expect((s as { enabled?: boolean }).enabled).toBeUndefined();
+      }
     }
   });
 });

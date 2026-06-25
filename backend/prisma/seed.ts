@@ -46,7 +46,7 @@ export const crawlSources = [
   { url: 'https://www.publix.com/savings/weekly-ad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Publix', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.kroger.com/weeklyad', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.kroger.com/coupons', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Kroger', defaultCategorySlug: 'groceries', zoneSlug: 'midtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
-  { url: 'https://www.aldi.us/weekly-specials/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Aldi', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
+  { url: 'https://www.aldi.us/weekly-specials/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Aldi', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168, enabled: true },
   { url: 'https://www.foodcity.com/coupons/', sourceType: 'coupon_page', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   { url: 'https://www.foodcity.com/weekly-ad/', sourceType: 'weekly_ad', kind: 'grocery_circular' as const, merchantHint: 'Food City', defaultCategorySlug: 'groceries', zoneSlug: 'cartersville', dealUrl: null, targetPaths: [], crawlIntervalHours: 168 },
   // Walmart homepage-ish — needs a targeted path (operator should confirm dealUrl).
@@ -77,8 +77,8 @@ export const crawlSources = [
   // Firecrawl-crawlable before enabling. A curl-403 at seed time does NOT mean Firecrawl
   // cannot crawl (it uses rotating proxies) — see the discovery runbook for status.
   // Restaurants / food specials
-  { url: 'https://www.chilis.com/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Chili's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://www.applebees.com/en/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Applebee's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://www.chilis.com/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Chili's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72, enabled: true },
+  { url: 'https://www.applebees.com/en/specials', sourceType: 'merchant_site', kind: 'restaurant' as const, merchantHint: "Applebee's", defaultCategorySlug: 'food', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72, enabled: true },
   // Entertainment
   { url: 'https://www.foxtheatre.org/events', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Fox Theatre', defaultCategorySlug: 'entertainment', zoneSlug: 'downtown', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://www.regmovies.com/movies/promotions', sourceType: 'merchant_site', kind: 'local_promo' as const, merchantHint: 'Regal Cinemas', defaultCategorySlug: 'entertainment', zoneSlug: 'atlanta', dealUrl: null, targetPaths: [], crawlIntervalHours: 72 },
@@ -92,12 +92,12 @@ export const crawlSources = [
   // resolveCrawlTargets keeps the deep link. Seeded DISABLED until a trial discovery run
   // proves Gemini extracts ≥1 concrete offer. Eligibility (student vs faculty/staff/alumni)
   // is set per-offer by extraction → requiresStudentId, NOT assumed here.
-  { url: 'https://engagement.gsu.edu/student-center/foodandretail/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'entertainment', zoneSlug: 'gsu', dealUrl: 'https://engagement.gsu.edu/student-center/foodandretail/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://engagement.gsu.edu/student-center/foodandretail/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GSU Student Center', defaultCategorySlug: 'entertainment', zoneSlug: 'gsu', dealUrl: 'https://engagement.gsu.edu/student-center/foodandretail/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
   { url: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT BuzzCard', defaultCategorySlug: 'food', zoneSlug: 'gt', dealUrl: 'https://www.buzzcard.gatech.edu/offers-from-our-merchants/', targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://benefits.hr.gatech.edu/perks-and-programs/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'GT Perks & Programs', defaultCategorySlug: 'studentSupplies', zoneSlug: 'gt', dealUrl: 'https://benefits.hr.gatech.edu/perks-and-programs/', targetPaths: [], crawlIntervalHours: 72 },
   { url: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'KSU Perks & Discounts', defaultCategorySlug: 'food', zoneSlug: 'ksu', dealUrl: 'https://campus.kennesaw.edu/faculty-staff/human-resources/resources/employees/perks-discounts.php', targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://alumni.uga.edu/benefits/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Benefits', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: 'https://alumni.uga.edu/benefits/', targetPaths: [], crawlIntervalHours: 72 },
-  { url: 'https://pac.uga.edu/discounts/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Performing Arts Center', defaultCategorySlug: 'entertainment', zoneSlug: 'uga', dealUrl: 'https://pac.uga.edu/discounts/', targetPaths: [], crawlIntervalHours: 72 },
+  { url: 'https://alumni.uga.edu/benefits/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Benefits', defaultCategorySlug: 'studentSupplies', zoneSlug: 'uga', dealUrl: 'https://alumni.uga.edu/benefits/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
+  { url: 'https://pac.uga.edu/discounts/', sourceType: 'student_platform' as const, kind: 'student_discount' as const, merchantHint: 'UGA Performing Arts Center', defaultCategorySlug: 'entertainment', zoneSlug: 'uga', dealUrl: 'https://pac.uga.edu/discounts/', targetPaths: [], crawlIntervalHours: 72, enabled: true },
 ];
 
 async function seedCrawlSources(): Promise<void> {
@@ -126,7 +126,10 @@ async function seedCrawlSources(): Promise<void> {
         dealUrl: s.dealUrl,
         targetPaths: s.targetPaths,
         crawlIntervalHours: s.crawlIntervalHours,
-        enabled: false, // operator verifies the URL, then flips this on
+        // Disabled by default — operator verifies the URL, then flips this on. A
+        // source may opt into enabled-on-seed only after it's been verified to yield
+        // (see the GSU/UGA campus sources, trial-verified in docs/campus-source-intel.md).
+        enabled: 'enabled' in s ? (s as { enabled?: boolean }).enabled ?? false : false,
       },
     });
   }
