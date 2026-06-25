@@ -29,6 +29,8 @@ const dealExtractionSchema = {
           },
           verified: { type: 'boolean' },
           image_url: { type: ['string', 'null'] },
+          campus_slug: { type: ['string', 'null'] },
+          requires_student_id: { type: 'boolean' },
         },
         required: [
           'title',
@@ -42,6 +44,8 @@ const dealExtractionSchema = {
           'verification_status',
           'verified',
           'image_url',
+          'campus_slug',
+          'requires_student_id',
         ],
       },
     },
@@ -83,6 +87,10 @@ export class GeminiService {
         'merchant image for that specific deal — an absolute https image URL that ' +
         'appears in the page content (e.g. a markdown image). Prefer a real product ' +
         'or food photo over a logo/banner; use null if the page has no suitable image. ' +
+        'Set requires_student_id true when the offer is for students / requires a student ' +
+        "ID / mentions '.edu', 'student', 'with valid student ID', 'campus'. " +
+        'Set campus_slug to one of gsu, gt, ksu, uga when the deal is clearly tied to ' +
+        'that campus, else null. ' +
         `Source URL: ${input.sourceUrl}\nMerchant hint: ${input.merchantHint ?? ''}\n\nCONTENT:\n${input.content.slice(0, 12_000)}`,
     });
   }

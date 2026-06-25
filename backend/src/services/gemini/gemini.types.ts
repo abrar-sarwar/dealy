@@ -25,6 +25,8 @@ export interface GeminiDeal {
   verification_status: 'pending' | 'verified' | 'unreachable' | 'invalid' | 'expired';
   verified: boolean;
   image_url: string | null;
+  campus_slug: string | null;
+  requires_student_id: boolean;
 }
 
 export interface GeminiDealExtraction {
