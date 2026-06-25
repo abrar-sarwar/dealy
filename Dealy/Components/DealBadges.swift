@@ -50,16 +50,48 @@ struct CampusBadge: View {
     }
 }
 
-/// Renders the student-ID and campus chips for a deal — and nothing at all for a
+/// "Campus Perk" chip — the offer is open to the wider campus community (no ID required).
+struct CampusPerkBadge: View {
+    var body: some View {
+        InfoChip(symbol: "building.2.fill", text: "Campus Perk", tint: Theme.primary)
+            .accessibilityLabel("Campus perk — open to campus community")
+    }
+}
+
+/// "Faculty/Staff" chip — the offer targets faculty and staff members.
+struct FacultyStaffBadge: View {
+    var body: some View {
+        InfoChip(symbol: "briefcase.fill", text: "Faculty/Staff", tint: Theme.primary)
+            .accessibilityLabel("Faculty and staff offer")
+    }
+}
+
+/// "Alumni" chip — the offer targets alumni.
+struct AlumniBadge: View {
+    var body: some View {
+        InfoChip(symbol: "graduationcap.circle", text: "Alumni", tint: Theme.primary)
+            .accessibilityLabel("Alumni offer")
+    }
+}
+
+/// Renders eligibility and campus chips for a deal — and nothing at all for a
 /// normal (non-campus, non-student) grocery/restaurant deal.
 struct StudentDealBadges: View {
     let deal: Deal
 
     var body: some View {
-        if deal.requiresStudentId || deal.campusBadge != nil {
+        let badge = deal.eligibilityBadge
+        let campus = deal.campusBadge
+        if badge != nil || campus != nil {
             HStack(spacing: 6) {
-                if deal.requiresStudentId { StudentIDBadge() }
-                if let campus = deal.campusBadge { CampusBadge(label: campus) }
+                if let campus { CampusBadge(label: campus) }
+                switch badge {
+                case .studentID: StudentIDBadge()
+                case .campusPerk: CampusPerkBadge()
+                case .facultyStaff: FacultyStaffBadge()
+                case .alumni: AlumniBadge()
+                case nil: EmptyView()
+                }
             }
         }
     }

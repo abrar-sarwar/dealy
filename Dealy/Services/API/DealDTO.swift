@@ -52,6 +52,10 @@ struct DealDTO: Decodable {
     let campusSlug: String?
     /// Whether redeeming requires a valid student ID.
     let requiresStudentId: Bool?
+    /// Audience segment: "students", "campus_community", "faculty_staff", "alumni", "general".
+    let audience: String?
+    /// Finer-grained campus deal type (e.g. "student_discount", "campus_perk").
+    let campusDealType: String?
 
     /// Map to the app's domain model. Unknown category slugs fall back to `.food`.
     func toDeal() -> Deal {
@@ -83,7 +87,9 @@ struct DealDTO: Decodable {
             redemptionBrand: redemptionBrand,
             locationPrecision: locationPrecision ?? "approximate",
             campusSlug: campusSlug,
-            requiresStudentId: requiresStudentId ?? false
+            requiresStudentId: requiresStudentId ?? false,
+            audience: audience ?? "general",
+            campusDealType: campusDealType
         )
     }
 }
