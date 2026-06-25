@@ -400,11 +400,31 @@ struct DealsMapView: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedText)
                         .lineLimit(1)
-                    if deal.hasFixedPricing {
-                        Text(Format.price(deal.currentPrice))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Theme.primary)
+                    // Distance (honest: exact = real, approximate = "Nearby") + price +
+                    // ending-soon + student-ID, all compact and truncating.
+                    HStack(spacing: 4) {
+                        if !deal.isOnline {
+                            Text(deal.isExactLocation
+                                 ? Format.distance(deal.distanceMiles, isOnline: false)
+                                 : "Nearby")
+                                .foregroundStyle(Theme.mutedText)
+                        }
+                        if deal.hasFixedPricing {
+                            Text(Format.price(deal.currentPrice)).foregroundStyle(Theme.primary)
+                        }
+                        if deal.isEndingSoon() {
+                            Image(systemName: "clock.fill").foregroundStyle(.orange)
+                        }
+                        if deal.requiresStudentId {
+                            Image(systemName: "graduationcap.fill").foregroundStyle(Theme.primary)
+                        }
                     }
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    Text(deal.category.displayName)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.mutedText)
+                        .lineLimit(1)
                 }
                 .frame(width: 116, alignment: .leading)
             }
