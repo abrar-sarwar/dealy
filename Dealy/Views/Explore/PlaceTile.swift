@@ -25,6 +25,15 @@ struct PlaceTile: View {
                            category: place.category, seed: place.visualSeed)
                     .frame(height: 132)
                     .clipped()
+                    // "What it is" badge — category at the top of the photo.
+                    .overlay(alignment: .topLeading) {
+                        Label(place.category.displayName, systemImage: place.category.symbol)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(.black.opacity(0.5), in: Capsule())
+                            .padding(7)
+                    }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(place.name)

@@ -182,21 +182,30 @@ struct DealsMapView: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             let diameter = side * 0.62
+            let r = diameter / 2
             ZStack {
-                // Soft radial fade: clear inside the bubble, gently fading to a light
-                // ~0.3 dim outside (you can still see beyond — just de-emphasized).
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: .clear, location: 0.80),
-                        .init(color: .black.opacity(0.30), location: 1.0),
-                    ]),
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: diameter / 2 * 1.18
+                // Frosted "locked" blur OUTSIDE the bubble — a teaser, like you'd pay to
+                // unlock the rest. The material blurs the map behind it; a radial mask
+                // keeps the bubble crisp and feathers the blur in softly at the edge.
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Color.black.opacity(0.12)
+                }
+                .compositingGroup()
+                .mask(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: .clear, location: 0.84),
+                            .init(color: .black, location: 1.0),
+                        ]),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: r * 1.16
+                    )
                 )
                 Circle()
-                    .stroke(Theme.primary.opacity(0.8), lineWidth: 2.5)
+                    .stroke(Theme.primary.opacity(0.85), lineWidth: 2.5)
                     .frame(width: diameter, height: diameter)
             }
             .frame(width: geo.size.width, height: geo.size.height)
