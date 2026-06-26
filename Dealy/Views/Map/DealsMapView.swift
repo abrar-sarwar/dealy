@@ -140,10 +140,14 @@ struct DealsMapView: View {
     // MARK: Map
 
     private var mapArea: some View {
-        // interactionModes [] LOCKS the camera to the user's location: no manual
-        // pan/zoom, so the centered spotlight bubble always stays on you. The radius
-        // slider is the only thing that changes the view.
-        Map(position: $position, bounds: cameraBounds, interactionModes: []) {
+        // Free to pan/zoom but bounded to the Dealy zone (no metro-wide roaming). The
+        // clean glowing "near me" ring (below) marks the slider radius — no heavy blur.
+        Map(position: $position, bounds: cameraBounds, interactionModes: [.pan, .zoom]) {
+            // Clean glowing radius ring — the Dealy "near me" signature, no frosted blur.
+            MapCircle(center: center, radius: MapCameraModel.radiusMeters(radiusMiles))
+                .foregroundStyle(Theme.primary.opacity(0.06))
+                .stroke(Theme.primary.opacity(0.65), lineWidth: 2)
+
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
@@ -183,10 +187,6 @@ struct DealsMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
-        // Spotlight: dim everything OUTSIDE the radius bubble. The camera frames the
-        // bubble centered (spotlightRegion), so a centered circular cutout aligns with
-        // the range. Sits under the chrome overlays (slider/filters stay bright).
-        .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .top) { routeBanner }
         .overlay(alignment: .topLeading) { filterButton }
@@ -714,26 +714,50 @@ private struct DealMapPin: View {
 /// Compact, kind-tinted place pin — a smaller teardrop, deliberately distinct from
 /// the round category-gradient deal pins, so real places read as a separate layer.
 /// Grows + brightens when selected.
+/// A little circular PHOTO of the actual place, ringed in its category color — the
+/// distinctive Dealy pin. Falls back to a category-tinted icon when there's no photo.
 private struct PlaceMapPin: View {
     let marker: PlaceMarker
     let selected: Bool
 
-    private var size: CGFloat { selected ? 34 : 26 }
-    private var iconSize: CGFloat { selected ? 15 : 12 }
+    private var size: CGFloat { selected ? 54 : 40 }
+    private var photoURL: URL? {
+        guard let s = marker.primaryPhotoUrl, !s.isEmpty, let u = URL(string: s), u.scheme == "https"
+        else { return nil }
+        return u
+    }
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(marker.kind.tint)
-                .frame(width: size, height: size)
-                .overlay(Circle().stroke(.white, lineWidth: selected ? 2.5 : 1.5))
-                .shadow(color: .black.opacity(0.25), radius: selected ? 4 : 2, y: 1)
-            Image(systemName: marker.kind.symbol)
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundStyle(.white)
+            Group {
+                if let url = photoURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image): image.resizable().scaledToFill()
+                        default: fallbackFill
+                        }
+                    }
+                } else {
+                    fallbackFill
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(marker.kind.tint, lineWidth: selected ? 4 : 3))
+            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1))
+            .shadow(color: .black.opacity(0.4), radius: selected ? 7 : 3, y: 2)
         }
         .accessibilityLabel("\(marker.name), place")
         .accessibilityHint("Shows a preview with directions")
+    }
+
+    private var fallbackFill: some View {
+        ZStack {
+            marker.kind.tint
+            Image(systemName: marker.kind.symbol)
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(.white)
+        }
     }
 }
 
