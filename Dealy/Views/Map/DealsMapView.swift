@@ -78,6 +78,12 @@ struct DealsMapView: View {
         MapCameraModel.markersWithin(app.placeMarkers, center: center, radiusMiles: radiusMiles)
     }
 
+    /// Place markers grouped into clusters at the current radius so dense areas don't
+    /// overlap. Single → photo pin; group → lead photo + "+N".
+    private var placeClusters: [MapCameraModel.MarkerCluster] {
+        MapCameraModel.clusterMarkers(app.placeMarkers, radiusMiles: radiusMiles)
+    }
+
     /// The currently-selected place marker (if still visible), backing the preview card.
     private var selectedPlace: PlaceMarker? {
         guard let id = selectedPlaceID else { return nil }
@@ -140,14 +146,9 @@ struct DealsMapView: View {
     // MARK: Map
 
     private var mapArea: some View {
-        // Free to pan/zoom but bounded to the Dealy zone (no metro-wide roaming). The
-        // clean glowing "near me" ring (below) marks the slider radius — no heavy blur.
-        Map(position: $position, bounds: cameraBounds, interactionModes: [.pan, .zoom]) {
-            // Clean glowing radius ring — the Dealy "near me" signature, no frosted blur.
-            MapCircle(center: center, radius: MapCameraModel.radiusMeters(radiusMiles))
-                .foregroundStyle(Theme.primary.opacity(0.06))
-                .stroke(Theme.primary.opacity(0.65), lineWidth: 2)
-
+        // Locked to your location (no manual pan/zoom) so the spotlight bubble stays
+        // centered on you. The radius slider is the only thing that moves the view.
+        Map(position: $position, bounds: cameraBounds, interactionModes: []) {
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
 
@@ -161,12 +162,18 @@ struct DealsMapView: View {
 
             // Place markers render AFTER (on top of) the deal pins. They sit under the
             // spotlight overlay (clear inside the bubble, dimmed outside) — intended.
-            // Render ALL loaded markers (not just within-radius): the ones outside the
-            // bubble show through the frosted blur as a "there's more out here" teaser.
-            ForEach(app.placeMarkers) { marker in
-                Annotation(marker.name, coordinate: marker.coordinate) {
-                    PlaceMapPin(marker: marker, selected: selectedPlaceID == marker.id)
-                        .onTapGesture { selectPlace(marker.id) }
+            // Place markers, CLUSTERED so dense areas don't overlap: a single marker
+            // shows its photo pin; a group shows the lead photo + a "+N" badge. Tighten
+            // the radius slider to break clusters into individual pins.
+            ForEach(placeClusters) { cluster in
+                Annotation(cluster.lead.name, coordinate: cluster.coordinate) {
+                    if cluster.count == 1 {
+                        PlaceMapPin(marker: cluster.lead, selected: selectedPlaceID == cluster.lead.id)
+                            .onTapGesture { selectPlace(cluster.lead.id) }
+                    } else {
+                        ClusterPin(cluster: cluster)
+                            .onTapGesture { selectPlace(cluster.lead.id) }
+                    }
                 }
                 .annotationTitles(.hidden)
             }
@@ -187,6 +194,7 @@ struct DealsMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
+        .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .top) { routeBanner }
         .overlay(alignment: .topLeading) { filterButton }
@@ -206,14 +214,13 @@ struct DealsMapView: View {
             let diameter = side * 0.62
             let r = diameter / 2
             ZStack {
-                // Frosted "locked" blur OUTSIDE the bubble — a heavier GREY blur of the
-                // city (you can faintly make out streets/icons but it reads as locked,
-                // like you'd pay to unlock the rest). regularMaterial blurs the map +
-                // markers behind it; a grey wash neutralizes the blue/green and covers
-                // it down to the edges; a radial mask keeps the bubble crisp + feathers.
+                // See-through blur OUTSIDE the bubble — you can still make out the city +
+                // pins through it, at a MEDIUM opacity (a "locked/teaser" feel), tinted
+                // with Dealy's dark navy — NOT grey. The ultraThin material does the
+                // blur; the navy wash colors it; a radial mask keeps the bubble crisp.
                 ZStack {
-                    Rectangle().fill(.regularMaterial)
-                    Color(white: 0.32).opacity(0.55)
+                    Rectangle().fill(.ultraThinMaterial)
+                    Theme.background.opacity(0.45)
                 }
                 .compositingGroup()
                 .mask(
@@ -758,6 +765,25 @@ private struct PlaceMapPin: View {
                 .font(.system(size: size * 0.42, weight: .bold))
                 .foregroundStyle(.white)
         }
+    }
+}
+
+/// A cluster of nearby places: the lead's photo pin with a "+N" badge for the rest.
+private struct ClusterPin: View {
+    let cluster: MapCameraModel.MarkerCluster
+
+    var body: some View {
+        PlaceMapPin(marker: cluster.lead, selected: false)
+            .overlay(alignment: .topTrailing) {
+                Text("+\(cluster.count - 1)")
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Capsule().fill(Theme.primary))
+                    .overlay(Capsule().stroke(.white, lineWidth: 1))
+                    .offset(x: 8, y: -4)
+            }
+            .accessibilityLabel("\(cluster.count) places here")
     }
 }
 
