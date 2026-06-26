@@ -829,6 +829,7 @@ model Place {
   vibeTags              String[]  @default([]) @map("vibe_tags")
   categoryTags          String[]  @default([]) @map("category_tags")
   whyRecommended        String?   @map("why_recommended")
+  budgetTip             String?   @map("budget_tip")
   confidenceLabel       String?   @map("confidence_label")
   dealLikelihoodScore   Float?    @map("deal_likelihood_score")
   hiddenGemScore        Float?    @map("hidden_gem_score")

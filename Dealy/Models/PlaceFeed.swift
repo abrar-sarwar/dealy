@@ -17,6 +17,9 @@ struct Place: Identifiable, Equatable, Sendable {
     let vibeTags: [String]
     let studentValueScore: Double?
     let confidenceLabel: String?
+    /// Gemini money-saving tip ("what to order / how to save here for your budget").
+    /// nil when the place has no tip — the UI hides the tip line in that case.
+    let budgetTip: String?
     /// Real remote photo URL (keyless `lh3.googleusercontent.com`) when the place has
     /// a resolved image — a real place/food photo, NOT a logo. nil → `CategoryArtwork`.
     let primaryPhotoUrl: String?
@@ -33,12 +36,21 @@ struct Place: Identifiable, Equatable, Sendable {
         latitude != nil && longitude != nil
     }
 
+    /// The budget tip to render, or nil when there is nothing usable to show — the
+    /// card binds its tip line to this so an empty/whitespace tip is hidden.
+    var budgetTipDisplay: String? {
+        guard let tip = budgetTip?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !tip.isEmpty else { return nil }
+        return tip
+    }
+
     /// Memberwise init with defaults for the photo fields so existing call sites
     /// (mock fixtures, tests) that predate the "real photos" upgrade keep compiling.
     init(id: String, name: String, category: DealCategory, priceBucket: String?,
          rating: Double?, whyRecommended: String?, bestFor: String?, address: String?,
          latitude: Double?, longitude: Double?, vibeTags: [String],
          studentValueScore: Double?, confidenceLabel: String?,
+         budgetTip: String? = nil,
          primaryPhotoUrl: String? = nil, imageStatus: String? = nil) {
         self.id = id
         self.name = name
@@ -53,6 +65,7 @@ struct Place: Identifiable, Equatable, Sendable {
         self.vibeTags = vibeTags
         self.studentValueScore = studentValueScore
         self.confidenceLabel = confidenceLabel
+        self.budgetTip = budgetTip
         self.primaryPhotoUrl = primaryPhotoUrl
         self.imageStatus = imageStatus
     }
@@ -104,6 +117,7 @@ struct PlaceCardDTO: Decodable {
     let vibeTags: [String]?
     let studentValueScore: Double?
     let confidenceLabel: String?
+    let budgetTip: String?
     let primaryPhotoUrl: String?
     let imageStatus: String?
 
@@ -123,6 +137,7 @@ struct PlaceCardDTO: Decodable {
             vibeTags: vibeTags ?? [],
             studentValueScore: studentValueScore,
             confidenceLabel: confidenceLabel,
+            budgetTip: budgetTip,
             primaryPhotoUrl: primaryPhotoUrl,
             imageStatus: imageStatus
         )

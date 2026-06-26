@@ -777,6 +777,19 @@ private struct PlacePreviewCard: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
+                if let tip = marker.budgetTipDisplay {
+                    // "How to save here" line — keep it to 1 line on the compact card.
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.yellow)
+                        Text(tip)
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
                 Button(action: onDirections) {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")

@@ -21,6 +21,7 @@ function fp(over: Partial<FeedPlace> = {}): FeedPlace {
     hiddenGemScore: over.hiddenGemScore ?? 0.1,
     cheapEatsScore: over.cheapEatsScore ?? 0.1,
     whyRecommended: over.whyRecommended ?? 'why',
+    budgetTip: 'budgetTip' in over ? over.budgetTip! : 'Get the $5 combo.',
     website: 'website' in over ? over.website! : 'https://x.example',
     enrichedAt: over.enrichedAt ?? new Date(),
     primaryPhotoUrl: 'primaryPhotoUrl' in over ? over.primaryPhotoUrl! : null,
@@ -165,6 +166,30 @@ describe('PlaceFeedService.sections', () => {
     expect(place.primaryPhotoUrl).toBe('https://lh3.googleusercontent.com/x=s1600');
     expect(place.imageStatus).toBe('fetched');
   });
+
+  it('exposes budgetTip on ranked places (nullable)', async () => {
+    const withTip = fp({
+      id: 'tip',
+      cheapEatsScore: 0.95,
+      affordabilityScore: 0.9,
+      rating: 4.4,
+      budgetTip: 'For under $8, get the falafel wrap.',
+    });
+    const noTip = fp({
+      id: 'notip',
+      cheapEatsScore: 0.9,
+      affordabilityScore: 0.85,
+      rating: 4.3,
+      budgetTip: null,
+    });
+    const { prisma } = makePrisma([withTip, noTip]);
+    const svc = new PlaceFeedService(prisma as never);
+    const cheap = (await svc.sections('gsu')).find((s) => s.key === 'cheap_eats')!.places;
+    expect(cheap.find((p) => p.id === 'tip')!.budgetTip).toBe(
+      'For under $8, get the falafel wrap.',
+    );
+    expect(cheap.find((p) => p.id === 'notip')!.budgetTip).toBeNull();
+  });
 });
 
 describe('PlaceFeedService.mapMarkers', () => {
@@ -219,6 +244,7 @@ describe('PlaceFeedService.mapMarkers', () => {
       whyRecommended: 'Great value',
       primaryPhotoUrl: 'https://lh3.googleusercontent.com/m1=s1600',
       imageStatus: 'fetched',
+      budgetTip: 'Get the $5 combo.',
     });
     expect(typeof marker.markerKind).toBe('string');
   });

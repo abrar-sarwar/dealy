@@ -28,7 +28,8 @@ final class PlaceFeedTests: XCTestCase {
             "bestFor": "budget-friendly flavorful dinner",
             "vibeTags": ["casual", "fast-casual"],
             "studentValueScore": 0.95,
-            "confidenceLabel": "high"
+            "confidenceLabel": "high",
+            "budgetTip": "For under $8, get the falafel wrap; split a side to share."
           }
         ]
       },
@@ -63,7 +64,19 @@ final class PlaceFeedTests: XCTestCase {
         XCTAssertEqual(place.vibeTags, ["casual", "fast-casual"])
         XCTAssertEqual(place.studentValueScore, 0.95)
         XCTAssertEqual(place.confidenceLabel, "high")
+        XCTAssertEqual(place.budgetTip, "For under $8, get the falafel wrap; split a side to share.")
         XCTAssertTrue(place.hasCoordinates)
+    }
+
+    func testPlaceCardBudgetTipIsNilWhenAbsent() throws {
+        let json = """
+        [{"key":"k","title":"t","places":[
+          {"id":"1","name":"X","categorySlug":"food"}
+        ]}]
+        """.data(using: .utf8)!
+        let place = try APIClient.jsonDecoder.decode([PlaceFeedSectionDTO].self, from: json)
+            .map { $0.toSection() }[0].places[0]
+        XCTAssertNil(place.budgetTip)
     }
 
     func testUnknownCategorySlugFallsBackToFood() throws {
@@ -119,6 +132,27 @@ final class PlaceFeedTests: XCTestCase {
         XCTAssertEqual(items["daddr"], "33.7563,-84.3909")
         XCTAssertEqual(items["q"], "Baraka Shawarma")
         XCTAssertEqual(items["dirflg"], "d")
+    }
+
+    func testBudgetTipDisplayShowsTipWhenPresent() {
+        let place = Place(id: "1", name: "X", category: .food, priceBucket: nil, rating: nil,
+                          whyRecommended: nil, bestFor: nil, address: nil, latitude: nil,
+                          longitude: nil, vibeTags: [], studentValueScore: nil, confidenceLabel: nil,
+                          budgetTip: "Get the $5 combo.")
+        XCTAssertEqual(place.budgetTipDisplay, "Get the $5 combo.")
+    }
+
+    func testBudgetTipDisplayHiddenWhenNilOrBlank() {
+        let noTip = Place(id: "1", name: "X", category: .food, priceBucket: nil, rating: nil,
+                          whyRecommended: nil, bestFor: nil, address: nil, latitude: nil,
+                          longitude: nil, vibeTags: [], studentValueScore: nil, confidenceLabel: nil,
+                          budgetTip: nil)
+        XCTAssertNil(noTip.budgetTipDisplay)
+        let blank = Place(id: "1", name: "X", category: .food, priceBucket: nil, rating: nil,
+                          whyRecommended: nil, bestFor: nil, address: nil, latitude: nil,
+                          longitude: nil, vibeTags: [], studentValueScore: nil, confidenceLabel: nil,
+                          budgetTip: "   ")
+        XCTAssertNil(blank.budgetTipDisplay)
     }
 
     func testPlaceWithoutCoordsHasNoCoordinates() {

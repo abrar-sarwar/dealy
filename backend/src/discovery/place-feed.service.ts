@@ -22,6 +22,7 @@ export interface FeedPlace {
   vibeTags: string[];
   confidenceLabel: string | null;
   whyRecommended: string | null;
+  budgetTip: string | null;
   website: string | null;
   enrichedAt: Date | null;
   // Real Google Places photo (keyless URL) + status — populated by the photo job.
@@ -38,6 +39,8 @@ export interface RankedPlace {
   /** The score (0..1) that placed this entry in its section. */
   score: number;
   whyRecommended: string | null;
+  /** Gemini money-saving tip ("what to order / how to save here"); nullable. */
+  budgetTip: string | null;
   // Enriched detail fields (P4) — let the app render & navigate without a second call.
   categorySlug: string;
   address: string | null;
@@ -78,6 +81,8 @@ export interface MapMarker {
   priceBucket: string | null;
   rating: number | null;
   whyRecommended: string | null;
+  /** Gemini money-saving tip ("what to order / how to save here"); nullable. */
+  budgetTip: string | null;
   /** Keyless, client-loadable Google Places photo URL (nullable). */
   primaryPhotoUrl: string | null;
   imageStatus: string;
@@ -229,6 +234,7 @@ export class PlaceFeedService {
           rating: p.rating,
           score,
           whyRecommended: p.whyRecommended,
+          budgetTip: p.budgetTip,
           categorySlug: p.categorySlug,
           address: p.address,
           latitude: p.latitude,
@@ -328,6 +334,7 @@ export class PlaceFeedService {
         priceBucket: p.priceBucket,
         rating: p.rating,
         whyRecommended: p.whyRecommended,
+        budgetTip: p.budgetTip,
         primaryPhotoUrl: p.primaryPhotoUrl,
         imageStatus: p.imageStatus,
         markerKind: deriveMarkerKind(p),
