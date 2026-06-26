@@ -214,13 +214,13 @@ struct DealsMapView: View {
             let diameter = side * 0.62
             let r = diameter / 2
             ZStack {
-                // See-through blur OUTSIDE the bubble — you can still make out the city +
-                // pins through it, at a MEDIUM opacity (a "locked/teaser" feel), tinted
-                // with Dealy's dark navy — NOT grey. The ultraThin material does the
-                // blur; the navy wash colors it; a radial mask keeps the bubble crisp.
+                // Light FROSTED blur OUTSIDE the bubble — reads as blurred glass, not a
+                // dark overlay. A faint Dealy-blue tint keeps it from looking grey; you
+                // can still see the city softly through it. Radial mask keeps the bubble
+                // crisp + feathers the edge.
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
-                    Theme.background.opacity(0.45)
+                    Theme.primary.opacity(0.10)
                 }
                 .compositingGroup()
                 .mask(
