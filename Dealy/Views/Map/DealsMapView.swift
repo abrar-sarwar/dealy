@@ -81,7 +81,7 @@ struct DealsMapView: View {
     /// The currently-selected place marker (if still visible), backing the preview card.
     private var selectedPlace: PlaceMarker? {
         guard let id = selectedPlaceID else { return nil }
-        return visibleMarkers.first { $0.id == id }
+        return app.placeMarkers.first { $0.id == id }
     }
 
     /// Bounds: the camera is locked to the CURRENT RADIUS bubble — the user cannot
@@ -157,7 +157,9 @@ struct DealsMapView: View {
 
             // Place markers render AFTER (on top of) the deal pins. They sit under the
             // spotlight overlay (clear inside the bubble, dimmed outside) — intended.
-            ForEach(visibleMarkers) { marker in
+            // Render ALL loaded markers (not just within-radius): the ones outside the
+            // bubble show through the frosted blur as a "there's more out here" teaser.
+            ForEach(app.placeMarkers) { marker in
                 Annotation(marker.name, coordinate: marker.coordinate) {
                     PlaceMapPin(marker: marker, selected: selectedPlaceID == marker.id)
                         .onTapGesture { selectPlace(marker.id) }
@@ -204,28 +206,30 @@ struct DealsMapView: View {
             let diameter = side * 0.62
             let r = diameter / 2
             ZStack {
-                // Frosted "locked" blur OUTSIDE the bubble — a teaser, like you'd pay to
-                // unlock the rest. The material blurs the map behind it; a radial mask
-                // keeps the bubble crisp and feathers the blur in softly at the edge.
+                // Frosted "locked" blur OUTSIDE the bubble — a heavier GREY blur of the
+                // city (you can faintly make out streets/icons but it reads as locked,
+                // like you'd pay to unlock the rest). regularMaterial blurs the map +
+                // markers behind it; a grey wash neutralizes the blue/green and covers
+                // it down to the edges; a radial mask keeps the bubble crisp + feathers.
                 ZStack {
-                    Rectangle().fill(.ultraThinMaterial)
-                    Color.black.opacity(0.12)
+                    Rectangle().fill(.regularMaterial)
+                    Color(white: 0.32).opacity(0.55)
                 }
                 .compositingGroup()
                 .mask(
                     RadialGradient(
                         gradient: Gradient(stops: [
                             .init(color: .clear, location: 0.0),
-                            .init(color: .clear, location: 0.84),
-                            .init(color: .black, location: 1.0),
+                            .init(color: .clear, location: 0.82),
+                            .init(color: .black, location: 0.97),
                         ]),
                         center: .center,
                         startRadius: 0,
-                        endRadius: r * 1.16
+                        endRadius: r * 1.2
                     )
                 )
                 Circle()
-                    .stroke(Theme.primary.opacity(0.85), lineWidth: 2.5)
+                    .stroke(Theme.primary.opacity(0.5), lineWidth: 2)
                     .frame(width: diameter, height: diameter)
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -639,7 +643,7 @@ struct DealsMapView: View {
         if let id = selectedID, !visible.contains(where: { $0.id == id }) {
             selectedID = nil
         }
-        if let id = selectedPlaceID, !visibleMarkers.contains(where: { $0.id == id }) {
+        if let id = selectedPlaceID, !app.placeMarkers.contains(where: { $0.id == id }) {
             selectedPlaceID = nil
         }
     }
