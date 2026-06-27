@@ -838,6 +838,10 @@ model Place {
   enrichedAt            DateTime? @map("enriched_at")
   enrichmentHash        String?   @map("enrichment_hash")
 
+  // Admin-curated "student-friendly" flag (Food Run v2). Boosts studentValue +
+  // the student_friendly goal ranking; not derived from Google/Gemini.
+  curatedStudentFriendly Boolean  @default(false) @map("curated_student_friendly")
+
   // Real Google Places photos (keyless, client-loadable URLs). Populated by a
   // capped batch job — NEVER live-fetched on app open. See docs/places-photos.md.
   primaryPhotoReference String?   @map("primary_photo_reference")

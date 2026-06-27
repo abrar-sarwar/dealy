@@ -11,12 +11,14 @@ function place(p: Partial<FoodRunPlace> & Pick<FoodRunPlace, 'id' | 'name'>): Fo
     cheapEatsScore: 0.5,
     studentValueScore: 0.5,
     hiddenGemScore: 0.3,
+    dealLikelihoodScore: 0.3,
     bestFor: null,
     vibeTags: [],
     categoryTags: [],
     whyRecommended: null,
     budgetTip: null,
     primaryPhotoUrl: null,
+    curatedStudentFriendly: false,
     ...p,
   };
 }
@@ -24,6 +26,16 @@ function place(p: Partial<FoodRunPlace> & Pick<FoodRunPlace, 'id' | 'name'>): Fo
 // rankPlaces is pure → null prisma/placeFeed are never touched.
 const svc = new FoodRunService(null as never, null as never);
 const CENTER = { latitude: 33.753, longitude: -84.386 };
+
+/** Build a service whose DB is mocked to return `places` + no deals. */
+function svcWith(places: FoodRunPlace[], region: string | null = 'atl'): FoodRunService {
+  const prisma = {
+    place: { findMany: async (): Promise<FoodRunPlace[]> => places },
+    deal: { findFirst: async (): Promise<null> => null },
+  };
+  const placeFeed = { resolveRegion: async (): Promise<string | null> => region };
+  return new FoodRunService(prisma as never, placeFeed as never);
+}
 
 describe('FoodRunService.rankPlaces', () => {
   it('under_10 ranks the cheap-eats place first', () => {
@@ -80,5 +92,119 @@ describe('FoodRunService.rankPlaces', () => {
 
   it('returns an empty ranking for no places', () => {
     expect(svc.rankPlaces([], 'under_10', CENTER)).toEqual([]);
+  });
+
+  it('student_friendly ranks the curated place first', () => {
+    const curated = place({
+      id: 'curated',
+      name: 'Campus Grill',
+      studentValueScore: 0.5,
+      curatedStudentFriendly: true,
+    });
+    const plain = place({ id: 'plain', name: 'Generic Eats', studentValueScore: 0.5 });
+    const ranked = svc.rankPlaces([plain, curated], 'student_friendly', CENTER);
+    expect(ranked[0].place.id).toBe('curated');
+  });
+
+  it('cheapest ranks the most affordable place first', () => {
+    const aff = place({
+      id: 'aff',
+      name: 'Budget Bowls',
+      priceBucket: '$',
+      affordabilityScore: 0.95,
+      cheapEatsScore: 0.9,
+    });
+    const exp = place({
+      id: 'exp',
+      name: 'Bistro',
+      priceBucket: '$$$',
+      affordabilityScore: 0.2,
+      cheapEatsScore: 0.2,
+    });
+    const ranked = svc.rankPlaces([exp, aff], 'cheapest', CENTER);
+    expect(ranked[0].place.id).toBe('aff');
+  });
+
+  it('maxDistanceMiles drops places beyond the radius', () => {
+    const near = place({ id: 'near', name: 'Near', latitude: 33.753, longitude: -84.386 });
+    const far = place({ id: 'far', name: 'Far', latitude: 33.8, longitude: -84.45 }); // ~4-5 mi
+    const ranked = svc.rankPlaces([near, far], 'best_value', CENTER, { maxDistanceMiles: 2 });
+    expect(ranked.map((r) => r.place.id)).toEqual(['near']);
+  });
+
+  it('allowChains=false excludes known chains', () => {
+    const chain = place({ id: 'chain', name: "McDonald's #123" });
+    const local = place({ id: 'local', name: 'Mom & Pop Diner' });
+    const ranked = svc.rankPlaces([chain, local], 'best_value', CENTER, { allowChains: false });
+    expect(ranked.map((r) => r.place.id)).toEqual(['local']);
+  });
+
+  it('allowLocal=false excludes independents (keeps chains)', () => {
+    const chain = place({ id: 'chain', name: 'Chipotle Mexican Grill' });
+    const local = place({ id: 'local', name: 'Mom & Pop Diner' });
+    const ranked = svc.rankPlaces([chain, local], 'best_value', CENTER, { allowLocal: false });
+    expect(ranked.map((r) => r.place.id)).toEqual(['chain']);
+  });
+});
+
+describe('FoodRunService.bestPlace', () => {
+  it('returns ranking_label, tags and ranked_alternatives in the response', async () => {
+    const places = [
+      place({
+        id: 'a',
+        name: 'Taco Spot',
+        priceBucket: '$',
+        cheapEatsScore: 0.9,
+        affordabilityScore: 0.9,
+      }),
+      place({ id: 'b', name: 'Burrito Bar', priceBucket: '$', cheapEatsScore: 0.8 }),
+      place({ id: 'c', name: 'Salad Place', priceBucket: '$$', vibeTags: ['healthy', 'salad'] }),
+    ];
+    const res = await svcWith(places).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'under_10',
+      budgetMinor: 1000,
+    });
+    expect(res.place).not.toBeNull();
+    expect(typeof res.ranking_label).toBe('string');
+    expect(Array.isArray(res.tags)).toBe(true);
+    expect(res.ranked_alternatives.length).toBeGreaterThan(0);
+    expect(res.place?.distance_miles).toBeDefined();
+    expect(res.place?.tags).toContain('under $10');
+  });
+
+  it('labels the best "Skip today if too expensive" when it busts the budget', async () => {
+    const places = [
+      place({ id: 'pricey', name: 'Steakhouse', priceBucket: '$$$', affordabilityScore: 0.2 }),
+    ];
+    const res = await svcWith(places).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'under_10',
+      budgetMinor: 1000, // $10 budget, est ~ $30
+    });
+    expect(res.ranking_label).toBe('Skip today if too expensive');
+  });
+
+  it('out-of-area still returns the best available place at low confidence', async () => {
+    const far = place({ id: 'far', name: 'Far Eats', latitude: 34.4, longitude: -85.1 });
+    const res = await svcWith([far], null).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.place?.id).toBe('far');
+    expect(res.confidence).toBe('low');
+  });
+
+  it('returns a null place only when there are no places at all', async () => {
+    const res = await svcWith([], null).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.place).toBeNull();
+    expect(res.ranked_alternatives).toEqual([]);
   });
 });

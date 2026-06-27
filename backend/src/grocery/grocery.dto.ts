@@ -147,6 +147,24 @@ export interface SubstitutionDto {
   options: string[];
 }
 
+/** Food Run v2 goals (the decision-engine drivers). */
+export const FOOD_RUN_GOALS = [
+  'under_10',
+  'cheapest',
+  'high_protein',
+  'quick_lunch',
+  'late_night',
+  'study_spot',
+  'coffee_dessert',
+  'date_friends',
+  'group_meal',
+  'best_value',
+  'pickup_deal',
+  'student_friendly',
+  'custom',
+] as const;
+
+/** Legacy `intent` values still accepted as an alias for `goal`. */
 export const FOOD_RUN_INTENTS = [
   'under_10',
   'high_protein',
@@ -157,7 +175,26 @@ export const FOOD_RUN_INTENTS = [
   'closest_cheap',
 ] as const;
 
-/** POST /v1/feeds/food-run request. */
+export const FOOD_RUN_TIMES_OF_DAY = [
+  'morning',
+  'lunch',
+  'afternoon',
+  'dinner',
+  'late_night',
+] as const;
+
+export const FOOD_RUN_VIBES = [
+  'quick',
+  'filling',
+  'healthy',
+  'comfort',
+  'social',
+  'quiet',
+] as const;
+
+export const FOOD_RUN_DIETARY = ['vegetarian', 'halal', 'high_protein', 'healthy'] as const;
+
+/** POST /v1/feeds/food-run request (Food Run v2). */
 export class FoodRunRequestDto {
   @ApiProperty({ example: 33.753 })
   @IsLatitude()
@@ -172,9 +209,18 @@ export class FoodRunRequestDto {
   @IsString()
   region?: string;
 
-  @ApiProperty({ enum: FOOD_RUN_INTENTS, example: 'under_10' })
+  @ApiPropertyOptional({ enum: FOOD_RUN_GOALS, example: 'under_10', description: 'Primary goal' })
+  @IsOptional()
+  @IsIn(FOOD_RUN_GOALS)
+  goal?: (typeof FOOD_RUN_GOALS)[number];
+
+  @ApiPropertyOptional({
+    enum: FOOD_RUN_INTENTS,
+    description: 'Legacy alias for `goal`; used only when `goal` is omitted',
+  })
+  @IsOptional()
   @IsIn(FOOD_RUN_INTENTS)
-  intent!: (typeof FOOD_RUN_INTENTS)[number];
+  intent?: (typeof FOOD_RUN_INTENTS)[number];
 
   @ApiPropertyOptional({ example: 10, description: 'Budget in dollars' })
   @IsOptional()
@@ -182,9 +228,42 @@ export class FoodRunRequestDto {
   @Min(1)
   @Max(2000)
   budget?: number;
+
+  @ApiPropertyOptional({ example: 2, description: 'Max distance in miles' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(100)
+  maxDistanceMiles?: number;
+
+  @ApiPropertyOptional({ enum: FOOD_RUN_DIETARY, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsIn(FOOD_RUN_DIETARY, { each: true })
+  dietary?: (typeof FOOD_RUN_DIETARY)[number][];
+
+  @ApiPropertyOptional({ enum: FOOD_RUN_TIMES_OF_DAY, example: 'lunch' })
+  @IsOptional()
+  @IsIn(FOOD_RUN_TIMES_OF_DAY)
+  timeOfDay?: (typeof FOOD_RUN_TIMES_OF_DAY)[number];
+
+  @ApiPropertyOptional({ enum: FOOD_RUN_VIBES, example: 'quick' })
+  @IsOptional()
+  @IsIn(FOOD_RUN_VIBES)
+  vibe?: (typeof FOOD_RUN_VIBES)[number];
+
+  @ApiPropertyOptional({ default: true, description: 'Include chain restaurants' })
+  @IsOptional()
+  @IsBoolean()
+  allowChains?: boolean;
+
+  @ApiPropertyOptional({ default: true, description: 'Include local/independent places' })
+  @IsOptional()
+  @IsBoolean()
+  allowLocal?: boolean;
 }
 
-/** The chosen place inside a Cheap Food Run response. */
+/** The chosen place inside a Food Run response. */
 export interface FoodRunPlaceDto {
   id: string;
   name: string;
@@ -196,15 +275,21 @@ export interface FoodRunPlaceDto {
   why_recommended: string | null;
   budget_tip: string | null;
   primary_photo_url: string | null;
+  distance_miles: number;
+  tags: string[];
 }
 
-/** Cheap Food Run response (wire `FoodRunDto`). */
+/** Food Run response (wire `FoodRunDto`). */
 export interface FoodRunDto {
   place: FoodRunPlaceDto | null;
+  ranked_alternatives: FoodRunPlaceDto[];
   estimated_cost: number;
+  recommended_order: string | null;
   reason: string;
+  ranking_label: string;
   matched_deal: MatchedDealDto | null;
   confidence: string;
+  tags: string[];
   source_status: string;
 }
 

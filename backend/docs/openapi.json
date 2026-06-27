@@ -1961,6 +1961,26 @@
             "type": "string",
             "description": "Region slug; resolved from lat/lng when omitted"
           },
+          "goal": {
+            "type": "string",
+            "enum": [
+              "under_10",
+              "cheapest",
+              "high_protein",
+              "quick_lunch",
+              "late_night",
+              "study_spot",
+              "coffee_dessert",
+              "date_friends",
+              "group_meal",
+              "best_value",
+              "pickup_deal",
+              "student_friendly",
+              "custom"
+            ],
+            "example": "under_10",
+            "description": "Primary goal"
+          },
           "intent": {
             "type": "string",
             "enum": [
@@ -1972,18 +1992,67 @@
               "date_friends",
               "closest_cheap"
             ],
-            "example": "under_10"
+            "description": "Legacy alias for `goal`; used only when `goal` is omitted"
           },
           "budget": {
             "type": "number",
             "example": 10,
             "description": "Budget in dollars"
+          },
+          "maxDistanceMiles": {
+            "type": "number",
+            "example": 2,
+            "description": "Max distance in miles"
+          },
+          "dietary": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "vegetarian",
+                "halal",
+                "high_protein",
+                "healthy"
+              ]
+            }
+          },
+          "timeOfDay": {
+            "type": "string",
+            "enum": [
+              "morning",
+              "lunch",
+              "afternoon",
+              "dinner",
+              "late_night"
+            ],
+            "example": "lunch"
+          },
+          "vibe": {
+            "type": "string",
+            "enum": [
+              "quick",
+              "filling",
+              "healthy",
+              "comfort",
+              "social",
+              "quiet"
+            ],
+            "example": "quick"
+          },
+          "allowChains": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include chain restaurants"
+          },
+          "allowLocal": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include local/independent places"
           }
         },
         "required": [
           "latitude",
-          "longitude",
-          "intent"
+          "longitude"
         ]
       },
       "GenerateBasketDto": {

@@ -142,12 +142,19 @@ export class FeedsController {
       'optional matched restaurant deal. Read-only over stored Places — no live AI.',
   })
   foodRun(@Body() body: FoodRunRequestDto) {
+    const goal = body.goal ?? body.intent ?? 'best_value';
     return this.foodRunService.bestPlace({
       latitude: body.latitude,
       longitude: body.longitude,
       region: body.region ?? null,
-      intent: body.intent,
+      goal,
       budgetMinor: body.budget != null ? Math.round(body.budget * 100) : null,
+      maxDistanceMiles: body.maxDistanceMiles ?? null,
+      dietary: body.dietary ?? [],
+      timeOfDay: body.timeOfDay ?? null,
+      vibe: body.vibe ?? null,
+      allowChains: body.allowChains ?? true,
+      allowLocal: body.allowLocal ?? true,
     });
   }
 }
