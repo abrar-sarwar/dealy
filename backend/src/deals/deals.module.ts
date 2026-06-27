@@ -6,9 +6,10 @@ import { FeedsService } from '../feeds/feeds.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { CoverageModule } from '../coverage/coverage.module';
 import { DiscoveryModule } from '../discovery/discovery.module';
+import { GroceryModule } from '../grocery/grocery.module';
 
 @Module({
-  imports: [CoverageModule, DiscoveryModule],
+  imports: [CoverageModule, DiscoveryModule, GroceryModule],
   controllers: [DealsController, FeedsController],
   providers: [DealsService, FeedsService, RecommendationsService],
   exports: [DealsService, FeedsService, RecommendationsService],

@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public, CurrentUser } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
@@ -7,6 +7,8 @@ import { FeedsService } from './feeds.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { FeedPageQuery } from '../recommendations/recommendations.dto';
 import { PlaceFeedService } from '../discovery/place-feed.service';
+import { FoodRunService } from '../grocery/food-run.service';
+import { FoodRunRequestDto } from '../grocery/grocery.dto';
 
 @ApiTags('feeds')
 @Controller({ path: 'feeds', version: '1' })
@@ -15,6 +17,7 @@ export class FeedsController {
     private readonly feeds: FeedsService,
     private readonly recs: RecommendationsService,
     private readonly placeFeed: PlaceFeedService,
+    private readonly foodRunService: FoodRunService,
   ) {}
 
   // Public deal browsing.
@@ -128,5 +131,23 @@ export class FeedsController {
   })
   trending(@Query() query: OnlineFeedQuery) {
     return this.feeds.trending(query);
+  }
+
+  @Public()
+  @Post('food-run')
+  @ApiOperation({
+    summary:
+      'Cheap Food Run: the single best place to eat right now for an intent ' +
+      '(under_10, study_spot, etc.) with estimated cost, reason, budget tip, and an ' +
+      'optional matched restaurant deal. Read-only over stored Places — no live AI.',
+  })
+  foodRun(@Body() body: FoodRunRequestDto) {
+    return this.foodRunService.bestPlace({
+      latitude: body.latitude,
+      longitude: body.longitude,
+      region: body.region ?? null,
+      intent: body.intent,
+      budgetMinor: body.budget != null ? Math.round(body.budget * 100) : null,
+    });
   }
 }
