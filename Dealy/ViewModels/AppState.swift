@@ -478,14 +478,30 @@ final class AppState {
         )
     }
 
-    /// Build a `FoodRunRequest` from the current discovery center + intent.
-    func makeFoodRunRequest(intent: FoodRunIntent, budgetDollars: Int? = nil) -> FoodRunRequest {
+    /// Build a `FoodRunRequest` from the current discovery center plus the user's
+    /// quiz selections. Pure mapping — the single testable seam for the setup flow.
+    func makeFoodRunRequest(
+        goal: FoodRunIntent,
+        budgetDollars: Int? = nil,
+        maxDistanceMiles: Double? = nil,
+        dietary: [DietaryPreference] = [],
+        timeOfDay: FoodRunTimeOfDay? = nil,
+        vibe: FoodRunVibe? = nil,
+        allowChains: Bool = true,
+        allowLocal: Bool = true
+    ) -> FoodRunRequest {
         let center = persisted.discovery.center
         return FoodRunRequest(
             latitude: center.latitude,
             longitude: center.longitude,
-            intent: intent,
-            budget: budgetDollars
+            goal: goal,
+            budget: budgetDollars,
+            maxDistanceMiles: maxDistanceMiles,
+            dietary: dietary,
+            timeOfDay: timeOfDay,
+            vibe: vibe,
+            allowChains: allowChains,
+            allowLocal: allowLocal
         )
     }
 
@@ -529,6 +545,36 @@ final class AppState {
     func toggleBasketSaved(_ basket: SmartBasket) -> Bool {
         if isBasketSaved(basket.id) { removeBasket(basket.id); return false }
         saveBasket(basket); return true
+    }
+
+    // MARK: - Saved places (Food Run, local, mirrors saved baskets)
+
+    /// Saved Food Run places, most-recently-saved first.
+    var savedPlaces: [Place] { persisted.savedPlaces.reversed() }
+
+    var savedPlaceCount: Int { persisted.savedPlaces.count }
+
+    func isPlaceSaved(_ id: String) -> Bool {
+        persisted.savedPlaces.contains { $0.id == id }
+    }
+
+    /// Save a place (replacing any existing entry with the same id). Appends so
+    /// the newest stays last.
+    func savePlace(_ place: Place) {
+        persisted.savedPlaces.removeAll { $0.id == place.id }
+        persisted.savedPlaces.append(place)
+        persist()
+    }
+
+    func removePlace(_ id: String) {
+        persisted.savedPlaces.removeAll { $0.id == id }
+        persist()
+    }
+
+    @discardableResult
+    func togglePlaceSaved(_ place: Place) -> Bool {
+        if isPlaceSaved(place.id) { removePlace(place.id); return false }
+        savePlace(place); return true
     }
 
     // MARK: - Watched deals

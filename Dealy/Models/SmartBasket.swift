@@ -266,60 +266,178 @@ struct SmartBasket: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-/// The "Cheap Food Run" intents the lightweight food-run flow can request.
+/// The Food Run "goals" — "Where should I eat right now?" Mirrors the backend
+/// `goal` wire values exactly. `custom` is the open-ended catch-all.
 enum FoodRunIntent: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case under10
+    case cheapest
     case highProtein
     case quickLunch
     case lateNight
     case studySpot
+    case coffeeDessert
     case dateFriends
-    case closestCheap
+    case groupMeal
+    case bestValue
+    case pickupDeal
+    case studentFriendly
+    case custom
 
     var id: String { rawValue }
 
     var apiValue: String {
         switch self {
         case .under10: return "under_10"
+        case .cheapest: return "cheapest"
         case .highProtein: return "high_protein"
         case .quickLunch: return "quick_lunch"
         case .lateNight: return "late_night"
         case .studySpot: return "study_spot"
+        case .coffeeDessert: return "coffee_dessert"
         case .dateFriends: return "date_friends"
-        case .closestCheap: return "closest_cheap"
+        case .groupMeal: return "group_meal"
+        case .bestValue: return "best_value"
+        case .pickupDeal: return "pickup_deal"
+        case .studentFriendly: return "student_friendly"
+        case .custom: return "custom"
         }
+    }
+
+    /// Decode from the wire `goal` value, falling back to `.bestValue` for
+    /// anything unknown so a new backend goal never breaks the client.
+    static func from(apiValue: String?) -> FoodRunIntent {
+        FoodRunIntent.allCases.first { $0.apiValue == apiValue } ?? .bestValue
     }
 
     var displayName: String {
         switch self {
         case .under10: return "Under $10"
+        case .cheapest: return "Cheapest"
         case .highProtein: return "High protein"
         case .quickLunch: return "Quick lunch"
         case .lateNight: return "Late night"
         case .studySpot: return "Study spot"
+        case .coffeeDessert: return "Coffee / dessert"
         case .dateFriends: return "Date / friends"
-        case .closestCheap: return "Closest & cheap"
+        case .groupMeal: return "Group meal"
+        case .bestValue: return "Best value"
+        case .pickupDeal: return "Pickup deal"
+        case .studentFriendly: return "Student-friendly"
+        case .custom: return "Surprise me"
         }
     }
 
     var icon: String {
         switch self {
         case .under10: return "dollarsign.circle.fill"
+        case .cheapest: return "tag.fill"
         case .highProtein: return "dumbbell.fill"
         case .quickLunch: return "bolt.fill"
         case .lateNight: return "moon.stars.fill"
         case .studySpot: return "book.fill"
+        case .coffeeDessert: return "cup.and.saucer.fill"
         case .dateFriends: return "person.2.fill"
-        case .closestCheap: return "location.fill"
+        case .groupMeal: return "person.3.fill"
+        case .bestValue: return "star.circle.fill"
+        case .pickupDeal: return "bag.fill"
+        case .studentFriendly: return "graduationcap.fill"
+        case .custom: return "sparkles"
         }
     }
 }
 
-/// Result of a Cheap Food Run: a single best place plus the reasoning around it.
-struct FoodRunResult: Identifiable, Equatable, Sendable {
+/// When the food run is happening — shapes the (honest, estimated) open-now
+/// heuristic and ranking. Mirrors the backend `timeOfDay` wire values.
+enum FoodRunTimeOfDay: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case morning
+    case lunch
+    case afternoon
+    case dinner
+    case lateNight
+
+    var id: String { rawValue }
+
+    var apiValue: String {
+        switch self {
+        case .morning: return "morning"
+        case .lunch: return "lunch"
+        case .afternoon: return "afternoon"
+        case .dinner: return "dinner"
+        case .lateNight: return "late_night"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .morning: return "Morning"
+        case .lunch: return "Lunch"
+        case .afternoon: return "Afternoon"
+        case .dinner: return "Dinner"
+        case .lateNight: return "Late night"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .morning: return "sunrise.fill"
+        case .lunch: return "sun.max.fill"
+        case .afternoon: return "cloud.sun.fill"
+        case .dinner: return "sunset.fill"
+        case .lateNight: return "moon.stars.fill"
+        }
+    }
+}
+
+/// The mood of the meal. Mirrors the backend `vibe` wire values.
+enum FoodRunVibe: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case quick
+    case filling
+    case healthy
+    case comfort
+    case social
+    case quiet
+
+    var id: String { rawValue }
+
+    var apiValue: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .quick: return "Quick"
+        case .filling: return "Filling"
+        case .healthy: return "Healthy"
+        case .comfort: return "Comfort"
+        case .social: return "Social"
+        case .quiet: return "Quiet"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .quick: return "bolt.fill"
+        case .filling: return "fork.knife"
+        case .healthy: return "leaf.fill"
+        case .comfort: return "heart.fill"
+        case .social: return "person.2.fill"
+        case .quiet: return "book.fill"
+        }
+    }
+}
+
+/// Result of a Food Run: a single best place, the reasoning around it, and a
+/// ranked list of nearby alternatives.
+struct FoodRunResult: Identifiable, Equatable, Hashable, Sendable {
     let place: Place
+    /// More options nearby, ranked best-first.
+    let alternatives: [Place]
     let estimatedCost: Decimal?
     let reason: String
+    /// "Best under $10", "Worth the walk", … — the headline label for the pick.
+    let rankingLabel: String?
+    /// "Get the falafel wrap" — what to order to stay on budget. nil when unknown.
+    let recommendedOrder: String?
+    /// Display tags ("under $10", "good for students", …) derived server-side.
+    let tags: [String]
     let matchedDeal: BasketDealMatch?
     let confidence: BasketConfidence
     let sourceStatus: TrustLabel
@@ -327,23 +445,60 @@ struct FoodRunResult: Identifiable, Equatable, Sendable {
     var id: String { place.id }
 }
 
-/// Request payload for a Cheap Food Run (`POST /v1/feeds/food-run`).
+/// Request payload for a Food Run (`POST /v1/feeds/food-run`).
 struct FoodRunRequest: Hashable, Sendable {
     var latitude: Double
     var longitude: Double
     var region: String?
-    var intent: FoodRunIntent
+    var goal: FoodRunIntent
     var budget: Int?
+    var maxDistanceMiles: Double?
+    var dietary: [DietaryPreference]
+    var timeOfDay: FoodRunTimeOfDay?
+    var vibe: FoodRunVibe?
+    var allowChains: Bool
+    var allowLocal: Bool
 
-    /// JSON body matching the wire contract.
+    init(latitude: Double,
+         longitude: Double,
+         region: String? = nil,
+         goal: FoodRunIntent,
+         budget: Int? = nil,
+         maxDistanceMiles: Double? = nil,
+         dietary: [DietaryPreference] = [],
+         timeOfDay: FoodRunTimeOfDay? = nil,
+         vibe: FoodRunVibe? = nil,
+         allowChains: Bool = true,
+         allowLocal: Bool = true) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.region = region
+        self.goal = goal
+        self.budget = budget
+        self.maxDistanceMiles = maxDistanceMiles
+        self.dietary = dietary
+        self.timeOfDay = timeOfDay
+        self.vibe = vibe
+        self.allowChains = allowChains
+        self.allowLocal = allowLocal
+    }
+
+    /// JSON body matching the v2 wire contract. snake_case for the value-bearing
+    /// fields, camelCase for the flags (mirrors `BasketRequest.jsonBody`).
     var jsonBody: [String: Any] {
         var body: [String: Any] = [
             "latitude": latitude,
             "longitude": longitude,
-            "intent": intent.apiValue,
+            "goal": goal.apiValue,
+            "allowChains": allowChains,
+            "allowLocal": allowLocal,
         ]
         if let region { body["region"] = region }
         if let budget { body["budget"] = budget }
+        if let maxDistanceMiles { body["maxDistanceMiles"] = maxDistanceMiles }
+        if !dietary.isEmpty { body["dietary"] = dietary.map { $0.apiValue } }
+        if let timeOfDay { body["timeOfDay"] = timeOfDay.apiValue }
+        if let vibe { body["vibe"] = vibe.apiValue }
         return body
     }
 }

@@ -180,6 +180,8 @@ struct FoodRunPlaceDTO: Decodable {
     let whyRecommended: String?
     let budgetTip: String?
     let primaryPhotoUrl: String?
+    let distanceMiles: Double?
+    let tags: [String]?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -192,6 +194,8 @@ struct FoodRunPlaceDTO: Decodable {
         case whyRecommended = "why_recommended"
         case budgetTip = "budget_tip"
         case primaryPhotoUrl = "primary_photo_url"
+        case distanceMiles = "distance_miles"
+        case tags
     }
 
     func toPlace() -> Place {
@@ -211,34 +215,48 @@ struct FoodRunPlaceDTO: Decodable {
             confidenceLabel: nil,
             budgetTip: budgetTip,
             primaryPhotoUrl: primaryPhotoUrl,
-            imageStatus: nil
+            imageStatus: nil,
+            distanceMiles: distanceMiles,
+            tags: tags ?? []
         )
     }
 }
 
-/// Wire shape of a Cheap Food Run response (`FoodRunDto`). snake_case keys.
+/// Wire shape of a Food Run response (`FoodRunDto`, v2). snake_case keys.
 struct FoodRunDTO: Decodable {
     let place: FoodRunPlaceDTO
+    let rankedAlternatives: [FoodRunPlaceDTO]?
     let estimatedCost: Double?
+    let recommendedOrder: String?
     let reason: String?
+    let rankingLabel: String?
     let matchedDeal: MatchedDealDTO?
     let confidence: String?
+    let tags: [String]?
     let sourceStatus: String?
 
     private enum CodingKeys: String, CodingKey {
         case place
+        case rankedAlternatives = "ranked_alternatives"
         case estimatedCost = "estimated_cost"
+        case recommendedOrder = "recommended_order"
         case reason
+        case rankingLabel = "ranking_label"
         case matchedDeal = "matched_deal"
         case confidence
+        case tags
         case sourceStatus = "source_status"
     }
 
     func toDomain() -> FoodRunResult {
         FoodRunResult(
             place: place.toPlace(),
+            alternatives: (rankedAlternatives ?? []).map { $0.toPlace() },
             estimatedCost: estimatedCost.map { Decimal($0) },
             reason: reason ?? "",
+            rankingLabel: rankingLabel,
+            recommendedOrder: recommendedOrder,
+            tags: tags ?? [],
             matchedDeal: matchedDeal?.toDomain(),
             confidence: BasketConfidence.from(apiValue: confidence),
             sourceStatus: TrustLabel.from(apiValue: sourceStatus)

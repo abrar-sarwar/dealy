@@ -3,7 +3,10 @@ import Foundation
 /// A single enriched local business surfaced in the Explore "local savings feed".
 /// Sourced from the backend `/v1/feeds/places` projection — places have no remote
 /// image, so the UI renders generated `CategoryArtwork`.
-struct Place: Identifiable, Equatable, Sendable {
+///
+/// `Codable`/`Hashable` so places can be persisted (saved Food Run places) and
+/// carried as ranked Food Run alternatives.
+struct Place: Identifiable, Equatable, Hashable, Codable, Sendable {
     let id: String
     let name: String
     let category: DealCategory
@@ -24,6 +27,11 @@ struct Place: Identifiable, Equatable, Sendable {
     /// a resolved image — a real place/food photo, NOT a logo. nil → `CategoryArtwork`.
     let primaryPhotoUrl: String?
     let imageStatus: String?
+    /// Straight-line distance from the user, when the backend knows it (Food Run).
+    /// nil for the Explore places feed where distance is not projected.
+    let distanceMiles: Double?
+    /// Short display tags ("under $10", "good for students", …). Empty when none.
+    let tags: [String]
 
     /// Deterministic seed for `CategoryArtwork`, derived from the stable id so the
     /// same place always renders the same artwork.
@@ -44,14 +52,21 @@ struct Place: Identifiable, Equatable, Sendable {
         return tip
     }
 
-    /// Memberwise init with defaults for the photo fields so existing call sites
-    /// (mock fixtures, tests) that predate the "real photos" upgrade keep compiling.
+    /// "0.4 mi" — the distance to render, or nil when unknown.
+    var distanceDisplay: String? {
+        guard let distanceMiles else { return nil }
+        return String(format: "%.1f mi", distanceMiles)
+    }
+
+    /// Memberwise init with defaults for the photo / food-run fields so existing
+    /// call sites (mock fixtures, tests) that predate later upgrades keep compiling.
     init(id: String, name: String, category: DealCategory, priceBucket: String?,
          rating: Double?, whyRecommended: String?, bestFor: String?, address: String?,
          latitude: Double?, longitude: Double?, vibeTags: [String],
          studentValueScore: Double?, confidenceLabel: String?,
          budgetTip: String? = nil,
-         primaryPhotoUrl: String? = nil, imageStatus: String? = nil) {
+         primaryPhotoUrl: String? = nil, imageStatus: String? = nil,
+         distanceMiles: Double? = nil, tags: [String] = []) {
         self.id = id
         self.name = name
         self.category = category
@@ -68,6 +83,8 @@ struct Place: Identifiable, Equatable, Sendable {
         self.budgetTip = budgetTip
         self.primaryPhotoUrl = primaryPhotoUrl
         self.imageStatus = imageStatus
+        self.distanceMiles = distanceMiles
+        self.tags = tags
     }
 }
 

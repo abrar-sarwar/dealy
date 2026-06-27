@@ -62,12 +62,104 @@ final class SmartBasketTests: XCTestCase {
         XCTAssertLessThanOrEqual(basket.estimatedTotal, Decimal(35))
     }
 
-    func testMockFoodRunReturnsResult() async throws {
+    func testMockFoodRunReturnsEnrichedResult() async throws {
         let app = makeApp()
-        let request = app.makeFoodRunRequest(intent: .under10)
+        let request = app.makeFoodRunRequest(goal: .under10)
         let result = try await app.fetchFoodRun(request)
         XCTAssertFalse(result.place.name.isEmpty)
         XCTAssertNotNil(result.estimatedCost)
+        // v2 enrichment: tags, alternatives, ranking label, recommended order.
+        XCTAssertFalse(result.tags.isEmpty)
+        XCTAssertGreaterThanOrEqual(result.alternatives.count, 2)
+        XCTAssertEqual(result.rankingLabel, "Best under $10")
+        XCTAssertEqual(result.recommendedOrder, "Get the chicken plate")
+        XCTAssertNotNil(result.place.distanceMiles)
+        XCTAssertEqual(result.sourceStatus, .estimated)
+    }
+
+    // MARK: - Setup → FoodRunRequest mapping
+
+    func testMakeFoodRunRequestMapsSelectionsToWireValues() {
+        let app = makeApp()
+        let request = app.makeFoodRunRequest(
+            goal: .quickLunch,
+            budgetDollars: 15,
+            maxDistanceMiles: 1.5,
+            dietary: [.halal, .highProtein],
+            timeOfDay: .lunch,
+            vibe: .quick,
+            allowChains: false,
+            allowLocal: true
+        )
+        XCTAssertEqual(request.goal, .quickLunch)
+        XCTAssertEqual(request.budget, 15)
+        XCTAssertEqual(request.maxDistanceMiles, 1.5)
+        XCTAssertFalse(request.allowChains)
+        XCTAssertEqual(request.latitude, app.discovery.center.latitude)
+
+        let body = request.jsonBody
+        XCTAssertEqual(body["goal"] as? String, "quick_lunch")
+        XCTAssertEqual(body["budget"] as? Int, 15)
+        XCTAssertEqual(body["maxDistanceMiles"] as? Double, 1.5)
+        XCTAssertEqual(body["dietary"] as? [String], ["halal", "high_protein"])
+        XCTAssertEqual(body["timeOfDay"] as? String, "lunch")
+        XCTAssertEqual(body["vibe"] as? String, "quick")
+        XCTAssertEqual(body["allowChains"] as? Bool, false)
+        XCTAssertEqual(body["allowLocal"] as? Bool, true)
+    }
+
+    func testFoodRunRequestOmitsAbsentOptionalFields() {
+        let app = makeApp()
+        let body = app.makeFoodRunRequest(goal: .bestValue).jsonBody
+        XCTAssertEqual(body["goal"] as? String, "best_value")
+        XCTAssertNil(body["budget"])
+        XCTAssertNil(body["maxDistanceMiles"])
+        XCTAssertNil(body["dietary"])
+        XCTAssertNil(body["timeOfDay"])
+        XCTAssertNil(body["vibe"])
+    }
+
+    // MARK: - Save / unsave place persistence
+
+    func testSaveAndUnsavePlace() async throws {
+        let app = makeApp()
+        let result = try await app.fetchFoodRun(app.makeFoodRunRequest(goal: .under10))
+        let place = result.place
+
+        XCTAssertFalse(app.isPlaceSaved(place.id))
+        app.savePlace(place)
+        XCTAssertTrue(app.isPlaceSaved(place.id))
+        XCTAssertEqual(app.savedPlaceCount, 1)
+        XCTAssertEqual(app.savedPlaces.first?.id, place.id)
+
+        // Saving the same id again replaces (no duplicate).
+        app.savePlace(place)
+        XCTAssertEqual(app.savedPlaceCount, 1)
+
+        app.removePlace(place.id)
+        XCTAssertFalse(app.isPlaceSaved(place.id))
+        XCTAssertEqual(app.savedPlaceCount, 0)
+    }
+
+    func testSavedPlacesPersistAcrossAppStateInstances() async throws {
+        let store = InMemoryPreferencesStore()
+        let app = makeApp(store)
+        let result = try await app.fetchFoodRun(app.makeFoodRunRequest(goal: .highProtein))
+        app.savePlace(result.place)
+
+        let reloaded = makeApp(store)
+        XCTAssertTrue(reloaded.isPlaceSaved(result.place.id))
+        XCTAssertEqual(reloaded.savedPlaces.first?.name, result.place.name)
+        XCTAssertEqual(reloaded.savedPlaces.first?.tags, result.place.tags)
+    }
+
+    func testTogglePlaceSaved() async throws {
+        let app = makeApp()
+        let result = try await app.fetchFoodRun(app.makeFoodRunRequest(goal: .cheapest))
+        XCTAssertTrue(app.togglePlaceSaved(result.place))
+        XCTAssertTrue(app.isPlaceSaved(result.place.id))
+        XCTAssertFalse(app.togglePlaceSaved(result.place))
+        XCTAssertFalse(app.isPlaceSaved(result.place.id))
     }
 
     // MARK: - Save / unsave basket persistence

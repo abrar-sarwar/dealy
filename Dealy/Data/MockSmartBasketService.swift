@@ -39,14 +39,19 @@ final class MockSmartBasketService: SmartBasketServicing {
     }
 
     func foodRun(_ request: FoodRunRequest) async throws -> FoodRunResult {
+        if simulateFailureOnce {
+            simulateFailureOnce = false
+            throw SmartBasketError.unavailable
+        }
+        let tags = ["under $10", "good for students", "high protein"]
         let place = Place(
-            id: "food-run-\(request.intent.rawValue)",
+            id: "food-run-\(request.goal.rawValue)",
             name: "Baraka Shawarma",
             category: .food,
             priceBucket: "$",
             rating: 4.6,
-            whyRecommended: "High ratings and low prices for a filling meal.",
-            bestFor: request.intent.displayName,
+            whyRecommended: "Filling, close, highly rated, and usually under $10.",
+            bestFor: request.goal.displayName,
             address: "68 Walton St NW, Atlanta",
             latitude: request.latitude,
             longitude: request.longitude,
@@ -55,12 +60,44 @@ final class MockSmartBasketService: SmartBasketServicing {
             confidenceLabel: "medium",
             budgetTip: "Get the chicken plate — it's the most food per dollar.",
             primaryPhotoUrl: nil,
-            imageStatus: "none"
+            imageStatus: "none",
+            distanceMiles: 0.4,
+            tags: tags
         )
+        let alternatives = [
+            Place(
+                id: "food-run-alt-1-\(request.goal.rawValue)",
+                name: "Con Leche Coffee",
+                category: .food, priceBucket: "$", rating: 4.4,
+                whyRecommended: "Cheap breakfast burritos and great coffee.",
+                bestFor: nil, address: "120 Edgewood Ave, Atlanta",
+                latitude: request.latitude, longitude: request.longitude,
+                vibeTags: ["cafe", "quiet"], studentValueScore: 0.8,
+                confidenceLabel: "medium", budgetTip: "The breakfast burrito is the value pick.",
+                primaryPhotoUrl: nil, imageStatus: "none",
+                distanceMiles: 0.6, tags: ["under $10", "quiet study"]
+            ),
+            Place(
+                id: "food-run-alt-2-\(request.goal.rawValue)",
+                name: "The Food Shoppe",
+                category: .food, priceBucket: "$$", rating: 4.2,
+                whyRecommended: "Big portions, good for sharing with friends.",
+                bestFor: nil, address: "200 Peachtree St, Atlanta",
+                latitude: request.latitude, longitude: request.longitude,
+                vibeTags: ["casual", "shareable"], studentValueScore: 0.7,
+                confidenceLabel: "low", budgetTip: "Split a platter to keep it cheap.",
+                primaryPhotoUrl: nil, imageStatus: "none",
+                distanceMiles: 1.1, tags: ["good for students"]
+            ),
+        ]
         return FoodRunResult(
             place: place,
+            alternatives: alternatives,
             estimatedCost: Decimal(9.50),
-            reason: "Best \(request.intent.displayName.lowercased()) pick near you for the money.",
+            reason: "Best \(request.goal.displayName.lowercased()) pick near you for the money.",
+            rankingLabel: request.goal == .under10 ? "Best under $10" : "Best overall",
+            recommendedOrder: "Get the chicken plate",
+            tags: tags,
             matchedDeal: nil,
             confidence: .medium,
             sourceStatus: .estimated

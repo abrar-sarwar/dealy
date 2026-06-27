@@ -11,6 +11,7 @@ struct ExploreView: View {
     @State private var localFilter: DealCategoryFilter = .all
     @State private var showSmartBasket = false
     @State private var showFoodRun = false
+    @State private var foodRunPreset: FoodRunIntent?
 
     /// Deals available for browsing & search. The service already returns
     /// discovery-eligible inventory, so we only drop expired ones here.
@@ -55,7 +56,7 @@ struct ExploreView: View {
                 SmartBasketSetupView(onClose: { showSmartBasket = false })
             }
             .fullScreenCover(isPresented: $showFoodRun) {
-                FoodRunView(onClose: { showFoodRun = false })
+                FoodRunView(onClose: { showFoodRun = false }, presetGoal: foodRunPreset)
             }
             .task { await app.loadPlaceSections() }
             .task { await app.loadStudentDeals() }
@@ -72,10 +73,21 @@ struct ExploreView: View {
     private var smartBasketSection: some View {
         VStack(spacing: Spacing.sm) {
             SmartBasketEntryCard { Haptics.selection(); showSmartBasket = true }
-            Button { Haptics.selection(); showFoodRun = true } label: {
-                Label("Cheap Food Run — where to eat right now", systemImage: "fork.knife")
+            FoodRunEntryCard {
+                Haptics.selection(); foodRunPreset = nil; showFoodRun = true
             }
-            .buttonStyle(SecondaryButtonStyle(fullWidth: true))
+            HStack(spacing: Spacing.sm) {
+                FoodRunDecisionCard(title: "Best lunch move",
+                                    subtitle: "Quick & on budget",
+                                    symbol: "bolt.fill") {
+                    Haptics.selection(); foodRunPreset = .quickLunch; showFoodRun = true
+                }
+                FoodRunDecisionCard(title: "Under $10 near you",
+                                    subtitle: "Most food per dollar",
+                                    symbol: "dollarsign.circle.fill") {
+                    Haptics.selection(); foodRunPreset = .under10; showFoodRun = true
+                }
+            }
         }
         .padding(.horizontal, Spacing.lg)
     }

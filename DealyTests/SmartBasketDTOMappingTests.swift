@@ -142,5 +142,79 @@ final class SmartBasketDTOMappingTests: XCTestCase {
         XCTAssertEqual(result.confidence, .high)
         XCTAssertEqual(result.sourceStatus, .sourceBacked)
         XCTAssertNil(result.matchedDeal)
+        // v1-shaped payloads still map: no alternatives / tags / labels.
+        XCTAssertTrue(result.alternatives.isEmpty)
+        XCTAssertTrue(result.tags.isEmpty)
+        XCTAssertNil(result.rankingLabel)
+        XCTAssertNil(result.recommendedOrder)
+    }
+
+    func testFoodRunV2DecodesTagsAlternativesAndLabels() throws {
+        let json = """
+        {
+          "place": {
+            "id": "p1", "name": "Baraka Shawarma", "category": "food",
+            "price_bucket": "$", "rating": 4.6, "latitude": 33.75, "longitude": -84.39,
+            "why_recommended": "Filling, close, highly rated, and usually under $10.",
+            "budget_tip": "Get the chicken plate", "primary_photo_url": null,
+            "distance_miles": 0.4, "tags": ["under $10", "good for students"]
+          },
+          "ranked_alternatives": [
+            {
+              "id": "p2", "name": "Con Leche Coffee", "category": "food",
+              "price_bucket": "$", "rating": 4.4, "latitude": 33.75, "longitude": -84.39,
+              "why_recommended": "Cheap breakfast", "budget_tip": null,
+              "primary_photo_url": null, "distance_miles": 0.6, "tags": ["quiet study"]
+            }
+          ],
+          "estimated_cost": 9.0,
+          "recommended_order": "Get the falafel wrap",
+          "reason": "Filling, close, highly rated, and usually under $10.",
+          "ranking_label": "Best under $10",
+          "matched_deal": null,
+          "confidence": "high",
+          "tags": ["under $10", "good for students", "high protein"],
+          "source_status": "estimated"
+        }
+        """.data(using: .utf8)!
+        let result = try APIClient.jsonDecoder.decode(FoodRunDTO.self, from: json).toDomain()
+
+        XCTAssertEqual(result.place.name, "Baraka Shawarma")
+        XCTAssertEqual(result.place.distanceMiles, 0.4)
+        XCTAssertEqual(result.place.tags, ["under $10", "good for students"])
+        XCTAssertEqual(result.rankingLabel, "Best under $10")
+        XCTAssertEqual(result.recommendedOrder, "Get the falafel wrap")
+        XCTAssertEqual(result.tags, ["under $10", "good for students", "high protein"])
+        XCTAssertEqual(result.estimatedCost, Decimal(9.0))
+        XCTAssertEqual(result.confidence, .high)
+        XCTAssertEqual(result.sourceStatus, .estimated)
+
+        XCTAssertEqual(result.alternatives.count, 1)
+        let alt = try XCTUnwrap(result.alternatives.first)
+        XCTAssertEqual(alt.name, "Con Leche Coffee")
+        XCTAssertEqual(alt.distanceMiles, 0.6)
+        XCTAssertEqual(alt.tags, ["quiet study"])
+    }
+
+    func testFoodRunV2UnknownFieldsFallBackSafely() throws {
+        // Missing optional v2 fields + unknown enum values stay conservative.
+        let json = """
+        {
+          "place": {
+            "id": "p1", "name": "X", "category": "spaceship",
+            "price_bucket": null, "rating": null, "latitude": null, "longitude": null,
+            "why_recommended": null, "budget_tip": null, "primary_photo_url": null
+          },
+          "estimated_cost": null, "reason": null,
+          "confidence": "ultra", "source_status": "magic"
+        }
+        """.data(using: .utf8)!
+        let result = try APIClient.jsonDecoder.decode(FoodRunDTO.self, from: json).toDomain()
+        XCTAssertEqual(result.place.category, .food)        // unknown slug -> food
+        XCTAssertNil(result.place.distanceMiles)
+        XCTAssertTrue(result.place.tags.isEmpty)
+        XCTAssertTrue(result.alternatives.isEmpty)
+        XCTAssertEqual(result.confidence, .low)             // unknown -> low
+        XCTAssertEqual(result.sourceStatus, .estimated)     // unknown -> estimated
     }
 }

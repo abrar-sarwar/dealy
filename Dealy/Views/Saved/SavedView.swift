@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct SavedView: View {
     @Environment(AppState.self) private var app
@@ -24,7 +25,7 @@ struct SavedView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if app.savedCount == 0 && app.savedBasketCount == 0 {
+                if app.savedCount == 0 && app.savedBasketCount == 0 && app.savedPlaceCount == 0 {
                     EmptyStateView(
                         symbol: "heart.text.square",
                         title: "No saved deals yet",
@@ -61,6 +62,27 @@ struct SavedView: View {
                                               bottom: Spacing.md, trailing: Spacing.lg))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+            }
+
+            if app.savedPlaceCount > 0 {
+                Section {
+                    ForEach(app.savedPlaces) { place in
+                        SavedPlaceRow(place: place)
+                            .contentShape(Rectangle())
+                            .onTapGesture { openDirections(to: place) }
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg,
+                                                      bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    removePlace(place)
+                                } label: { Label("Remove", systemImage: "trash") }
+                            }
+                    }
+                } header: {
+                    Text("Food Run places · \(app.savedPlaceCount)")
+                }
             }
 
             if app.savedBasketCount > 0 {
@@ -146,6 +168,18 @@ struct SavedView: View {
         Haptics.impact(.light)
     }
 
+    private func removePlace(_ place: Place) {
+        withAnimation { app.removePlace(place.id) }
+        Haptics.impact(.light)
+    }
+
+    private func openDirections(to place: Place) {
+        guard let lat = place.latitude, let lng = place.longitude else { return }
+        Haptics.selection()
+        DirectionsLauncher.open(
+            to: CLLocationCoordinate2D(latitude: lat, longitude: lng), name: place.name)
+    }
+
     private func switchToHome() {
         Haptics.selection()
         router.selection = .home
@@ -182,6 +216,47 @@ private struct SavedBasketRow: View {
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Theme.faintText)
+        }
+        .padding(Spacing.md)
+        .dealyCardSurface()
+    }
+}
+
+/// Compact row summarizing a saved Food Run place in the Saved tab.
+private struct SavedPlaceRow: View {
+    let place: Place
+
+    private var metaLine: String {
+        var parts: [String] = []
+        if let bucket = place.priceBucket, !bucket.isEmpty { parts.append(bucket) }
+        if let rating = place.rating { parts.append(String(format: "★%.1f", rating)) }
+        if let distance = place.distanceDisplay { parts.append(distance) }
+        parts.append(place.category.displayName)
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            PlaceImage(photoURL: place.primaryPhotoUrl,
+                       category: place.category, seed: place.visualSeed)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(place.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Text(metaLine)
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedText)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if place.hasCoordinates {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.headline)
+                    .foregroundStyle(Theme.primary)
+            }
         }
         .padding(Spacing.md)
         .dealyCardSurface()
