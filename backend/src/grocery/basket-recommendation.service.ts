@@ -105,7 +105,8 @@ export class BasketRecommendationService {
       distanceScore(store.distanceMiles, opts.maxDistanceMiles) * SCORE_WEIGHTS.distance +
       budgetFitScore(estimatedTotalMinor, opts.budgetMinor) * SCORE_WEIGHTS.budget;
 
-    const lowConfidencePenalty = itemMatchRate < LOW_COVERAGE_THRESHOLD ? LOW_CONFIDENCE_PENALTY : 0;
+    const lowConfidencePenalty =
+      itemMatchRate < LOW_COVERAGE_THRESHOLD ? LOW_CONFIDENCE_PENALTY : 0;
 
     return {
       store,
@@ -143,8 +144,6 @@ export class BasketRecommendationService {
       .sort((a, b) => b.score - a.score || a.estimatedTotalMinor - b.estimatedTotalMinor);
 
     const best = scored[0];
-    const bestCovered = new Set(best.coveredSlugs);
-
     const secondStop = opts.allowSecondStop ? this.pickSecondStop(items, best, scored, opts) : null;
 
     const covered = new Set(best.coveredSlugs);
@@ -211,7 +210,10 @@ export class BasketRecommendationService {
   }
 
   private deriveConfidence(best: StoreScore): Confidence {
-    if (best.itemMatchRate >= HIGH_COVERAGE_THRESHOLD && best.dealConfidence >= HIGH_DEAL_CONFIDENCE_THRESHOLD) {
+    if (
+      best.itemMatchRate >= HIGH_COVERAGE_THRESHOLD &&
+      best.dealConfidence >= HIGH_DEAL_CONFIDENCE_THRESHOLD
+    ) {
       return 'high';
     }
     if (best.itemMatchRate >= LOW_COVERAGE_THRESHOLD) return 'medium';

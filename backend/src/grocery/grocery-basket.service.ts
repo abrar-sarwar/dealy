@@ -146,7 +146,13 @@ export class GroceryBasketService {
 
     const groceryDeals = await this.nearbyGroceryDeals(input, maxDistance);
     const dealById = new Map(groceryDeals.map((d) => [d.id, d]));
-    const stores = await this.buildCandidateStores(input, items, groceryDeals, regionSlug, maxDistance);
+    const stores = await this.buildCandidateStores(
+      input,
+      items,
+      groceryDeals,
+      regionSlug,
+      maxDistance,
+    );
 
     const ranking = this.recommendation.rankStores(items, stores, {
       budgetMinor: input.budgetMinor,
@@ -236,13 +242,19 @@ export class GroceryBasketService {
   }
 
   async getById(id: string): Promise<BasketEntity> {
-    const basket = await this.prisma.groceryBasket.findUnique({ where: { id }, include: basketInclude });
+    const basket = await this.prisma.groceryBasket.findUnique({
+      where: { id },
+      include: basketInclude,
+    });
     if (!basket) throw new NotFoundException(`Basket ${id} not found`);
     return basket;
   }
 
   /** Active, physical, grocery-category deals within range. */
-  private async nearbyGroceryDeals(input: GenerateBasketInput, maxDistance: number): Promise<Deal[]> {
+  private async nearbyGroceryDeals(
+    input: GenerateBasketInput,
+    maxDistance: number,
+  ): Promise<Deal[]> {
     const deals = await this.prisma.deal.findMany({
       where: {
         status: 'published',
@@ -273,9 +285,7 @@ export class GroceryBasketService {
   ): Promise<CandidateStore[]> {
     const byName = new Map<string, CandidateStore>();
 
-    const offersFor = (
-      storeName: string,
-    ): StoreOffer[] =>
+    const offersFor = (storeName: string): StoreOffer[] =>
       items.map((it) => {
         const deal = groceryDeals.find(
           (d) =>
@@ -291,7 +301,12 @@ export class GroceryBasketService {
             dealConfidence: dealTrust(deal).confidence,
           };
         }
-        return { slug: it.slug, priceMinor: it.estimatedPriceMinor, dealConfidence: 0, matchedDealId: null };
+        return {
+          slug: it.slug,
+          priceMinor: it.estimatedPriceMinor,
+          dealConfidence: 0,
+          matchedDealId: null,
+        };
       });
 
     // 1. Merchants that have grocery deals nearby.
@@ -381,7 +396,9 @@ export class GroceryBasketService {
           deal: null,
         };
       }
-      const deal = pick.offer.matchedDealId ? (dealById.get(pick.offer.matchedDealId) ?? null) : null;
+      const deal = pick.offer.matchedDealId
+        ? (dealById.get(pick.offer.matchedDealId) ?? null)
+        : null;
       const trust = deal ? dealTrust(deal) : null;
       return {
         item,
@@ -421,7 +438,11 @@ export class GroceryBasketService {
   }
 
   private discountLabel(deal: Deal): string | null {
-    if (deal.originalPriceMinor != null && deal.currentPriceMinor != null && deal.originalPriceMinor > 0n) {
+    if (
+      deal.originalPriceMinor != null &&
+      deal.currentPriceMinor != null &&
+      deal.originalPriceMinor > 0n
+    ) {
       const pct = Math.round(
         (1 - Number(deal.currentPriceMinor) / Number(deal.originalPriceMinor)) * 100,
       );

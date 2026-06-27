@@ -19,6 +19,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AdminModule } from './admin/admin.module';
 import { DiscoveryModule } from './discovery/discovery.module';
+import { GroceryModule } from './grocery/grocery.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { DiscoveryModule } from './discovery/discovery.module';
     IngestionModule,
     CrawlerModule,
     DiscoveryModule,
+    GroceryModule,
   ],
 })
 export class AppModule {}

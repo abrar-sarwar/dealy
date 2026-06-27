@@ -1,7 +1,9 @@
 import { GroceryCatalogService } from './grocery-catalog.service';
 import type { CatalogStaple } from './grocery.types';
 
-function staple(p: Partial<CatalogStaple> & Pick<CatalogStaple, 'slug' | 'category'>): CatalogStaple {
+function staple(
+  p: Partial<CatalogStaple> & Pick<CatalogStaple, 'slug' | 'category'>,
+): CatalogStaple {
   return {
     name: p.slug,
     unit: 'each',
@@ -18,13 +20,55 @@ function staple(p: Partial<CatalogStaple> & Pick<CatalogStaple, 'slug' | 'catego
 const svc = new GroceryCatalogService(null as never);
 
 const CATALOG: CatalogStaple[] = [
-  staple({ slug: 'eggs', category: 'protein', estimatedPriceMinor: 249, dietaryTags: ['vegetarian', 'high_protein', 'halal'], goalAffinities: ['high_protein', 'cheapest'] }),
-  staple({ slug: 'chicken', category: 'protein', estimatedPriceMinor: 399, dietaryTags: ['high_protein', 'halal'], goalAffinities: ['high_protein'] }),
-  staple({ slug: 'bacon', category: 'protein', estimatedPriceMinor: 599, dietaryTags: ['high_protein'], goalAffinities: ['high_protein', 'breakfast'] }),
-  staple({ slug: 'rice', category: 'grains', estimatedPriceMinor: 549, dietaryTags: ['vegetarian', 'halal', 'bulk_value'], goalAffinities: ['cheapest', 'meal_prep'] }),
-  staple({ slug: 'cookies', category: 'snacks', estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'snacks_drinks'], goalAffinities: ['dorm_snacks'] }),
-  staple({ slug: 'spinach', category: 'produce', estimatedPriceMinor: 279, dietaryTags: ['vegetarian', 'halal', 'healthy'], goalAffinities: ['healthy'] }),
-  staple({ slug: 'tofu', category: 'protein', estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'healthy'], goalAffinities: ['high_protein', 'healthy'] }),
+  staple({
+    slug: 'eggs',
+    category: 'protein',
+    estimatedPriceMinor: 249,
+    dietaryTags: ['vegetarian', 'high_protein', 'halal'],
+    goalAffinities: ['high_protein', 'cheapest'],
+  }),
+  staple({
+    slug: 'chicken',
+    category: 'protein',
+    estimatedPriceMinor: 399,
+    dietaryTags: ['high_protein', 'halal'],
+    goalAffinities: ['high_protein'],
+  }),
+  staple({
+    slug: 'bacon',
+    category: 'protein',
+    estimatedPriceMinor: 599,
+    dietaryTags: ['high_protein'],
+    goalAffinities: ['high_protein', 'breakfast'],
+  }),
+  staple({
+    slug: 'rice',
+    category: 'grains',
+    estimatedPriceMinor: 549,
+    dietaryTags: ['vegetarian', 'halal', 'bulk_value'],
+    goalAffinities: ['cheapest', 'meal_prep'],
+  }),
+  staple({
+    slug: 'cookies',
+    category: 'snacks',
+    estimatedPriceMinor: 299,
+    dietaryTags: ['vegetarian', 'snacks_drinks'],
+    goalAffinities: ['dorm_snacks'],
+  }),
+  staple({
+    slug: 'spinach',
+    category: 'produce',
+    estimatedPriceMinor: 279,
+    dietaryTags: ['vegetarian', 'halal', 'healthy'],
+    goalAffinities: ['healthy'],
+  }),
+  staple({
+    slug: 'tofu',
+    category: 'protein',
+    estimatedPriceMinor: 199,
+    dietaryTags: ['vegetarian', 'halal', 'high_protein', 'healthy'],
+    goalAffinities: ['high_protein', 'healthy'],
+  }),
 ];
 
 describe('GroceryCatalogService.selectStaples', () => {
