@@ -51,10 +51,17 @@ restaurant_score =
 - **openNow**: Dealy does **not** store store hours. This is an honest heuristic from
   `timeOfDay` + late-night/breakfast tags (neutral 0.5 when unknown). It is never
   presented to the user as a verified "open now" signal.
-- **chains/local**: `allowChains=false` drops known chains (substring match against a
-  curated chain list); `allowLocal=false` drops non-chains.
+- **chains/local**: driven by the `chainClassification` field (`chain|local|unknown`)
+  when present, falling back to a known-chain name list. `allowChains=false` drops
+  chains; `allowLocal=false` drops non-chains.
 - **dietary**: a soft bonus from vibe/category tags — it nudges, it never hard-filters
   (so you still get a result when data is sparse).
+
+Launch-hardening Place fields now feed scoring/output when present: `lateNight` and
+`studySpot` flags boost the matching goals/timeOfDay; `estimatedMealMinMinor`/
+`estimatedMealMaxMinor` give a tighter estimated cost + budget fit than the price
+bucket; `recommendedOrder` overrides the budget tip for `recommended_order`;
+`launchRegionPriority` is a small additive tiebreak for curated launch spots.
 
 The top place is "Best overall" for the goal; the next 3–5 become
 `ranked_alternatives` ("More options nearby").
@@ -74,10 +81,17 @@ wrap") — null when none exists.
 
 ## 5. Trust — real vs estimated
 
+Trust taxonomy (shared with Smart Basket; wire `trust_label`/`source_status`):
+`verified` · `source_backed` · `estimated` · `gemini_tip` · `manual_curated` ·
+`low_confidence` · `needs_verification` · `user_reported` · `mock`.
+
 | Signal | Meaning |
 |---|---|
-| `source_status: source_backed` / `verified` | A real published food **Deal** matched this place (coupon/promo). |
-| `source_status: estimated` | No verified deal — recommendation is value + budget-tip + Places data. The honest default. |
+| `verified` / `source_backed` | A real published food **Deal** matched this place (coupon/promo). |
+| `manual_curated` | An admin-curated student-friendly spot (honest estimated cost; no fabricated rating). |
+| `gemini_tip` | The budget tip / recommended order is AI-generated from Places data. |
+| `estimated` | No verified deal — recommendation is value + budget-tip + Places data. The honest default. |
+| `low_confidence` / `needs_verification` | Sparse/out-of-region data, or an extracted deal awaiting review. |
 | `matched_deal` present | A real `Deal` (merchant, discount, price, valid_until, last_verified_at, source_url). |
 | `confidence: high/medium/low` | high = in region + close + enriched; low = out of region / sparse data. |
 
@@ -100,11 +114,18 @@ pages. These plug into `matched_deal` / scoring without changing the contract.
 
 ## 8. iOS surface
 
-- Entry: Food Run card on **Home** + Cheap Eats in **Explore**; decision cards
-  ("Best lunch move today" → quick_lunch, "Under $10 near you" → under_10) deep-link
-  with a preset goal.
+- Entry: Food Run card on **Home** + Cheap Eats in **Explore**; a decision-card deck
+  (time-gated): "Best lunch move today"→quick_lunch, "Under $10 near you"→under_10,
+  "Best study spot nearby"→study_spot, "Quick bite near campus"→quick_lunch,
+  "Worth the walk"→best_value, "Late-night move"→late_night (shown only after 8pm).
+  Each deep-links Food Run preset to that goal.
 - Flow: `FoodRunSetupView` (chip quiz) → `FoodRunResultView` (best place + tags +
   ranking label + confidence + why + recommended order + deal + distance + ranked
   alternatives + Directions / Save place / Regenerate).
+- **Map:** "Show on map" opens a focused map sheet plotting the selected place +
+  ranked alternatives as photo pins (real images when available), selected pin
+  highlighted, with Directions via `DirectionsLauncher`. Smart Basket store
+  recommendations now carry coordinates and render the best store + optional second
+  stop with a route CTA.
 - Save place → local `savedPlaces` (UserDefaults), shown in **Saved** (auth-synced
   later, like saved baskets/deals).
