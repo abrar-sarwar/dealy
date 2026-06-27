@@ -108,6 +108,15 @@ export interface FoodRunPlace {
   budgetTip: string | null;
   primaryPhotoUrl: string | null;
   curatedStudentFriendly: boolean;
+  // Launch Region Data Hardening signals (BH3). All optional — older callers /
+  // unenriched rows leave them null and the engine falls back to prior behaviour.
+  lateNight?: boolean | null;
+  studySpot?: boolean | null;
+  chainClassification?: string | null;
+  estimatedMealMinMinor?: number | null;
+  estimatedMealMaxMinor?: number | null;
+  recommendedOrder?: string | null;
+  launchRegionPriority?: number | null;
 }
 
 /** Tunable knobs for the pure ranking (all optional → safe defaults). */
@@ -193,6 +202,29 @@ function isChain(name: string): boolean {
   return KNOWN_CHAINS.some((c) => lc.includes(c));
 }
 
+/**
+ * Chain/local decision (BH3): the stored `chainClassification` wins when known;
+ * `unknown`/missing falls back to the known-chain name heuristic.
+ */
+function placeIsChain(p: FoodRunPlace): boolean {
+  if (p.chainClassification === 'chain') return true;
+  if (p.chainClassification === 'local') return false;
+  return isChain(p.name);
+}
+
+/**
+ * Estimated per-meal cost in dollars (BH3): prefer the stored
+ * estimatedMealMin/MaxMinor (midpoint) when present, else the price-bucket proxy.
+ */
+function estimatedCostDollars(p: FoodRunPlace): number {
+  const min = p.estimatedMealMinMinor;
+  const max = p.estimatedMealMaxMinor;
+  if (min != null && max != null) return (min + max) / 2 / 100;
+  if (max != null) return max / 100;
+  if (min != null) return min / 100;
+  return priceBucketCost(p.priceBucket);
+}
+
 /** budgetFit: 1 when est ≤ budget, decays above; 0.5 neutral when no budget. */
 function budgetFitScore(estCostDollars: number, budgetDollars: number | null): number {
   if (budgetDollars == null) return 0.5;
@@ -214,7 +246,7 @@ function openNowScore(p: FoodRunPlace, timeOfDay: FoodRunTimeOfDay | null | unde
   if (!timeOfDay) return 0.5;
   const tags = placeTags(p);
   const isCafe = p.categorySlug === 'cafe' || p.categorySlug === 'coffee';
-  const lateLeaning = hasTag(tags, ['late', 'night', '24', 'open_late', 'bar']);
+  const lateLeaning = p.lateNight === true || hasTag(tags, ['late', 'night', '24', 'open_late', 'bar']);
   const breakfastLeaning = hasTag(tags, ['breakfast', 'brunch', 'coffee', 'cafe', 'bakery']);
   switch (timeOfDay) {
     case 'morning':
@@ -261,12 +293,15 @@ function goalAffinityScore(p: FoodRunPlace, goal: FoodRunGoal, dist: number): nu
           0.2 * (hasTag(tags, ['fast', 'quick', 'lunch', 'counter']) ? 1 : 0),
       );
     case 'late_night':
-      return hasTag(tags, ['late', 'night', 'open_late', '24', 'bar']) ? 1 : 0.1;
+      return p.lateNight === true || hasTag(tags, ['late', 'night', 'open_late', '24', 'bar'])
+        ? 1
+        : 0.1;
     case 'study_spot':
       return clamp01(
-        0.55 * (hasTag(tags, ['study', 'wifi', 'quiet', 'cafe', 'coffee']) ? 1 : 0) +
-          0.25 * (p.categorySlug === 'cafe' || p.categorySlug === 'coffee' ? 1 : 0) +
-          0.2 * rate,
+        0.45 * (p.studySpot === true || hasTag(tags, ['study', 'wifi', 'quiet']) ? 1 : 0) +
+          0.2 * (hasTag(tags, ['cafe', 'coffee']) ? 1 : 0) +
+          0.2 * (p.categorySlug === 'cafe' || p.categorySlug === 'coffee' ? 1 : 0) +
+          0.15 * rate,
       );
     case 'coffee_dessert':
       return clamp01(
@@ -363,7 +398,7 @@ export class FoodRunService {
     return places
       .filter((p) => {
         if (haversineMiles(center, p) > maxDistance) return false;
-        const chain = isChain(p.name);
+        const chain = placeIsChain(p);
         if (!allowChains && chain) return false;
         if (!allowLocal && !chain) return false;
         return true;
@@ -382,7 +417,7 @@ export class FoodRunService {
     const maxDistance = opts.maxDistanceMiles ?? DEFAULT_MAX_DISTANCE_MILES;
     const budgetDollars = opts.budgetMinor != null ? opts.budgetMinor / 100 : null;
     const miles = haversineMiles(center, p);
-    const estCost = priceBucketCost(p.priceBucket);
+    const estCost = estimatedCostDollars(p);
 
     const dist = distanceScore(miles, maxDistance);
     const budgetFit = budgetFitScore(estCost, budgetDollars);
@@ -398,6 +433,10 @@ export class FoodRunService {
     const expensivePenalty = estCost > effectiveBudget ? 0.15 : 0;
     const lowConfidencePenalty = opts.inRegion === false || p.affordabilityScore == null ? 0.1 : 0;
 
+    // Small additive tiebreak for launch-region priority places (BH3). Capped so
+    // it only separates otherwise-comparable picks, never dominates the score.
+    const priorityBoost = Math.min(0.05, Math.max(0, p.launchRegionPriority ?? 0) * 0.01);
+
     const base =
       budgetFit * 0.2 +
       rate * 0.18 +
@@ -407,7 +446,8 @@ export class FoodRunService {
       openNow * 0.1 +
       goalAffinity * 0.08 -
       expensivePenalty -
-      lowConfidencePenalty;
+      lowConfidencePenalty +
+      priorityBoost;
 
     return base + dietaryBonus(p, opts.dietary);
   }
@@ -511,7 +551,7 @@ export class FoodRunService {
 
     const top = ranked[0].place;
     const miles = haversineMiles(center, top);
-    const topEstCost = priceBucketCost(top.priceBucket);
+    const topEstCost = estimatedCostDollars(top);
 
     const deal = await this.nearbyFoodDeal(top);
     const sourceStatus =
@@ -533,11 +573,10 @@ export class FoodRunService {
       place: this.mapPlaceDto(top, center, topEstCost, deal != null),
       ranked_alternatives: ranked
         .slice(1, 1 + MAX_ALTERNATIVES)
-        .map(({ place }) =>
-          this.mapPlaceDto(place, center, priceBucketCost(place.priceBucket), false),
-        ),
+        .map(({ place }) => this.mapPlaceDto(place, center, estimatedCostDollars(place), false)),
       estimated_cost: topEstCost,
-      recommended_order: top.budgetTip ?? null,
+      // recommendedOrder (curated/enriched) overrides the generic budget tip (BH3).
+      recommended_order: top.recommendedOrder ?? top.budgetTip ?? null,
       reason: this.reason(input.goal, miles),
       ranking_label: this.rankingLabel(input.goal, topEstCost, miles, budgetDollars),
       matched_deal: deal ? this.mapDeal(deal) : null,
@@ -578,8 +617,11 @@ export class FoodRunService {
       tags.push('good for students');
     if (hasTag(raw, ['protein', 'grill', 'meat', 'chicken', 'steak'])) tags.push('high protein');
     if (hasTag(raw, ['healthy', 'salad', 'fresh', 'wholesome'])) tags.push('healthy');
-    if (hasTag(raw, ['late', 'night', 'open_late', '24'])) tags.push('late night');
+    if (p.lateNight === true || hasTag(raw, ['late', 'night', 'open_late', '24'])) {
+      tags.push('late night');
+    }
     if (
+      p.studySpot === true ||
       hasTag(raw, ['study', 'quiet', 'wifi']) ||
       p.categorySlug === 'cafe' ||
       p.categorySlug === 'coffee'
@@ -620,7 +662,9 @@ export class FoodRunService {
   private async loadPlaces(regionSlug: string | null): Promise<FoodRunPlace[]> {
     const rows = await this.prisma.place.findMany({
       where: {
-        enrichedAt: { not: null },
+        // Include enriched places AND curated/manual places (BH4) so curated
+        // GSU/GT spots are Food-Run-eligible even before discovery/enrichment runs.
+        OR: [{ enrichedAt: { not: null } }, { source: 'manual' }],
         ...(regionSlug ? { regionSlug } : {}),
       },
       take: 200,
@@ -645,6 +689,13 @@ export class FoodRunService {
       budgetTip: r.budgetTip,
       primaryPhotoUrl: r.primaryPhotoUrl,
       curatedStudentFriendly: r.curatedStudentFriendly,
+      lateNight: r.lateNight,
+      studySpot: r.studySpot,
+      chainClassification: r.chainClassification,
+      estimatedMealMinMinor: r.estimatedMealMinMinor,
+      estimatedMealMaxMinor: r.estimatedMealMaxMinor,
+      recommendedOrder: r.recommendedOrder,
+      launchRegionPriority: r.launchRegionPriority,
     }));
   }
 

@@ -145,6 +145,105 @@ describe('FoodRunService.rankPlaces', () => {
     const ranked = svc.rankPlaces([chain, local], 'best_value', CENTER, { allowLocal: false });
     expect(ranked.map((r) => r.place.id)).toEqual(['chain']);
   });
+
+  it('chainClassification overrides the name heuristic for the chain filter', () => {
+    // Name looks like a chain ("Subway") but classified local → kept when allowChains=false.
+    const localNamedLikeChain = place({
+      id: 'local',
+      name: 'Subway Cafe Local',
+      chainClassification: 'local',
+    });
+    const trueChain = place({
+      id: 'chain',
+      name: 'Indie Spot',
+      chainClassification: 'chain',
+    });
+    const ranked = svc.rankPlaces([localNamedLikeChain, trueChain], 'best_value', CENTER, {
+      allowChains: false,
+    });
+    expect(ranked.map((r) => r.place.id)).toEqual(['local']);
+  });
+
+  it('lateNight flag boosts the late_night goal even without late tags', () => {
+    const late = place({ id: 'late', name: 'Night Owl Diner', lateNight: true });
+    const day = place({ id: 'day', name: 'Daytime Deli', lateNight: false });
+    const ranked = svc.rankPlaces([day, late], 'late_night', CENTER);
+    expect(ranked[0].place.id).toBe('late');
+  });
+
+  it('studySpot flag boosts the study_spot goal', () => {
+    const study = place({ id: 'study', name: 'Focus Room', studySpot: true });
+    const noisy = place({ id: 'noisy', name: 'Loud Grill', studySpot: false });
+    const ranked = svc.rankPlaces([noisy, study], 'study_spot', CENTER);
+    expect(ranked[0].place.id).toBe('study');
+  });
+
+  it('launchRegionPriority breaks ties between otherwise-equal places', () => {
+    const base = { name: 'Twin', priceBucket: '$' as const };
+    const prioritized = place({ id: 'pri', ...base, launchRegionPriority: 5 });
+    const plain = place({ id: 'plain', ...base, launchRegionPriority: 0 });
+    const ranked = svc.rankPlaces([plain, prioritized], 'best_value', CENTER);
+    expect(ranked[0].place.id).toBe('pri');
+  });
+
+  it('uses estimatedMealMin/MaxMinor for budget fit when present', () => {
+    // Both priced bucket $$ but meal estimates differ; the cheaper-by-estimate
+    // place should win under_10 budget fit.
+    const cheapEstimate = place({
+      id: 'cheap',
+      name: 'Value Bowls',
+      priceBucket: '$$',
+      estimatedMealMinMinor: 600,
+      estimatedMealMaxMinor: 800,
+    });
+    const pricyEstimate = place({
+      id: 'pricy',
+      name: 'Splurge Bowls',
+      priceBucket: '$$',
+      estimatedMealMinMinor: 2800,
+      estimatedMealMaxMinor: 3400,
+    });
+    const ranked = svc.rankPlaces([pricyEstimate, cheapEstimate], 'under_10', CENTER, {
+      budgetMinor: 1000,
+    });
+    expect(ranked[0].place.id).toBe('cheap');
+  });
+});
+
+describe('FoodRunService.bestPlace new-field surfacing', () => {
+  function svcWith2(places: FoodRunPlace[]): FoodRunService {
+    const prisma = {
+      place: { findMany: async (): Promise<FoodRunPlace[]> => places },
+      deal: { findFirst: async (): Promise<null> => null },
+    };
+    const placeFeed = { resolveRegion: async (): Promise<string | null> => 'gsu' };
+    return new FoodRunService(prisma as never, placeFeed as never);
+  }
+
+  it('recommendedOrder overrides budget tip for recommended_order', async () => {
+    const p = place({
+      id: 'p',
+      name: 'Campus Eats',
+      budgetTip: 'generic tip',
+      recommendedOrder: 'Get the $6 combo',
+    });
+    const res = await svcWith2([p]).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.recommended_order).toBe('Get the $6 combo');
+  });
+
+  it('surfaces late night + quiet study tags from the flags', async () => {
+    const p = place({ id: 'p', name: 'Owl Study', lateNight: true, studySpot: true });
+    const res = await svcWith2([p]).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.place?.tags).toEqual(expect.arrayContaining(['late night', 'quiet study']));
+  });
 });
 
 describe('FoodRunService.bestPlace', () => {
