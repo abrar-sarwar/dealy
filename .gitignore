@@ -12,6 +12,10 @@ Dealy.xcodeproj/
 
 # Visual-companion / SDD working artifacts
 .superpowers/
+scratchpad/
+
+# Local simulator screenshots (not source)
+dealy-backend-simulator.png
 
 # macOS
 .DS_Store
