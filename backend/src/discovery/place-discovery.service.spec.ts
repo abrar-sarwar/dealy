@@ -1,4 +1,8 @@
-import { PlaceDiscoveryService } from './place-discovery.service';
+import {
+  PlaceDiscoveryService,
+  CATEGORY_PRESETS,
+  resolveCategories,
+} from './place-discovery.service';
 import type { PlaceResult } from '../services/google-places/google-places.types';
 
 const REGION = {
@@ -215,5 +219,26 @@ describe('PlaceDiscoveryService.discoverRegion', () => {
     const svc = build(prisma, places);
     await expect(svc.discoverRegion('gsu')).rejects.toThrow(/centroid/i);
     expect(places.nearbySearch).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveCategories (BH5 launch preset)', () => {
+  it('expands the launch preset to the full food/grocery sweep', () => {
+    expect(resolveCategories('launch')).toEqual(CATEGORY_PRESETS.launch);
+    expect(CATEGORY_PRESETS.launch).toContain('supermarket');
+    expect(CATEGORY_PRESETS.launch).toContain('meal_takeaway');
+  });
+
+  it('parses a comma-separated list', () => {
+    expect(resolveCategories('restaurant, cafe ,bakery')).toEqual([
+      'restaurant',
+      'cafe',
+      'bakery',
+    ]);
+  });
+
+  it('returns undefined for empty/missing input (so the safe default is used)', () => {
+    expect(resolveCategories(undefined)).toBeUndefined();
+    expect(resolveCategories('')).toBeUndefined();
   });
 });
