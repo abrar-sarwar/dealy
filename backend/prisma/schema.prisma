@@ -842,6 +842,21 @@ model Place {
   // the student_friendly goal ranking; not derived from Google/Gemini.
   curatedStudentFriendly Boolean  @default(false) @map("curated_student_friendly")
 
+  // Launch Region Data Hardening (GSU/GT). Enrichment-derived or curated signals
+  // the Food Run decision engine reads. All nullable/defaulted so existing rows
+  // stay valid and the place stays feed-ready before any of these are set.
+  lateNight             Boolean? @map("late_night")
+  studySpot             Boolean? @map("study_spot")
+  /// chain | local | unknown — drives the chain/local filter (name-list fallback).
+  chainClassification   String?  @map("chain_classification")
+  estimatedMealMinMinor Int?     @map("estimated_meal_min_minor")
+  estimatedMealMaxMinor Int?     @map("estimated_meal_max_minor")
+  recommendedOrder      String?  @map("recommended_order")
+  campusAffinity        String?  @map("campus_affinity")
+  launchRegionPriority  Int      @default(0) @map("launch_region_priority")
+  /// none | pending | approved | rejected — curation/review state for the place.
+  manualReviewStatus    String   @default("none") @map("manual_review_status")
+
   // Real Google Places photos (keyless, client-loadable URLs). Populated by a
   // capped batch job — NEVER live-fetched on app open. See docs/places-photos.md.
   primaryPhotoReference String?   @map("primary_photo_reference")
@@ -1074,6 +1089,9 @@ model GroceryStoreRecommendation {
   estimatedTotalMinor   Int      @map("estimated_total_minor")
   estimatedSavingsMinor Int      @default(0) @map("estimated_savings_minor")
   distanceMiles         Float?   @map("distance_miles")
+  /// Coordinates of the chosen store (from its Place/Deal) so iOS can map it.
+  latitude              Float?
+  longitude             Float?
   reason                String   @default("")
   createdAt             DateTime @default(now()) @map("created_at")
 
