@@ -4,11 +4,78 @@
  * catalog + recommendation services pass around. Money is in minor units.
  */
 
-/** Trust label shared with the wire contract. */
-export type TrustLabel = 'verified' | 'source_backed' | 'estimated' | 'user_reported' | 'mock';
+/**
+ * Trust label shared with the wire contract (backend + iOS must match). iOS maps
+ * all of these; unknown → estimated.
+ */
+export type TrustLabel =
+  | 'verified'
+  | 'source_backed'
+  | 'estimated'
+  | 'gemini_tip'
+  | 'manual_curated'
+  | 'low_confidence'
+  | 'needs_verification'
+  | 'user_reported'
+  | 'mock';
 
 /** Confidence band shared with the wire contract. */
 export type Confidence = 'low' | 'medium' | 'high';
+
+/** Days within which a verified deal is still considered "fresh". */
+const RECENT_VERIFY_DAYS = 7;
+/** Extracted-deal confidence score below which we label it low_confidence. */
+const LOW_CONFIDENCE_SCORE = 40;
+
+/** Minimal deal shape the trust mapper reads (keeps it pure + DB-free testable). */
+export interface DealTrustLike {
+  sourceTrust: string;
+  verificationStatus: string;
+  lastVerifiedAt: Date | null;
+  confidenceScore?: number | null;
+}
+
+export interface DealTrust {
+  confidence: number;
+  label: TrustLabel;
+  band: Confidence;
+}
+
+/**
+ * Map a deal's provenance/verification/recency to a wire trust label + band
+ * (BH6). Pure — shared by Smart Basket items and Food Run matched deals so both
+ * surfaces emit the same taxonomy:
+ *   authoritative+verified → verified
+ *   authoritative / editorial-verified → source_backed
+ *   editorial pending/unreachable → needs_verification
+ *   editorial invalid/expired or low score → low_confidence
+ *   fixture → mock
+ */
+export function dealTrust(deal: DealTrustLike): DealTrust {
+  const verified = deal.sourceTrust === 'authoritative' && deal.verificationStatus === 'verified';
+  const recent =
+    deal.lastVerifiedAt != null &&
+    Date.now() - deal.lastVerifiedAt.getTime() <= RECENT_VERIFY_DAYS * 24 * 60 * 60 * 1000;
+  if (verified) {
+    return recent
+      ? { confidence: 0.95, label: 'verified', band: 'high' }
+      : { confidence: 0.8, label: 'verified', band: 'high' };
+  }
+  if (deal.sourceTrust === 'fixture') {
+    return { confidence: 0.2, label: 'mock', band: 'low' };
+  }
+  if (deal.sourceTrust === 'authoritative') {
+    return { confidence: 0.6, label: 'source_backed', band: 'medium' };
+  }
+  if (deal.verificationStatus === 'verified') {
+    return { confidence: 0.55, label: 'source_backed', band: 'medium' };
+  }
+  const lowScore = deal.confidenceScore != null && deal.confidenceScore < LOW_CONFIDENCE_SCORE;
+  if (deal.verificationStatus === 'invalid' || deal.verificationStatus === 'expired' || lowScore) {
+    return { confidence: 0.25, label: 'low_confidence', band: 'low' };
+  }
+  return { confidence: 0.4, label: 'needs_verification', band: 'low' };
+}
 
 /** Goal enum (wire `goal`). */
 export type BasketGoal =
@@ -80,6 +147,10 @@ export interface CandidateStore {
   /** Provenance: a real grocery Deal, a Places grocery row, or the known list. */
   kind: 'deal' | 'place' | 'known';
   distanceMiles: number | null;
+  /** Coordinates of the store (from its Place/Deal) when known — null for the
+   *  known-store fallback list (BH8). Flows through to the store rec for mapping. */
+  latitude: number | null;
+  longitude: number | null;
   /** Per-staple offers. Items absent here are NOT stocked by this store. */
   offers: StoreOffer[];
 }

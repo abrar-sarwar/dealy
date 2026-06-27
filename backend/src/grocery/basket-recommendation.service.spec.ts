@@ -31,6 +31,8 @@ function store(
     placeId: null,
     kind: 'known',
     distanceMiles,
+    latitude: null,
+    longitude: null,
     offers: offers.map((o) => ({
       slug: o.slug,
       priceMinor: o.priceMinor,

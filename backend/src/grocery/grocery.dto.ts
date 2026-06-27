@@ -111,6 +111,10 @@ export interface StoreRecommendationDto {
   estimated_total: number;
   estimated_savings: number;
   distance_miles: number | null;
+  // Coordinates of the store (from its Place/Deal) so iOS can map it. Null for
+  // the known-store fallback list (BH8).
+  latitude: number | null;
+  longitude: number | null;
   reason: string;
 }
 
@@ -124,7 +128,9 @@ export interface BasketItemDto {
   store: string | null;
   matched_deal_id: string | null;
   confidence: string; // low | medium | high
-  trust_label: string; // verified | source_backed | estimated | user_reported | mock
+  // verified | source_backed | estimated | gemini_tip | manual_curated |
+  // low_confidence | needs_verification | user_reported | mock
+  trust_label: string;
   substitution_options: string[];
 }
 

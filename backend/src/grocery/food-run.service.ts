@@ -2,12 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Deal } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PlaceFeedService } from '../discovery/place-feed.service';
+import { dealTrust } from './grocery.types';
 import type { FoodRunDto, FoodRunPlaceDto } from './grocery.dto';
 
 const EARTH_RADIUS_MILES = 3958.7613;
 const DEFAULT_RADIUS_MILES = 15;
 const DEFAULT_MAX_DISTANCE_MILES = 10;
-const RECENT_VERIFY_DAYS = 7;
 const MAX_ALTERNATIVES = 4;
 const NO_BUDGET_EXPENSIVE_THRESHOLD = 25; // dollars
 const WORTH_THE_WALK_MILES = 1.5;
@@ -108,6 +108,8 @@ export interface FoodRunPlace {
   budgetTip: string | null;
   primaryPhotoUrl: string | null;
   curatedStudentFriendly: boolean;
+  /** Provenance: google_places | manual | ... — drives the manual_curated label. */
+  source?: string | null;
   // Launch Region Data Hardening signals (BH3). All optional — older callers /
   // unenriched rows leave them null and the engine falls back to prior behaviour.
   lateNight?: boolean | null;
@@ -554,18 +556,15 @@ export class FoodRunService {
     const topEstCost = estimatedCostDollars(top);
 
     const deal = await this.nearbyFoodDeal(top);
-    const sourceStatus =
-      deal && deal.sourceTrust === 'authoritative' && deal.verificationStatus === 'verified'
-        ? 'source_backed'
-        : 'estimated';
+    const sourceStatus = this.deriveSourceStatus(top, deal);
 
     const withinDistance = miles <= (input.maxDistanceMiles ?? DEFAULT_RADIUS_MILES);
-    const confidence =
-      sourceStatus === 'source_backed'
-        ? 'high'
-        : inRegion && filtered && withinDistance
-          ? 'medium'
-          : 'low';
+    const sourceBacked = sourceStatus === 'verified' || sourceStatus === 'source_backed';
+    const confidence = sourceBacked
+      ? 'high'
+      : inRegion && filtered && withinDistance
+        ? 'medium'
+        : 'low';
 
     const topTags = this.deriveTags(top, topEstCost, deal != null);
 
@@ -584,6 +583,25 @@ export class FoodRunService {
       tags: topTags,
       source_status: sourceStatus,
     };
+  }
+
+  /**
+   * Place-level source status from the extended trust taxonomy (BH6). A matched
+   * deal's label wins; otherwise a curated (manual) place is `manual_curated`, a
+   * Gemini budget tip / recommended order is `gemini_tip`, else `estimated`.
+   */
+  private deriveSourceStatus(p: FoodRunPlace, deal: Deal | null): string {
+    if (deal) {
+      const label = dealTrust(deal).label;
+      if (label === 'verified') return 'verified';
+      if (label === 'source_backed') return 'source_backed';
+      if (label === 'low_confidence') return 'low_confidence';
+      if (label === 'needs_verification') return 'needs_verification';
+      if (label === 'mock') return 'mock';
+    }
+    if (p.source === 'manual') return 'manual_curated';
+    if ((p.recommendedOrder ?? p.budgetTip) != null) return 'gemini_tip';
+    return 'estimated';
   }
 
   private mapPlaceDto(
@@ -689,6 +707,7 @@ export class FoodRunService {
       budgetTip: r.budgetTip,
       primaryPhotoUrl: r.primaryPhotoUrl,
       curatedStudentFriendly: r.curatedStudentFriendly,
+      source: r.source,
       lateNight: r.lateNight,
       studySpot: r.studySpot,
       chainClassification: r.chainClassification,
@@ -755,10 +774,6 @@ export class FoodRunService {
   }
 
   private mapDeal(deal: Deal): FoodRunDto['matched_deal'] {
-    const verified = deal.sourceTrust === 'authoritative' && deal.verificationStatus === 'verified';
-    const recent =
-      deal.lastVerifiedAt != null &&
-      Date.now() - deal.lastVerifiedAt.getTime() <= RECENT_VERIFY_DAYS * 24 * 60 * 60 * 1000;
     return {
       merchant: deal.merchant,
       title: deal.title,
@@ -772,7 +787,7 @@ export class FoodRunService {
       valid_until: deal.expiresAt.toISOString(),
       source: deal.source,
       last_verified_at: deal.lastVerifiedAt ? deal.lastVerifiedAt.toISOString() : null,
-      confidence: verified ? (recent ? 'high' : 'medium') : 'low',
+      confidence: dealTrust(deal).band,
       source_url: deal.sourceUrl,
     };
   }

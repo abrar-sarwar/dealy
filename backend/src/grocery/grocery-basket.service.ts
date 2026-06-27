@@ -9,23 +9,23 @@ import type { RateLimiter } from '../discovery/rate-limiter';
 import type { GeminiConfig } from '../config/gemini';
 import { BasketRecommendationService } from './basket-recommendation.service';
 import { GroceryCatalogService } from './grocery-catalog.service';
-import type {
-  BasketGoal,
-  BasketLineItem,
-  BasketTimeframe,
-  CandidateStore,
-  Confidence,
-  DietaryPreference,
-  StoreOffer,
-  StoreScore,
-  TrustLabel,
+import {
+  dealTrust,
+  type BasketGoal,
+  type BasketLineItem,
+  type BasketTimeframe,
+  type CandidateStore,
+  type Confidence,
+  type DietaryPreference,
+  type StoreOffer,
+  type StoreScore,
+  type TrustLabel,
 } from './grocery.types';
 
 /** Known student grocery chains used as a fallback when live data is thin. */
 const KNOWN_STORES = ['Aldi', 'Kroger', 'Publix', 'Walmart', 'Food City'];
 
 const EARTH_RADIUS_MILES = 3958.7613;
-const RECENT_VERIFY_DAYS = 7;
 const DEFAULT_MAX_DISTANCE = 10;
 
 /** Human-readable goal labels for titles/explanations. */
@@ -75,26 +75,6 @@ function haversineMiles(
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_MILES * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** Trust + confidence derived from a deal's provenance, verification, recency. */
-function dealTrust(deal: Deal): { confidence: number; label: TrustLabel; band: Confidence } {
-  const verified = deal.sourceTrust === 'authoritative' && deal.verificationStatus === 'verified';
-  const recent =
-    deal.lastVerifiedAt != null &&
-    Date.now() - deal.lastVerifiedAt.getTime() <= RECENT_VERIFY_DAYS * 24 * 60 * 60 * 1000;
-  if (verified) {
-    return recent
-      ? { confidence: 0.95, label: 'verified', band: 'high' }
-      : { confidence: 0.8, label: 'verified', band: 'high' };
-  }
-  if (deal.sourceTrust === 'authoritative') {
-    return { confidence: 0.6, label: 'source_backed', band: 'medium' };
-  }
-  if (deal.sourceTrust === 'editorial') {
-    return { confidence: 0.5, label: 'source_backed', band: 'medium' };
-  }
-  return { confidence: 0.3, label: 'estimated', band: 'low' };
 }
 
 /** Keyword match: a salient token of the staple name appears in the deal text. */
@@ -337,6 +317,8 @@ export class GroceryBasketService {
         placeId: null,
         kind: 'deal',
         distanceMiles: dist,
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null,
         offers: offersFor(d.merchant),
       });
     }
@@ -363,6 +345,8 @@ export class GroceryBasketService {
           placeId: p.id,
           kind: 'place',
           distanceMiles: dist,
+          latitude: p.latitude,
+          longitude: p.longitude,
           offers: offersFor(p.name),
         });
       }
@@ -377,6 +361,8 @@ export class GroceryBasketService {
         placeId: null,
         kind: 'known',
         distanceMiles: null,
+        latitude: null,
+        longitude: null,
         offers: offersFor(name),
       });
     }
@@ -427,9 +413,12 @@ export class GroceryBasketService {
     });
   }
 
+  /** Basket-level source status from the strongest item label (BH6 taxonomy). */
   private deriveSourceStatus(items: AssembledItem[]): string {
-    if (items.some((i) => i.deal && i.trustLabel === 'verified')) return 'verified';
-    if (items.some((i) => i.deal)) return 'source_backed';
+    if (items.some((i) => i.trustLabel === 'verified')) return 'verified';
+    if (items.some((i) => i.trustLabel === 'source_backed')) return 'source_backed';
+    if (items.some((i) => i.trustLabel === 'needs_verification')) return 'needs_verification';
+    if (items.some((i) => i.trustLabel === 'low_confidence')) return 'low_confidence';
     return 'estimated';
   }
 
@@ -483,6 +472,8 @@ export class GroceryBasketService {
         estimatedTotalMinor: best.estimatedTotalMinor,
         estimatedSavingsMinor: best.estimatedSavingsMinor,
         distanceMiles: best.distanceMiles,
+        latitude: best.store.latitude,
+        longitude: best.store.longitude,
         reason: `Covers ${pct}% of your basket${underBudget ? ' under budget' : ''}`,
       });
     }
@@ -495,6 +486,8 @@ export class GroceryBasketService {
         estimatedTotalMinor: second.estimatedTotalMinor,
         estimatedSavingsMinor: second.estimatedSavingsMinor,
         distanceMiles: second.distanceMiles,
+        latitude: second.store.latitude,
+        longitude: second.store.longitude,
         reason: `Worth a stop to save $${(second.estimatedSavingsMinor / 100).toFixed(2)}`,
       });
     }

@@ -244,6 +244,26 @@ describe('FoodRunService.bestPlace new-field surfacing', () => {
     });
     expect(res.place?.tags).toEqual(expect.arrayContaining(['late night', 'quiet study']));
   });
+
+  it('labels a curated (manual) place manual_curated', async () => {
+    const p = place({ id: 'p', name: 'Rosa Pizza', source: 'manual' });
+    const res = await svcWith2([p]).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.source_status).toBe('manual_curated');
+  });
+
+  it('labels a Gemini budget-tip place gemini_tip (no deal, not curated)', async () => {
+    const p = place({ id: 'p', name: 'Enriched Eats', budgetTip: 'Order the combo' });
+    const res = await svcWith2([p]).bestPlace({
+      latitude: CENTER.latitude,
+      longitude: CENTER.longitude,
+      goal: 'best_value',
+    });
+    expect(res.source_status).toBe('gemini_tip');
+  });
 });
 
 describe('FoodRunService.bestPlace', () => {

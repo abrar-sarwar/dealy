@@ -50,6 +50,8 @@ function mapStoreRec(
     estimated_total: dollars(rec.estimatedTotalMinor),
     estimated_savings: dollars(rec.estimatedSavingsMinor),
     distance_miles: rec.distanceMiles == null ? null : Math.round(rec.distanceMiles * 10) / 10,
+    latitude: rec.latitude ?? null,
+    longitude: rec.longitude ?? null,
     reason: rec.reason,
   };
 }
