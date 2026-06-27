@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { seedCuratedPlaces } from './curated-places';
 
 const prisma = new PrismaClient();
 
@@ -201,8 +202,9 @@ async function main(): Promise<void> {
   await seedCrawlSources();
   await seedRegionalInventories();
   await seedGroceryStaples();
+  await seedCuratedPlaces(prisma);
 
-  const [cat, sch, cam, deal, crawl, region, staple] = await Promise.all([
+  const [cat, sch, cam, deal, crawl, region, staple, curated] = await Promise.all([
     prisma.category.count(),
     prisma.school.count(),
     prisma.campus.count(),
@@ -210,10 +212,11 @@ async function main(): Promise<void> {
     prisma.crawlSource.count(),
     prisma.regionalInventory.count(),
     prisma.groceryStapleItem.count(),
+    prisma.place.count({ where: { source: 'manual' } }),
   ]);
   // eslint-disable-next-line no-console
   console.log(
-    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources, ${region} regions, ${staple} staples`,
+    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources, ${region} regions, ${staple} staples, ${curated} curated places`,
   );
 }
 
