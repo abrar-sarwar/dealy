@@ -168,7 +168,9 @@ export class RobotsChecker {
       const text = await res.text();
       return { rules: parseRobots(text), reachable: true, expiresMs };
     } catch (err) {
-      this.logger.warn(`robots.txt ${origin} unreachable (${(err as Error).message}); failing open`);
+      this.logger.warn(
+        `robots.txt ${origin} unreachable (${(err as Error).message}); failing open`,
+      );
       return { rules: null, reachable: false, expiresMs };
     }
   }

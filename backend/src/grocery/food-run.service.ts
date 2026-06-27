@@ -248,7 +248,8 @@ function openNowScore(p: FoodRunPlace, timeOfDay: FoodRunTimeOfDay | null | unde
   if (!timeOfDay) return 0.5;
   const tags = placeTags(p);
   const isCafe = p.categorySlug === 'cafe' || p.categorySlug === 'coffee';
-  const lateLeaning = p.lateNight === true || hasTag(tags, ['late', 'night', '24', 'open_late', 'bar']);
+  const lateLeaning =
+    p.lateNight === true || hasTag(tags, ['late', 'night', '24', 'open_late', 'bar']);
   const breakfastLeaning = hasTag(tags, ['breakfast', 'brunch', 'coffee', 'cafe', 'bakery']);
   switch (timeOfDay) {
     case 'morning':

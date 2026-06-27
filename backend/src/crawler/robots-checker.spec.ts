@@ -1,11 +1,7 @@
 import { RobotsChecker, parseRobots } from './robots-checker';
 
 /** Build a fake fetch returning the given robots.txt body (or a status error). */
-function fakeFetch(opts: {
-  body?: string;
-  status?: number;
-  throws?: boolean;
-}): typeof fetch {
+function fakeFetch(opts: { body?: string; status?: number; throws?: boolean }): typeof fetch {
   return (async () => {
     if (opts.throws) throw new Error('network down');
     const status = opts.status ?? 200;
@@ -20,9 +16,15 @@ function fakeFetch(opts: {
 describe('parseRobots', () => {
   it('groups directives by user-agent, sharing blocks across consecutive agents', () => {
     const groups = parseRobots(
-      ['User-agent: *', 'Disallow: /private', 'Allow: /private/ok', '', 'User-agent: BadBot', 'User-agent: DealyCrawler', 'Disallow: /'].join(
-        '\n',
-      ),
+      [
+        'User-agent: *',
+        'Disallow: /private',
+        'Allow: /private/ok',
+        '',
+        'User-agent: BadBot',
+        'User-agent: DealyCrawler',
+        'Disallow: /',
+      ].join('\n'),
     );
     expect(groups.get('*')?.disallow).toEqual(['/private']);
     expect(groups.get('*')?.allow).toEqual(['/private/ok']);
@@ -33,17 +35,25 @@ describe('parseRobots', () => {
 
 describe('RobotsChecker', () => {
   it('allows a path not covered by any Disallow', async () => {
-    const checker = new RobotsChecker('DealyCrawler', fakeFetch({ body: 'User-agent: *\nDisallow: /admin' }));
+    const checker = new RobotsChecker(
+      'DealyCrawler',
+      fakeFetch({ body: 'User-agent: *\nDisallow: /admin' }),
+    );
     expect(await checker.isAllowed('https://shop.test/deals')).toBe('allowed');
   });
 
   it('disallows a path explicitly blocked for the wildcard agent', async () => {
-    const checker = new RobotsChecker('DealyCrawler', fakeFetch({ body: 'User-agent: *\nDisallow: /admin' }));
+    const checker = new RobotsChecker(
+      'DealyCrawler',
+      fakeFetch({ body: 'User-agent: *\nDisallow: /admin' }),
+    );
     expect(await checker.isAllowed('https://shop.test/admin/users')).toBe('disallowed');
   });
 
   it('honours a UA-specific block over the wildcard group', async () => {
-    const body = ['User-agent: *', 'Disallow:', '', 'User-agent: DealyCrawler', 'Disallow: /'].join('\n');
+    const body = ['User-agent: *', 'Disallow:', '', 'User-agent: DealyCrawler', 'Disallow: /'].join(
+      '\n',
+    );
     const checker = new RobotsChecker('DealyCrawler', fakeFetch({ body }));
     expect(await checker.isAllowed('https://shop.test/anything')).toBe('disallowed');
   });

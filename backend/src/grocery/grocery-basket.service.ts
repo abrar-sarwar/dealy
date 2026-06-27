@@ -152,7 +152,11 @@ export class GroceryBasketService {
     );
     const sourceStatus = this.deriveSourceStatus(assembled);
     const title = `$${Math.round(input.budgetMinor / 100)} ${GOAL_LABELS[input.goal]} Grocery Run`;
-    const { text: explanation, geminiUsed, cacheHit } = await this.buildExplanation({
+    const {
+      text: explanation,
+      geminiUsed,
+      cacheHit,
+    } = await this.buildExplanation({
       best: ranking.bestStore,
       second: ranking.secondStop,
       budgetMinor: input.budgetMinor,

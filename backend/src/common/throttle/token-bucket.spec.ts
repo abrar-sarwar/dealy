@@ -2,7 +2,7 @@ import { TokenBucketLimiter } from './token-bucket';
 
 describe('TokenBucketLimiter', () => {
   it('allows up to the burst capacity immediately, then blocks', () => {
-    let now = 1_000;
+    const now = 1_000;
     const limiter = new TokenBucketLimiter(20, 5, () => now);
     const results = Array.from({ length: 6 }, () => limiter.tryConsume('ip-a'));
     expect(results).toEqual([true, true, true, true, true, false]);
@@ -26,7 +26,7 @@ describe('TokenBucketLimiter', () => {
   });
 
   it('tracks buckets independently per key', () => {
-    let now = 0;
+    const now = 0;
     const limiter = new TokenBucketLimiter(20, 1, () => now);
     expect(limiter.tryConsume('a')).toBe(true);
     expect(limiter.tryConsume('a')).toBe(false);

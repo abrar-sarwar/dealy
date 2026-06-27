@@ -13,7 +13,11 @@ function deal(over: Partial<DealTrustLike>): DealTrustLike {
 describe('dealTrust (BH6 taxonomy)', () => {
   it('authoritative + verified + recent → verified / high', () => {
     const t = dealTrust(
-      deal({ sourceTrust: 'authoritative', verificationStatus: 'verified', lastVerifiedAt: new Date() }),
+      deal({
+        sourceTrust: 'authoritative',
+        verificationStatus: 'verified',
+        lastVerifiedAt: new Date(),
+      }),
     );
     expect(t.label).toBe('verified');
     expect(t.band).toBe('high');

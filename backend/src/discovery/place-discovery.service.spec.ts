@@ -230,11 +230,7 @@ describe('resolveCategories (BH5 launch preset)', () => {
   });
 
   it('parses a comma-separated list', () => {
-    expect(resolveCategories('restaurant, cafe ,bakery')).toEqual([
-      'restaurant',
-      'cafe',
-      'bakery',
-    ]);
+    expect(resolveCategories('restaurant, cafe ,bakery')).toEqual(['restaurant', 'cafe', 'bakery']);
   });
 
   it('returns undefined for empty/missing input (so the safe default is used)', () => {
