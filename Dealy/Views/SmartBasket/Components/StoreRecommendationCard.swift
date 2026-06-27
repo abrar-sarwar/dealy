@@ -46,7 +46,8 @@ struct StoreRecommendationCard: View {
 
                 if let onOpenInMaps {
                     Button(action: onOpenInMaps) {
-                        Label("Open in Maps", systemImage: "map.fill")
+                        Label(store.hasCoordinates ? "Directions" : "Open in Maps",
+                              systemImage: store.hasCoordinates ? "arrow.triangle.turn.up.right.diamond.fill" : "map.fill")
                     }
                     .buttonStyle(SecondaryButtonStyle(fullWidth: true))
                     .padding(.top, Spacing.xxs)

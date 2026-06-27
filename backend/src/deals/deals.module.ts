@@ -7,9 +7,10 @@ import { RecommendationsService } from '../recommendations/recommendations.servi
 import { CoverageModule } from '../coverage/coverage.module';
 import { DiscoveryModule } from '../discovery/discovery.module';
 import { GroceryModule } from '../grocery/grocery.module';
+import { ThrottleModule } from '../common/throttle/throttle.module';
 
 @Module({
-  imports: [CoverageModule, DiscoveryModule, GroceryModule],
+  imports: [CoverageModule, DiscoveryModule, GroceryModule, ThrottleModule],
   controllers: [DealsController, FeedsController],
   providers: [DealsService, FeedsService, RecommendationsService],
   exports: [DealsService, FeedsService, RecommendationsService],

@@ -39,12 +39,9 @@ struct HomeView: View {
                 foodRunPreset = nil; showFoodRun = true
             }
             .padding(.horizontal, 14)
-            FoodRunDecisionCard(title: "Best lunch move today",
-                                subtitle: "Quick, close, on budget",
-                                symbol: "bolt.fill") {
-                Haptics.selection(); foodRunPreset = .quickLunch; showFoodRun = true
+            FoodRunDecisionDeckView(horizontalPadding: 14) { goal in
+                foodRunPreset = goal; showFoodRun = true
             }
-            .padding(.horizontal, 14)
             deckArea
         }
         .padding(.top, 4)

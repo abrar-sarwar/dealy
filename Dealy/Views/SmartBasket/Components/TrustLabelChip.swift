@@ -10,7 +10,11 @@ struct TrustLabelChip: View {
         case .verified: return Theme.save
         case .sourceBacked: return Theme.primary
         case .estimated: return Theme.mutedText
-        case .userReported: return Theme.watch
+        case .geminiTip: return Theme.watch
+        case .manualCurated: return Color(hex: 0x8B5CF6)   // purple
+        case .lowConfidence: return Theme.warning
+        case .needsVerification: return Theme.warning
+        case .userReported: return Theme.mutedText
         case .mock: return Theme.mutedText
         }
     }

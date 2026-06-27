@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Deal } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PlaceFeedService } from '../discovery/place-feed.service';
@@ -11,6 +11,8 @@ const RECENT_VERIFY_DAYS = 7;
 const MAX_ALTERNATIVES = 4;
 const NO_BUDGET_EXPENSIVE_THRESHOLD = 25; // dollars
 const WORTH_THE_WALK_MILES = 1.5;
+/** Short-TTL result cache to absorb repeat taps on the same query (BH2). */
+const RESULT_CACHE_TTL_MS = 120_000;
 
 /**
  * Food Run v2 goals. Includes the 13 public goals plus the legacy `closest_cheap`
@@ -321,10 +323,26 @@ function dietaryBonus(p: FoodRunPlace, dietary: FoodRunDietary[] | undefined): n
  */
 @Injectable()
 export class FoodRunService {
+  private readonly logger = new Logger(FoodRunService.name);
+  /** key → cached result. Bounded by TTL; keyed on rounded coords + params. */
+  private readonly resultCache = new Map<string, { value: FoodRunDto; expiresMs: number }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly placeFeed: PlaceFeedService,
   ) {}
+
+  /** Cache key: round(lat,3)|round(lng,3)|goal|budget|maxDist (BH2). */
+  private cacheKey(input: FoodRunInput): string {
+    const r3 = (n: number): string => n.toFixed(3);
+    return [
+      r3(input.latitude),
+      r3(input.longitude),
+      input.goal,
+      input.budgetMinor ?? '',
+      input.maxDistanceMiles ?? '',
+    ].join('|');
+  }
 
   /**
    * Pure goal ranking over a places array (highest score first). Applies the
@@ -394,8 +412,55 @@ export class FoodRunService {
     return base + dietaryBonus(p, opts.dietary);
   }
 
-  /** Resolve region, rank Places, attach a nearby food deal, and shape the DTO. */
+  /**
+   * Public entry: short-TTL cached over {@link computeBestPlace} to absorb repeat
+   * taps, with one structured log line per call (region/goal/confidence/etc.).
+   */
   async bestPlace(input: FoodRunInput): Promise<FoodRunDto> {
+    const start = Date.now();
+    const key = this.cacheKey(input);
+    const now = Date.now();
+    const cached = this.resultCache.get(key);
+    if (cached && cached.expiresMs > now) {
+      this.logger.log({
+        msg: 'food_run.bestPlace',
+        region: input.region ?? null,
+        goal: input.goal,
+        confidence: cached.value.confidence,
+        sourceStatus: cached.value.source_status,
+        placeCount: cached.value.place ? 1 + cached.value.ranked_alternatives.length : 0,
+        durationMs: Date.now() - start,
+        cacheHit: true,
+      });
+      return cached.value;
+    }
+
+    const result = await this.computeBestPlace(input);
+    this.resultCache.set(key, { value: result, expiresMs: now + RESULT_CACHE_TTL_MS });
+    this.pruneCache(now);
+
+    this.logger.log({
+      msg: 'food_run.bestPlace',
+      region: input.region ?? null,
+      goal: input.goal,
+      confidence: result.confidence,
+      sourceStatus: result.source_status,
+      placeCount: result.place ? 1 + result.ranked_alternatives.length : 0,
+      durationMs: Date.now() - start,
+      cacheHit: false,
+    });
+    return result;
+  }
+
+  /** Drop expired cache entries (called on each miss; cheap, bounded). */
+  private pruneCache(now: number): void {
+    for (const [k, v] of this.resultCache) {
+      if (v.expiresMs <= now) this.resultCache.delete(k);
+    }
+  }
+
+  /** Resolve region, rank Places, attach a nearby food deal, and shape the DTO. */
+  private async computeBestPlace(input: FoodRunInput): Promise<FoodRunDto> {
     const center = { latitude: input.latitude, longitude: input.longitude };
     const regionSlug = input.region ?? (await this.placeFeed.resolveRegion(center)) ?? null;
     const inRegion = regionSlug != null;

@@ -132,6 +132,34 @@ struct FoodRunDecisionCard: View {
     }
 }
 
+/// A horizontally-scrolling row of Food Run decision cards. The set is sourced
+/// from `FoodRunDecisionDeck` (time-gated: the late-night card only appears after
+/// 8pm). Tapping a card hands its goal back to the host so it can deep-link the
+/// Food Run flow to that preset. Reused on Home and Explore.
+struct FoodRunDecisionDeckView: View {
+    /// Local hour (0–23) used for time-gating; defaults to now. Injectable for tests/previews.
+    var hour: Int = Calendar.current.component(.hour, from: Date())
+    var horizontalPadding: CGFloat = Spacing.lg
+    let onSelect: (FoodRunIntent) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Spacing.sm) {
+                ForEach(FoodRunDecisionDeck.visibleCards(hour: hour)) { spec in
+                    FoodRunDecisionCard(title: spec.title,
+                                        subtitle: spec.subtitle,
+                                        symbol: spec.symbol) {
+                        Haptics.selection()
+                        onSelect(spec.goal)
+                    }
+                    .frame(width: 230)
+                }
+            }
+            .padding(.horizontal, horizontalPadding)
+        }
+    }
+}
+
 #Preview {
     VStack(spacing: Spacing.lg) {
         FoodRunEntryCard {}
@@ -139,6 +167,7 @@ struct FoodRunDecisionCard: View {
         FoodRunDecisionCard(title: "Best lunch move today",
                             subtitle: "Quick, close, on budget",
                             symbol: "bolt.fill") {}
+        FoodRunDecisionDeckView(hour: 21) { _ in }
     }
     .padding()
     .background(Theme.background)

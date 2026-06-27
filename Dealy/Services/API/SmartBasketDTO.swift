@@ -10,6 +10,8 @@ struct StoreRecDTO: Decodable {
     let estimatedSavings: Double?
     let distanceMiles: Double?
     let reason: String?
+    let latitude: Double?
+    let longitude: Double?
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -20,6 +22,8 @@ struct StoreRecDTO: Decodable {
         case estimatedSavings = "estimated_savings"
         case distanceMiles = "distance_miles"
         case reason
+        case latitude
+        case longitude
     }
 
     func toDomain() -> StoreRecommendation {
@@ -31,7 +35,9 @@ struct StoreRecDTO: Decodable {
             estimatedTotal: Decimal(estimatedTotal ?? 0),
             estimatedSavings: Decimal(estimatedSavings ?? 0),
             distanceMiles: distanceMiles,
-            reason: reason ?? ""
+            reason: reason ?? "",
+            latitude: latitude,
+            longitude: longitude
         )
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Per-item / per-deal trust signal. Mirrors the backend wire labels exactly.
 /// Estimated prices are NEVER presented to the user as verified deals.
@@ -6,6 +7,10 @@ enum TrustLabel: String, Codable, Hashable, Sendable, CaseIterable {
     case verified
     case sourceBacked
     case estimated
+    case geminiTip
+    case manualCurated
+    case lowConfidence
+    case needsVerification
     case userReported
     case mock
 
@@ -15,6 +20,10 @@ enum TrustLabel: String, Codable, Hashable, Sendable, CaseIterable {
         case .verified: return "verified"
         case .sourceBacked: return "source_backed"
         case .estimated: return "estimated"
+        case .geminiTip: return "gemini_tip"
+        case .manualCurated: return "manual_curated"
+        case .lowConfidence: return "low_confidence"
+        case .needsVerification: return "needs_verification"
         case .userReported: return "user_reported"
         case .mock: return "mock"
         }
@@ -27,6 +36,10 @@ enum TrustLabel: String, Codable, Hashable, Sendable, CaseIterable {
         case "verified": return .verified
         case "source_backed": return .sourceBacked
         case "estimated": return .estimated
+        case "gemini_tip": return .geminiTip
+        case "manual_curated": return .manualCurated
+        case "low_confidence": return .lowConfidence
+        case "needs_verification": return .needsVerification
         case "user_reported": return .userReported
         case "mock": return .mock
         default: return .estimated
@@ -35,10 +48,14 @@ enum TrustLabel: String, Codable, Hashable, Sendable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .verified: return "Verified"
+        case .verified: return "Verified deal"
         case .sourceBacked: return "Source-backed"
-        case .estimated: return "Estimated"
-        case .userReported: return "User-reported"
+        case .estimated: return "Estimated price"
+        case .geminiTip: return "Budget tip"
+        case .manualCurated: return "Curated pick"
+        case .lowConfidence: return "Low confidence"
+        case .needsVerification: return "Needs verification"
+        case .userReported: return "User reported"
         case .mock: return "Sample"
         }
     }
@@ -47,9 +64,13 @@ enum TrustLabel: String, Codable, Hashable, Sendable, CaseIterable {
         switch self {
         case .verified: return "checkmark.seal.fill"
         case .sourceBacked: return "link"
-        case .estimated: return "chart.bar.doc.horizontal"
-        case .userReported: return "person.fill.checkmark"
-        case .mock: return "sparkles"
+        case .estimated: return "tag"
+        case .geminiTip: return "lightbulb.fill"
+        case .manualCurated: return "star.fill"
+        case .lowConfidence: return "exclamationmark.triangle"
+        case .needsVerification: return "questionmark.circle"
+        case .userReported: return "person"
+        case .mock: return "hammer"
         }
     }
 }
@@ -171,6 +192,10 @@ struct StoreRecommendation: Identifiable, Codable, Hashable, Sendable {
     let estimatedSavings: Decimal
     let distanceMiles: Double?
     let reason: String
+    /// Storefront coordinates of the matched place/deal, when the backend knows
+    /// them. nil → the UI falls back to a maps name-search instead of a route.
+    let latitude: Double?
+    let longitude: Double?
 
     init(id: String = UUID().uuidString,
          name: String,
@@ -180,7 +205,9 @@ struct StoreRecommendation: Identifiable, Codable, Hashable, Sendable {
          estimatedTotal: Decimal,
          estimatedSavings: Decimal,
          distanceMiles: Double?,
-         reason: String) {
+         reason: String,
+         latitude: Double? = nil,
+         longitude: Double? = nil) {
         self.id = id
         self.name = name
         self.placeId = placeId
@@ -190,6 +217,17 @@ struct StoreRecommendation: Identifiable, Codable, Hashable, Sendable {
         self.estimatedSavings = estimatedSavings
         self.distanceMiles = distanceMiles
         self.reason = reason
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+
+    /// Whether the store can be routed to directly (has resolvable coordinates).
+    var hasCoordinates: Bool { latitude != nil && longitude != nil }
+
+    /// Storefront coordinate when known, else nil (maps-search fallback path).
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }
 

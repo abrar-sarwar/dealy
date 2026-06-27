@@ -73,23 +73,15 @@ struct ExploreView: View {
     private var smartBasketSection: some View {
         VStack(spacing: Spacing.sm) {
             SmartBasketEntryCard { Haptics.selection(); showSmartBasket = true }
+                .padding(.horizontal, Spacing.lg)
             FoodRunEntryCard {
                 Haptics.selection(); foodRunPreset = nil; showFoodRun = true
             }
-            HStack(spacing: Spacing.sm) {
-                FoodRunDecisionCard(title: "Best lunch move",
-                                    subtitle: "Quick & on budget",
-                                    symbol: "bolt.fill") {
-                    Haptics.selection(); foodRunPreset = .quickLunch; showFoodRun = true
-                }
-                FoodRunDecisionCard(title: "Under $10 near you",
-                                    subtitle: "Most food per dollar",
-                                    symbol: "dollarsign.circle.fill") {
-                    Haptics.selection(); foodRunPreset = .under10; showFoodRun = true
-                }
+            .padding(.horizontal, Spacing.lg)
+            FoodRunDecisionDeckView { goal in
+                foodRunPreset = goal; showFoodRun = true
             }
         }
-        .padding(.horizontal, Spacing.lg)
     }
 
     // MARK: Local filter chips

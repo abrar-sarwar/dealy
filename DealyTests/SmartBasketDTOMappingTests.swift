@@ -104,6 +104,73 @@ final class SmartBasketDTOMappingTests: XCTestCase {
         XCTAssertTrue(basket.showsLowDataBanner)
     }
 
+    func testExtendedTrustLabelTaxonomyMapsFromWire() {
+        // Every wire value in the shared contract maps to its enum case…
+        XCTAssertEqual(TrustLabel.from(apiValue: "verified"), .verified)
+        XCTAssertEqual(TrustLabel.from(apiValue: "source_backed"), .sourceBacked)
+        XCTAssertEqual(TrustLabel.from(apiValue: "estimated"), .estimated)
+        XCTAssertEqual(TrustLabel.from(apiValue: "gemini_tip"), .geminiTip)
+        XCTAssertEqual(TrustLabel.from(apiValue: "manual_curated"), .manualCurated)
+        XCTAssertEqual(TrustLabel.from(apiValue: "low_confidence"), .lowConfidence)
+        XCTAssertEqual(TrustLabel.from(apiValue: "needs_verification"), .needsVerification)
+        XCTAssertEqual(TrustLabel.from(apiValue: "user_reported"), .userReported)
+        XCTAssertEqual(TrustLabel.from(apiValue: "mock"), .mock)
+        // …and round-trips through apiValue.
+        for label in TrustLabel.allCases {
+            XCTAssertEqual(TrustLabel.from(apiValue: label.apiValue), label)
+            XCTAssertFalse(label.displayName.isEmpty)
+            XCTAssertFalse(label.icon.isEmpty)
+        }
+        // Unknown stays conservative.
+        XCTAssertEqual(TrustLabel.from(apiValue: "totally_new"), .estimated)
+        XCTAssertEqual(TrustLabel.from(apiValue: nil), .estimated)
+    }
+
+    func testNewTrustLabelDecodesOnBasketAndItems() throws {
+        let json = """
+        {
+          "basket_id": "x", "title": "t", "estimated_total": 10, "estimated_savings": 0,
+          "confidence": "medium", "source_status": "manual_curated", "explanation": "",
+          "items": [
+            { "name": "Rice", "category": "grains", "estimated_price": 1.99,
+              "quantity": 1, "unit": "bag", "store": null, "matched_deal_id": null,
+              "confidence": "medium", "trust_label": "gemini_tip", "substitution_options": [] }
+          ],
+          "matched_deals": []
+        }
+        """.data(using: .utf8)!
+        let basket = try APIClient.jsonDecoder.decode(BasketDTO.self, from: json).toDomain()
+        XCTAssertEqual(basket.sourceStatus, .manualCurated)
+        XCTAssertEqual(basket.items[0].trustLabel, .geminiTip)
+    }
+
+    func testStoreRecommendationDecodesCoordinates() throws {
+        let dto = try APIClient.jsonDecoder.decode(BasketDTO.self, from: basketJSONWithStoreCoords)
+        let basket = dto.toDomain()
+        let store = try XCTUnwrap(basket.bestStore)
+        XCTAssertEqual(store.latitude, 33.7537)
+        XCTAssertEqual(store.longitude, -84.3863)
+        XCTAssertTrue(store.hasCoordinates)
+        // Second store without coords stays nil-coord (maps-search fallback path).
+        let second = try XCTUnwrap(basket.optionalSecondStore)
+        XCTAssertNil(second.latitude)
+        XCTAssertNil(second.longitude)
+        XCTAssertFalse(second.hasCoordinates)
+    }
+
+    private let basketJSONWithStoreCoords = """
+    {
+      "basket_id": "c", "title": "t", "estimated_total": 20, "estimated_savings": 2,
+      "confidence": "high", "source_status": "source_backed", "explanation": "",
+      "best_store": { "name": "Aldi", "kind": "best_single", "score": 0.8,
+        "estimated_total": 20, "estimated_savings": 2, "distance_miles": 1.2,
+        "reason": "ok", "latitude": 33.7537, "longitude": -84.3863 },
+      "optional_second_store": { "name": "Publix", "kind": "second_stop", "score": 0.6,
+        "estimated_total": 22, "estimated_savings": 1, "reason": "extras" },
+      "items": [], "matched_deals": []
+    }
+    """.data(using: .utf8)!
+
     func testSecondStoreKindFallsBackToBestSingleForUnknownKind() throws {
         let json = """
         {

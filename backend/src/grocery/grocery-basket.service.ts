@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Deal } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -115,6 +115,8 @@ function dealMatchesItem(deal: Deal, item: BasketLineItem): boolean {
  */
 @Injectable()
 export class GroceryBasketService {
+  private readonly logger = new Logger(GroceryBasketService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: GroceryCatalogService,
@@ -127,6 +129,7 @@ export class GroceryBasketService {
   ) {}
 
   async generate(input: GenerateBasketInput): Promise<BasketEntity> {
+    const start = Date.now();
     const maxDistance = input.maxDistanceMiles || DEFAULT_MAX_DISTANCE;
     const regionSlug =
       input.region ??
@@ -169,7 +172,7 @@ export class GroceryBasketService {
     );
     const sourceStatus = this.deriveSourceStatus(assembled);
     const title = `$${Math.round(input.budgetMinor / 100)} ${GOAL_LABELS[input.goal]} Grocery Run`;
-    const explanation = await this.buildExplanation({
+    const { text: explanation, geminiUsed, cacheHit } = await this.buildExplanation({
       best: ranking.bestStore,
       second: ranking.secondStop,
       budgetMinor: input.budgetMinor,
@@ -218,6 +221,18 @@ export class GroceryBasketService {
         storeRecs: { create: this.storeRecData(ranking.bestStore, ranking.secondStop, input) },
       },
       include: basketInclude,
+    });
+
+    this.logger.log({
+      msg: 'smart_basket.generate',
+      region: regionSlug ?? null,
+      goal: input.goal,
+      confidence: ranking.confidence,
+      sourceStatus,
+      itemCount: assembled.length,
+      durationMs: Date.now() - start,
+      geminiUsed,
+      cacheHit,
     });
     return created;
   }
@@ -486,19 +501,25 @@ export class GroceryBasketService {
     return recs;
   }
 
-  /** Deterministic explanation, optionally upgraded by Gemini (best-effort). */
+  /**
+   * Deterministic explanation, optionally upgraded by Gemini (best-effort).
+   * Returns the text plus telemetry (`geminiUsed`, `cacheHit`) for logging.
+   * AI is gated by AI_ENABLED + AiCache + RateLimiter + template fallback.
+   */
   private async buildExplanation(args: {
     best: StoreScore | null;
     second: StoreScore | null;
     budgetMinor: number;
     estimatedTotalMinor: number;
     sourceStatus: string;
-  }): Promise<string> {
+  }): Promise<{ text: string; geminiUsed: boolean; cacheHit: boolean }> {
     const template = this.templateExplanation(args);
-    if (!this.geminiConfig.enabled || !args.best) return template;
+    if (!this.geminiConfig.enabled || !args.best) {
+      return { text: template, geminiUsed: false, cacheHit: false };
+    }
     try {
       await this.rateLimiter.acquire();
-      const { value } = await this.aiCache.getOrGenerate<{ explanation: string }>(
+      const { value, cacheHit } = await this.aiCache.getOrGenerate<{ explanation: string }>(
         {
           task: 'smart_basket_explanation',
           model: this.geminiConfig.model,
@@ -517,9 +538,13 @@ export class GroceryBasketService {
           }),
       );
       const text = value?.explanation?.trim();
-      return text && text.length > 0 ? text : template;
+      return {
+        text: text && text.length > 0 ? text : template,
+        geminiUsed: true,
+        cacheHit,
+      };
     } catch {
-      return template;
+      return { text: template, geminiUsed: false, cacheHit: false };
     }
   }
 

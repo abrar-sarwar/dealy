@@ -337,9 +337,15 @@ struct GeneratedBasketView: View {
         }
     }
 
-    /// Open the store in Apple Maps. We don't carry exact storefront coordinates,
-    /// so we hand Maps a name search (anchored near the user by the system).
+    /// Route to the store. When the backend resolved storefront coordinates we
+    /// launch turn-by-turn directions via `DirectionsLauncher`; otherwise we fall
+    /// back to a maps name search (anchored near the user by the system).
     private func openInMaps(_ store: StoreRecommendation) {
+        if let coordinate = store.coordinate {
+            Haptics.selection()
+            DirectionsLauncher.open(to: coordinate, name: store.name)
+            return
+        }
         var components = URLComponents()
         components.scheme = "https"
         components.host = "maps.apple.com"

@@ -13,6 +13,14 @@ struct FoodRunResultView: View {
     let onRegenerate: () -> Void
     let onClose: () -> Void
 
+    @State private var showMap = false
+
+    /// Whether anything in the result can be plotted (the pick or any alternative
+    /// has coordinates). Gates the "Show on map" affordance.
+    private var hasMappablePlaces: Bool {
+        result.place.hasCoordinates || result.alternatives.contains { $0.hasCoordinates }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -32,6 +40,9 @@ struct FoodRunResultView: View {
             }
         }
         .overlay { if isWorking { workingOverlay } }
+        .sheet(isPresented: $showMap) {
+            FoodRunMapSheet(result: result)
+        }
     }
 
     // MARK: Selected place
@@ -180,6 +191,13 @@ struct FoodRunResultView: View {
                     Label("Directions", systemImage: "map.fill")
                 }
                 .buttonStyle(.primaryDealy)
+            }
+
+            if hasMappablePlaces {
+                Button { Haptics.selection(); showMap = true } label: {
+                    Label("Show on map", systemImage: "mappin.and.ellipse")
+                }
+                .buttonStyle(SecondaryButtonStyle(fullWidth: true))
             }
 
             HStack(spacing: Spacing.sm) {

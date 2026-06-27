@@ -1,9 +1,13 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators';
+import { GenerationThrottleGuard } from '../common/throttle/generation-throttle.guard';
 import { GroceryBasketService } from './grocery-basket.service';
 import { GenerateBasketDto, type BasketDto } from './grocery.dto';
 import { toBasketDto, toGenerateInput } from './grocery.mapper';
+
+// TODO(auth): gate Save + per-user limits once iOS auth lands. These generation
+// endpoints are @Public() today and throttled per-IP only.
 
 @ApiTags('grocery')
 @Controller({ path: 'grocery', version: '1' })
@@ -11,6 +15,7 @@ export class GroceryController {
   constructor(private readonly baskets: GroceryBasketService) {}
 
   @Public()
+  @UseGuards(GenerationThrottleGuard)
   @Post('baskets/generate')
   @ApiOperation({
     summary:
@@ -24,6 +29,7 @@ export class GroceryController {
   }
 
   @Public()
+  @UseGuards(GenerationThrottleGuard)
   @Post('baskets/:id/regenerate')
   @ApiOperation({
     summary: 'Re-roll a Smart Basket from its saved parameters (returns a new basket)',

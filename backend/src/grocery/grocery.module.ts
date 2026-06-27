@@ -10,6 +10,7 @@ import { AiCacheService } from '../discovery/ai-cache.service';
 import { RateLimiter } from '../discovery/rate-limiter';
 import { GeminiModule } from '../services/gemini/gemini.module';
 import { GeminiClient } from '../services/gemini/gemini.client';
+import { ThrottleModule } from '../common/throttle/throttle.module';
 import { GroceryController } from './grocery.controller';
 import { GroceryCatalogService } from './grocery-catalog.service';
 import { BasketRecommendationService } from './basket-recommendation.service';
@@ -17,7 +18,7 @@ import { GroceryBasketService } from './grocery-basket.service';
 import { FoodRunService } from './food-run.service';
 
 @Module({
-  imports: [PrismaModule, DiscoveryModule, GeminiModule],
+  imports: [PrismaModule, DiscoveryModule, GeminiModule, ThrottleModule],
   controllers: [GroceryController],
   providers: [
     GroceryCatalogService,
