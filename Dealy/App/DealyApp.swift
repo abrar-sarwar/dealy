@@ -18,6 +18,7 @@ struct DealyApp: App {
         #endif
         let service: DealServicing
         let placeFeed: PlaceFeedServicing
+        let smartBasket: SmartBasketServicing
         let recorder: DealInteractionRecording
         if useRemote {
             // Feeds + interaction events share one authenticated client. The token
@@ -30,15 +31,18 @@ struct DealyApp: App {
             )
             service = composed.service
             placeFeed = composed.placeFeed
+            smartBasket = composed.smartBasket
             recorder = composed.recorder
         } else {
             service = MockDealService()
             placeFeed = MockPlaceFeedService()
+            smartBasket = MockSmartBasketService()
             recorder = NoopInteractionRecorder()
         }
         _appState = State(initialValue: AppState(
             dealService: service,
             placeFeedService: placeFeed,
+            smartBasketService: smartBasket,
             locationProvider: CoreLocationProvider(),
             interactionRecorder: recorder,
             nearbyStores: MapKitNearbyStoresService()

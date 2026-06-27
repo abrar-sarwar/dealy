@@ -45,6 +45,7 @@ final class AppState {
     private let store: PreferenceStoring
     private let dealService: DealServicing
     private let placeFeedService: PlaceFeedServicing
+    private let smartBasketService: SmartBasketServicing
     private let locationProvider: LocationProviding
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
@@ -86,6 +87,7 @@ final class AppState {
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
          placeFeedService: PlaceFeedServicing = MockPlaceFeedService(),
+         smartBasketService: SmartBasketServicing = MockSmartBasketService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
          interactionRecorder: DealInteractionRecording = NoopInteractionRecorder(),
@@ -93,6 +95,7 @@ final class AppState {
         self.store = store
         self.dealService = dealService
         self.placeFeedService = placeFeedService
+        self.smartBasketService = smartBasketService
         self.nearbyStores = nearbyStores
         self.locationProvider = locationProvider
         self.redemptionHandler = redemptionHandler
@@ -445,6 +448,87 @@ final class AppState {
     func toggleSaved(_ id: String) -> Bool {
         if isSaved(id) { unsave(id); return false }
         save(id); return true
+    }
+
+    // MARK: - Smart Basket
+
+    /// Build a `BasketRequest` from the current discovery center plus the user's
+    /// quiz selections. Pure mapping — the single testable seam for the setup flow.
+    func makeBasketRequest(
+        goal: BasketGoal,
+        budgetDollars: Int,
+        timeframe: BasketTimeframe,
+        dietary: [DietaryPreference] = [],
+        excludedItems: [String] = [],
+        preferredStores: [String] = [],
+        allowSecondStop: Bool = true
+    ) -> BasketRequest {
+        let center = persisted.discovery.center
+        return BasketRequest(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            budget: budgetDollars,
+            goal: goal,
+            timeframe: timeframe,
+            dietary: dietary,
+            excludedItems: excludedItems,
+            preferredStores: preferredStores,
+            maxDistance: persisted.discovery.radiusMiles,
+            allowSecondStop: allowSecondStop
+        )
+    }
+
+    /// Build a `FoodRunRequest` from the current discovery center + intent.
+    func makeFoodRunRequest(intent: FoodRunIntent, budgetDollars: Int? = nil) -> FoodRunRequest {
+        let center = persisted.discovery.center
+        return FoodRunRequest(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            intent: intent,
+            budget: budgetDollars
+        )
+    }
+
+    func generateBasket(_ request: BasketRequest) async throws -> SmartBasket {
+        try await smartBasketService.generate(request)
+    }
+
+    func regenerateBasket(id: String) async throws -> SmartBasket {
+        try await smartBasketService.regenerate(id: id)
+    }
+
+    func fetchFoodRun(_ request: FoodRunRequest) async throws -> FoodRunResult {
+        try await smartBasketService.foodRun(request)
+    }
+
+    // MARK: - Saved baskets (local, mirrors saved deals)
+
+    /// Saved Smart Baskets, most-recently-saved first.
+    var savedBaskets: [SmartBasket] { persisted.savedBaskets.reversed() }
+
+    var savedBasketCount: Int { persisted.savedBaskets.count }
+
+    func isBasketSaved(_ id: String) -> Bool {
+        persisted.savedBaskets.contains { $0.id == id }
+    }
+
+    /// Save a basket (or replace the existing entry with the same id so edits and
+    /// regenerations persist their latest state). Appends so newest stays last.
+    func saveBasket(_ basket: SmartBasket) {
+        persisted.savedBaskets.removeAll { $0.id == basket.id }
+        persisted.savedBaskets.append(basket)
+        persist()
+    }
+
+    func removeBasket(_ id: String) {
+        persisted.savedBaskets.removeAll { $0.id == id }
+        persist()
+    }
+
+    @discardableResult
+    func toggleBasketSaved(_ basket: SmartBasket) -> Bool {
+        if isBasketSaved(basket.id) { removeBasket(basket.id); return false }
+        saveBasket(basket); return true
     }
 
     // MARK: - Watched deals

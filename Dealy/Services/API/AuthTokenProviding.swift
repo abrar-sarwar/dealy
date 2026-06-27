@@ -31,7 +31,8 @@ enum RemoteComposition {
         baseURL: URL,
         auth: AuthTokenProviding,
         session: URLSession = .shared
-    ) -> (service: DealServicing, placeFeed: PlaceFeedServicing, recorder: DealInteractionRecording) {
+    ) -> (service: DealServicing, placeFeed: PlaceFeedServicing,
+          smartBasket: SmartBasketServicing, recorder: DealInteractionRecording) {
         let client = APIClient(
             baseURL: baseURL,
             session: session,
@@ -40,6 +41,8 @@ enum RemoteComposition {
         // One RemoteDealService backs both the deal feeds and the place feed (it
         // conforms to DealServicing + PlaceFeedServicing over the same client).
         let remote = RemoteDealService(client: client)
-        return (remote, remote, RemoteInteractionRecorder(client: client))
+        // Smart Basket rides the same authenticated client (public endpoints).
+        let smartBasket = RemoteSmartBasketService(client: client)
+        return (remote, remote, smartBasket, RemoteInteractionRecorder(client: client))
     }
 }
