@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var selectedDeal: Deal?
     @State private var getDeal: Deal?
     @State private var showFilters = false
+    @State private var showSmartBasket = false
     @AppStorage(SwipeTutorialState.key) private var hasSeenSwipeTutorial = false
 
     // First-run self-demo that runs on the real top card until the user acts.
@@ -30,10 +31,15 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 10) {
             header
+            SmartBasketEntryCard(compact: true) { showSmartBasket = true }
+                .padding(.horizontal, 14)
             deckArea
         }
         .padding(.top, 4)
         .background(Theme.background.ignoresSafeArea())
+        .fullScreenCover(isPresented: $showSmartBasket) {
+            SmartBasketSetupView(onClose: { showSmartBasket = false })
+        }
         .onChange(of: app.loadState) { _, _ in rebuild() }
         .onChange(of: app.discovery) { _, _ in rebuild() }
         .onChange(of: app.localDeals) { _, _ in rebuild() }

@@ -9,6 +9,8 @@ struct ExploreView: View {
     @State private var selectedDeal: Deal?
     @State private var showLocation = false
     @State private var localFilter: DealCategoryFilter = .all
+    @State private var showSmartBasket = false
+    @State private var showFoodRun = false
 
     /// Deals available for browsing & search. The service already returns
     /// discovery-eligible inventory, so we only drop expired ones here.
@@ -32,6 +34,7 @@ struct ExploreView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     categoryShortcuts
+                    smartBasketSection
                     if isSearching {
                         resultsSection
                     } else {
@@ -48,12 +51,33 @@ struct ExploreView: View {
             .sheet(isPresented: $showLocation) {
                 LocationSelectorView()
             }
+            .fullScreenCover(isPresented: $showSmartBasket) {
+                SmartBasketSetupView(onClose: { showSmartBasket = false })
+            }
+            .fullScreenCover(isPresented: $showFoodRun) {
+                FoodRunView(onClose: { showFoodRun = false })
+            }
             .task { await app.loadPlaceSections() }
             .task { await app.loadStudentDeals() }
             .task { await app.loadTrendingDeals() }
             .task { await app.loadLocalDeals() }
             .task { await app.loadMissedDeals() }
         }
+    }
+
+    // MARK: Smart Basket entry
+
+    /// Smart Basket hero plus a lighter "Cheap Food Run" entry, near the top of
+    /// Explore. Opens the respective flows as full-screen covers.
+    private var smartBasketSection: some View {
+        VStack(spacing: Spacing.sm) {
+            SmartBasketEntryCard { Haptics.selection(); showSmartBasket = true }
+            Button { Haptics.selection(); showFoodRun = true } label: {
+                Label("Cheap Food Run — where to eat right now", systemImage: "fork.knife")
+            }
+            .buttonStyle(SecondaryButtonStyle(fullWidth: true))
+        }
+        .padding(.horizontal, Spacing.lg)
     }
 
     // MARK: Local filter chips

@@ -5,6 +5,7 @@ struct SavedView: View {
     @Environment(TabRouter.self) private var router
     @State private var filter: DealCategory?
     @State private var selectedDeal: Deal?
+    @State private var selectedBasket: SmartBasket?
 
     private var savedDeals: [Deal] {
         let all = app.savedDeals
@@ -23,7 +24,7 @@ struct SavedView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if app.savedCount == 0 {
+                if app.savedCount == 0 && app.savedBasketCount == 0 {
                     EmptyStateView(
                         symbol: "heart.text.square",
                         title: "No saved deals yet",
@@ -43,6 +44,12 @@ struct SavedView: View {
                 }
             }
             .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
+            .fullScreenCover(item: $selectedBasket) { basket in
+                NavigationStack {
+                    GeneratedBasketView(basket: basket, request: nil,
+                                        onClose: { selectedBasket = nil })
+                }
+            }
         }
     }
 
@@ -56,6 +63,28 @@ struct SavedView: View {
                     .listRowSeparator(.hidden)
             }
 
+            if app.savedBasketCount > 0 {
+                Section {
+                    ForEach(app.savedBaskets) { basket in
+                        SavedBasketRow(basket: basket)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedBasket = basket }
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg,
+                                                      bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    removeBasket(basket)
+                                } label: { Label("Remove", systemImage: "trash") }
+                            }
+                    }
+                } header: {
+                    Text("Smart Baskets · \(app.savedBasketCount)")
+                }
+            }
+
+            if app.savedCount > 0 {
             Section {
                 ForEach(savedDeals) { deal in
                     DealRowCard(deal: deal) { selectedDeal = deal }
@@ -85,6 +114,7 @@ struct SavedView: View {
                     Text("\(app.savedCount) saved")
                 }
             }
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -111,8 +141,49 @@ struct SavedView: View {
         Haptics.impact(.light)
     }
 
+    private func removeBasket(_ basket: SmartBasket) {
+        withAnimation { app.removeBasket(basket.id) }
+        Haptics.impact(.light)
+    }
+
     private func switchToHome() {
         Haptics.selection()
         router.selection = .home
+    }
+}
+
+/// Compact row summarizing a saved Smart Basket in the Saved tab.
+private struct SavedBasketRow: View {
+    let basket: SmartBasket
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            ZStack {
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(Theme.primary.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "cart.fill")
+                    .font(.headline)
+                    .foregroundStyle(Theme.primary)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(basket.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(2)
+                HStack(spacing: Spacing.xs) {
+                    Text("\(basket.items.count) items · \(Format.price(basket.estimatedTotal))")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedText)
+                    ConfidenceBadge(confidence: basket.confidence)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Theme.faintText)
+        }
+        .padding(Spacing.md)
+        .dealyCardSurface()
     }
 }
