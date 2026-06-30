@@ -16,8 +16,9 @@ export type FeedSectionCandidate = (typeof FEED_SECTION_VOCAB)[number];
 const FEED_SECTION_SET = new Set<string>(FEED_SECTION_VOCAB);
 
 /** Bump when the enrichment prompt/schema/fields change so cached values from an
- *  older shape are not reused. */
-export const ENRICHMENT_SCHEMA_VERSION = 'v1';
+ *  older shape are not reused. v2 adds `budget_tip` — forces every already-enriched
+ *  place to regenerate WITH a budget tip on the next run. */
+export const ENRICHMENT_SCHEMA_VERSION = 'v2';
 
 /** Core inputs whose change should trigger a re-enrichment (staleness). Only
  *  these fields participate in the hash, so a re-run skips a place whose
@@ -60,6 +61,7 @@ export interface RawPlaceEnrichment {
   hidden_gem_score?: number | null;
   cheap_eats_score?: number | null;
   feed_section_candidates?: string[] | null;
+  budget_tip?: string | null;
 }
 
 /** Normalised enrichment ready to persist onto a Place row. */
@@ -76,6 +78,9 @@ export interface PlaceEnrichmentFields {
   hiddenGemScore: number | null;
   cheapEatsScore: number | null;
   feedSectionCandidates: string[];
+  /** Short, specific money-saving tip ("what to order / how to stretch a tight
+   *  budget here"). Null when Gemini gave nothing usable. */
+  budgetTip: string | null;
 }
 
 const VALID_PRICE_BUCKETS = new Set(['$', '$$', '$$$', '$$$$']);
@@ -133,6 +138,8 @@ export function mapEnrichment(raw: RawPlaceEnrichment): PlaceEnrichmentFields {
     hiddenGemScore: clamp01(raw.hidden_gem_score),
     cheapEatsScore: clamp01(raw.cheap_eats_score),
     feedSectionCandidates,
+    budgetTip:
+      typeof raw.budget_tip === 'string' && raw.budget_tip.trim() ? raw.budget_tip.trim() : null,
   };
 }
 
@@ -163,6 +170,7 @@ export const ENRICHMENT_BATCH_SCHEMA = {
             type: 'array',
             items: { type: 'string', enum: [...FEED_SECTION_VOCAB] },
           },
+          budget_tip: { type: ['string', 'null'] },
         },
         required: [
           'place_key',
@@ -178,6 +186,7 @@ export const ENRICHMENT_BATCH_SCHEMA = {
           'hidden_gem_score',
           'cheap_eats_score',
           'feed_section_candidates',
+          'budget_tip',
         ],
       },
     },

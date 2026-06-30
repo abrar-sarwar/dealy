@@ -20,6 +20,7 @@ function place(over: Partial<EnrichablePlace> = {}): EnrichablePlace {
     regionSlug: over.regionSlug ?? 'gsu',
     enrichedAt: over.enrichedAt ?? null,
     enrichmentHash: over.enrichmentHash ?? null,
+    budgetTip: 'budgetTip' in over ? over.budgetTip! : null,
   };
 }
 
@@ -39,7 +40,17 @@ function makeAiCache() {
       return { value, cacheHit: false };
     },
   );
-  return { getOrGenerate, store };
+  // Simulate a schemaVersion bump: same backing store, but every lookup is forced
+  // under a different version → cache miss → regeneration.
+  const withSchemaVersion = (version: string) => ({
+    getOrGenerate: jest.fn(
+      async (
+        params: { task: string; model: string; schemaVersion: string; prompt: string },
+        generate: () => Promise<unknown>,
+      ) => getOrGenerate({ ...params, schemaVersion: version }, generate),
+    ),
+  });
+  return { getOrGenerate, store, withSchemaVersion };
 }
 
 function makePrisma(rows: EnrichablePlace[]) {
@@ -75,6 +86,7 @@ function geminiReturning(forKeys: string[]): EnrichmentGemini & { generateJson: 
       hidden_gem_score: 0.2,
       cheap_eats_score: 0.9,
       feed_section_candidates: ['cheap_eats'],
+      budget_tip: 'For under $8, get the drip + a day-old pastry.',
     })),
   }));
   return { generateJson } as unknown as EnrichmentGemini & { generateJson: jest.Mock };
@@ -107,12 +119,36 @@ describe('PlaceEnrichmentService.enrichRegion', () => {
     const u = prisma.updates.find((x) => x.id === 'p1')!;
     expect(u.data.cheapEatsScore).toBe(0.9);
     expect(u.data.priceBucket).toBe('$$');
+    expect(u.data.budgetTip).toBe('For under $8, get the drip + a day-old pastry.');
     expect(u.data.enrichedAt).toBeInstanceOf(Date);
     expect(u.data.enrichmentHash).toBe(currentHash(rows[0]));
   });
 
-  it('skips already-enriched, unchanged places (resume): no Gemini call', async () => {
+  it('bumping the enrichment schemaVersion re-generates (cache miss) so already-enriched places get a budget tip', async () => {
     const p = place({ id: 'p1' });
+    const cache = makeAiCache();
+    const gemini = geminiReturning(['p1']);
+
+    // First run under the CURRENT schemaVersion populates the cache + persists.
+    const prisma1 = makePrisma([p]);
+    const svc1 = new PlaceEnrichmentService(prisma1 as never, gemini, cache as never, config);
+    await svc1.enrichRegion('gsu');
+    expect(gemini.generateJson).toHaveBeenCalledTimes(1);
+
+    // Same hash but the schemaVersion the cache keys on has changed → cache MISS,
+    // so Gemini is called again and a fresh (budget-tip-bearing) value is regenerated.
+    const bumped = cache.withSchemaVersion('vNEXT');
+    const prisma2 = makePrisma([place({ id: 'p1' })]);
+    const svc2 = new PlaceEnrichmentService(prisma2 as never, gemini, bumped as never, config);
+    await svc2.enrichRegion('gsu');
+
+    expect(gemini.generateJson).toHaveBeenCalledTimes(2); // regenerated under the new version
+    const u = prisma2.updates.find((x) => x.id === 'p1')!;
+    expect(u.data.budgetTip).toBe('For under $8, get the drip + a day-old pastry.');
+  });
+
+  it('skips already-enriched, unchanged places that already have a budget tip (resume): no Gemini call', async () => {
+    const p = place({ id: 'p1', budgetTip: 'Get the $5 combo.' });
     const enriched = { ...p, enrichedAt: new Date(), enrichmentHash: currentHash(p) };
     const prisma = makePrisma([enriched]);
     const cache = makeAiCache();
@@ -125,6 +161,23 @@ describe('PlaceEnrichmentService.enrichRegion', () => {
     expect(log.enriched).toBe(0);
     expect(gemini.generateJson).not.toHaveBeenCalled();
     expect(prisma.place.update).not.toHaveBeenCalled();
+  });
+
+  it('backfills an already-enriched place that is MISSING a budget tip (re-queues it)', async () => {
+    // Enriched against the CURRENT hash but predates budget tips → budgetTip null.
+    const p = place({ id: 'p1' });
+    const enriched = { ...p, enrichedAt: new Date(), enrichmentHash: currentHash(p) };
+    const prisma = makePrisma([enriched]);
+    const cache = makeAiCache();
+    const gemini = geminiReturning(['p1']);
+    const svc = new PlaceEnrichmentService(prisma as never, gemini, cache as never, config);
+
+    const log = await svc.enrichRegion('gsu');
+
+    expect(log.considered).toBe(1);
+    expect(log.enriched).toBe(1);
+    const u = prisma.updates.find((x) => x.id === 'p1')!;
+    expect(u.data.budgetTip).toBe('For under $8, get the drip + a day-old pastry.');
   });
 
   it('re-enriches a STALE place whose core data changed', async () => {
@@ -205,6 +258,7 @@ describe('PlaceEnrichmentService.enrichRegion', () => {
             hidden_gem_score: 0.5,
             cheap_eats_score: 0.5,
             feed_section_candidates: [],
+            budget_tip: 'Split a combo to save.',
           })),
         };
       }

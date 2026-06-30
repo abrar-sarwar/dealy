@@ -19,6 +19,9 @@ export interface EnrichablePlace extends PlaceCoreInputs {
   regionSlug: string;
   enrichedAt: Date | null;
   enrichmentHash: string | null;
+  /** Current persisted budget tip. An enriched place with a null tip predates the
+   *  budget-tip field and is re-queued so it is backfilled on the next run. */
+  budgetTip: string | null;
 }
 
 export interface EnrichmentLog {
@@ -105,6 +108,10 @@ function buildPrompt(regionSlug: string, places: EnrichablePlace[]): string {
     '- confidence_label: "low"|"medium"|"high" — your confidence given how much signal you had.\n' +
     '- best_for: short phrase (e.g. "quick lunch between classes"); vibe_tags / category_tags: short tags.\n' +
     '- why_recommended: one honest sentence.\n' +
+    '- budget_tip: A short, specific money-saving tip for this place — what to order / how to ' +
+    "stretch a tight (student) budget — e.g. 'For under $10, get the falafel wrap; split a side " +
+    "to share.' One sentence, concrete, friendly. Do NOT invent exact prices beyond the place's " +
+    'price level; phrase around the price bucket. null if you cannot give a useful tip.\n' +
     `- feed_section_candidates: subset of [${FEED_SECTION_VOCAB.join(', ')}] that genuinely fit.\n` +
     `Region: ${regionSlug}\n\nPLACES:\n` +
     places.map(placeLine).join('\n')
@@ -151,8 +158,11 @@ export class PlaceEnrichmentService {
       orderBy: { discoveredAt: 'asc' },
     })) as EnrichablePlace[];
 
-    // Needs enrichment: never enriched, OR core data changed (stale hash).
-    const pending = all.filter((p) => p.enrichedAt == null || p.enrichmentHash !== currentHash(p));
+    // Needs enrichment: never enriched, OR core data changed (stale hash), OR it
+    // predates a schema field it now lacks (e.g. budgetTip) — backfill it.
+    const pending = all.filter(
+      (p) => p.enrichedAt == null || p.enrichmentHash !== currentHash(p) || p.budgetTip == null,
+    );
     const capped = opts.max != null && opts.max >= 0 ? pending.slice(0, opts.max) : pending;
     log.considered = capped.length;
 

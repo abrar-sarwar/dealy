@@ -35,6 +35,7 @@ async function main(): Promise<void> {
             3,
           )} | ${p.whyRecommended ?? ''}`,
         );
+        if (p.budgetTip) console.log(`      💸 ${p.budgetTip}`);
       }
     }
   } finally {

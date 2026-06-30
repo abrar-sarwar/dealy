@@ -92,6 +92,39 @@ enum MapCameraModel {
         }
     }
 
+    // MARK: Marker clustering (+N)
+
+    /// A group of place markers that sit close together at the current zoom. Rendered
+    /// as the lead place's pin with a "+N" badge so dense areas don't overlap.
+    struct MarkerCluster: Identifiable {
+        let id: String
+        let coordinate: CLLocationCoordinate2D
+        let markers: [PlaceMarker]
+        var count: Int { markers.count }
+        var lead: PlaceMarker { markers[0] }
+    }
+
+    /// Grid-cluster markers into cells sized to the radius (tighter radius → finer grid
+    /// → more individual photo pins; wider → more "+N" clusters). Each cluster sits at
+    /// its members' centroid. Stable id per cell so SwiftUI diffs cleanly.
+    static func clusterMarkers(_ markers: [PlaceMarker], radiusMiles: Int) -> [MarkerCluster] {
+        guard !markers.isEmpty else { return [] }
+        let cell = max(0.003, (Double(radiusMiles) / 69.0) * 0.16)
+        var buckets: [String: [PlaceMarker]] = [:]
+        for m in markers {
+            let gx = Int((m.latitude / cell).rounded(.down))
+            let gy = Int((m.longitude / cell).rounded(.down))
+            buckets["\(gx):\(gy)", default: []].append(m)
+        }
+        return buckets.map { key, group in
+            let lat = group.reduce(0.0) { $0 + $1.latitude } / Double(group.count)
+            let lng = group.reduce(0.0) { $0 + $1.longitude } / Double(group.count)
+            return MarkerCluster(id: key,
+                                 coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                                 markers: group)
+        }.sorted { $0.id < $1.id }
+    }
+
     /// Compose category + radius filtering over a mappable set (already non-online).
     /// food@3mi = food deals within 3 miles.
     static func filtered(
@@ -179,12 +212,18 @@ enum MapCameraModel {
         Int(min(max(raw.rounded(), Double(minRadiusMiles)), Double(maxRadiusMiles)))
     }
 
-    /// Live "Within N mi · M deals" label for the slider, given the deals already
-    /// scoped by the sheet filters (category/toggles) — radius applied here.
-    static func radiusLabel(radiusMiles: Int, filtered: [Deal]) -> String {
+    /// Live "Within N mi · M deals · P places" label for the slider. Deals are scoped
+    /// by the sheet filters (category/toggles) with radius applied here; `places` is the
+    /// count of place pins in range, appended only when present so the slider never reads
+    /// "0 deals" while the map is clearly full of place pins (deals ≠ places).
+    static func radiusLabel(radiusMiles: Int, filtered: [Deal], places: Int = 0) -> String {
         let count = within(filtered, radiusMiles: radiusMiles).count
         let unit = count == 1 ? "deal" : "deals"
-        return "Within \(radiusMiles) mi · \(count) \(unit)"
+        var label = "Within \(radiusMiles) mi · \(count) \(unit)"
+        if places > 0 {
+            label += " · \(places) \(places == 1 ? "place" : "places")"
+        }
+        return label
     }
 
     /// Empty-state predicate: true when the radius + sheet filters yield zero deals

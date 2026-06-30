@@ -1,0 +1,287 @@
+import XCTest
+@testable import Dealy
+
+/// Verifies the Smart Basket wire contract (snake_case) decodes and maps to the
+/// domain models, including safe fallbacks for unknown enum / trust-label values.
+final class SmartBasketDTOMappingTests: XCTestCase {
+
+    private let basketJSON = """
+    {
+      "basket_id": "11111111-1111-1111-1111-111111111111",
+      "title": "$35 High-Protein Grocery Run",
+      "estimated_total": 33.80,
+      "estimated_savings": 6.40,
+      "confidence": "medium",
+      "source_status": "estimated",
+      "explanation": "Aldi covers 90% of your basket under budget.",
+      "route_summary": "1 stop · Aldi · ~1.2 mi",
+      "best_store": {
+        "name": "Aldi", "place_id": null, "kind": "best_single",
+        "score": 0.82, "estimated_total": 33.80, "estimated_savings": 6.40,
+        "distance_miles": 1.2, "reason": "Covers 90% of your basket under budget"
+      },
+      "optional_second_store": null,
+      "items": [
+        {
+          "name": "Eggs (dozen)", "category": "protein", "estimated_price": 2.49,
+          "quantity": 1, "unit": "dozen", "store": "Aldi", "matched_deal_id": null,
+          "confidence": "medium", "trust_label": "estimated",
+          "substitution_options": ["Egg whites"]
+        }
+      ],
+      "matched_deals": [
+        {
+          "merchant": "Aldi", "title": "Chicken thighs sale", "discount": "30% off",
+          "price": 3.49, "valid_until": "2026-07-01T00:00:00.000Z", "source": "crawler:aldi",
+          "last_verified_at": "2026-06-26T00:00:00.000Z", "confidence": "high",
+          "source_url": "https://www.aldi.us/weekly-specials/"
+        }
+      ],
+      "substitutions": []
+    }
+    """.data(using: .utf8)!
+
+    func testDecodesBasketAndMapsToDomain() throws {
+        let dto = try APIClient.jsonDecoder.decode(BasketDTO.self, from: basketJSON)
+        let basket = dto.toDomain()
+
+        XCTAssertEqual(basket.id, "11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(basket.title, "$35 High-Protein Grocery Run")
+        XCTAssertEqual(basket.estimatedTotal, Decimal(33.80))
+        XCTAssertEqual(basket.estimatedSavings, Decimal(6.40))
+        XCTAssertEqual(basket.confidence, .medium)
+        XCTAssertEqual(basket.sourceStatus, .estimated)
+        XCTAssertEqual(basket.routeSummary, "1 stop · Aldi · ~1.2 mi")
+
+        let store = try XCTUnwrap(basket.bestStore)
+        XCTAssertEqual(store.name, "Aldi")
+        XCTAssertEqual(store.kind, .bestSingle)
+        XCTAssertNil(store.placeId)
+        XCTAssertEqual(store.distanceMiles, 1.2)
+        XCTAssertNil(basket.optionalSecondStore)
+
+        XCTAssertEqual(basket.items.count, 1)
+        let item = basket.items[0]
+        XCTAssertEqual(item.name, "Eggs (dozen)")
+        XCTAssertEqual(item.category, "protein")
+        XCTAssertEqual(item.estimatedPrice, Decimal(2.49))
+        XCTAssertEqual(item.unit, "dozen")
+        XCTAssertEqual(item.store, "Aldi")
+        XCTAssertNil(item.matchedDealId)
+        XCTAssertEqual(item.trustLabel, .estimated)
+        XCTAssertEqual(item.substitutionOptions, ["Egg whites"])
+
+        XCTAssertEqual(basket.matchedDeals.count, 1)
+        let deal = basket.matchedDeals[0]
+        XCTAssertEqual(deal.merchant, "Aldi")
+        XCTAssertEqual(deal.discount, "30% off")
+        XCTAssertEqual(deal.price, Decimal(3.49))
+        XCTAssertEqual(deal.confidence, .high)
+        XCTAssertNotNil(deal.validUntil)
+        XCTAssertNotNil(deal.lastVerifiedAt)
+        XCTAssertEqual(deal.sourceUrl, "https://www.aldi.us/weekly-specials/")
+    }
+
+    func testUnknownTrustLabelAndConfidenceFallBackSafely() throws {
+        let json = """
+        {
+          "basket_id": "x", "title": "t", "estimated_total": 10, "estimated_savings": 0,
+          "confidence": "ultra", "source_status": "magic", "explanation": "",
+          "items": [
+            { "name": "Rice", "category": "grains", "estimated_price": 1.99,
+              "quantity": 1, "unit": "bag", "store": null, "matched_deal_id": null,
+              "confidence": "nope", "trust_label": "wat", "substitution_options": [] }
+          ],
+          "matched_deals": []
+        }
+        """.data(using: .utf8)!
+        let basket = try APIClient.jsonDecoder.decode(BasketDTO.self, from: json).toDomain()
+        // Unknown confidence -> low; unknown trust label -> estimated (conservative).
+        XCTAssertEqual(basket.confidence, .low)
+        XCTAssertEqual(basket.sourceStatus, .estimated)
+        XCTAssertEqual(basket.items[0].confidence, .low)
+        XCTAssertEqual(basket.items[0].trustLabel, .estimated)
+        XCTAssertTrue(basket.showsLowDataBanner)
+    }
+
+    func testExtendedTrustLabelTaxonomyMapsFromWire() {
+        // Every wire value in the shared contract maps to its enum case…
+        XCTAssertEqual(TrustLabel.from(apiValue: "verified"), .verified)
+        XCTAssertEqual(TrustLabel.from(apiValue: "source_backed"), .sourceBacked)
+        XCTAssertEqual(TrustLabel.from(apiValue: "estimated"), .estimated)
+        XCTAssertEqual(TrustLabel.from(apiValue: "gemini_tip"), .geminiTip)
+        XCTAssertEqual(TrustLabel.from(apiValue: "manual_curated"), .manualCurated)
+        XCTAssertEqual(TrustLabel.from(apiValue: "low_confidence"), .lowConfidence)
+        XCTAssertEqual(TrustLabel.from(apiValue: "needs_verification"), .needsVerification)
+        XCTAssertEqual(TrustLabel.from(apiValue: "user_reported"), .userReported)
+        XCTAssertEqual(TrustLabel.from(apiValue: "mock"), .mock)
+        // …and round-trips through apiValue.
+        for label in TrustLabel.allCases {
+            XCTAssertEqual(TrustLabel.from(apiValue: label.apiValue), label)
+            XCTAssertFalse(label.displayName.isEmpty)
+            XCTAssertFalse(label.icon.isEmpty)
+        }
+        // Unknown stays conservative.
+        XCTAssertEqual(TrustLabel.from(apiValue: "totally_new"), .estimated)
+        XCTAssertEqual(TrustLabel.from(apiValue: nil), .estimated)
+    }
+
+    func testNewTrustLabelDecodesOnBasketAndItems() throws {
+        let json = """
+        {
+          "basket_id": "x", "title": "t", "estimated_total": 10, "estimated_savings": 0,
+          "confidence": "medium", "source_status": "manual_curated", "explanation": "",
+          "items": [
+            { "name": "Rice", "category": "grains", "estimated_price": 1.99,
+              "quantity": 1, "unit": "bag", "store": null, "matched_deal_id": null,
+              "confidence": "medium", "trust_label": "gemini_tip", "substitution_options": [] }
+          ],
+          "matched_deals": []
+        }
+        """.data(using: .utf8)!
+        let basket = try APIClient.jsonDecoder.decode(BasketDTO.self, from: json).toDomain()
+        XCTAssertEqual(basket.sourceStatus, .manualCurated)
+        XCTAssertEqual(basket.items[0].trustLabel, .geminiTip)
+    }
+
+    func testStoreRecommendationDecodesCoordinates() throws {
+        let dto = try APIClient.jsonDecoder.decode(BasketDTO.self, from: basketJSONWithStoreCoords)
+        let basket = dto.toDomain()
+        let store = try XCTUnwrap(basket.bestStore)
+        XCTAssertEqual(store.latitude, 33.7537)
+        XCTAssertEqual(store.longitude, -84.3863)
+        XCTAssertTrue(store.hasCoordinates)
+        // Second store without coords stays nil-coord (maps-search fallback path).
+        let second = try XCTUnwrap(basket.optionalSecondStore)
+        XCTAssertNil(second.latitude)
+        XCTAssertNil(second.longitude)
+        XCTAssertFalse(second.hasCoordinates)
+    }
+
+    private let basketJSONWithStoreCoords = """
+    {
+      "basket_id": "c", "title": "t", "estimated_total": 20, "estimated_savings": 2,
+      "confidence": "high", "source_status": "source_backed", "explanation": "",
+      "best_store": { "name": "Aldi", "kind": "best_single", "score": 0.8,
+        "estimated_total": 20, "estimated_savings": 2, "distance_miles": 1.2,
+        "reason": "ok", "latitude": 33.7537, "longitude": -84.3863 },
+      "optional_second_store": { "name": "Publix", "kind": "second_stop", "score": 0.6,
+        "estimated_total": 22, "estimated_savings": 1, "reason": "extras" },
+      "items": [], "matched_deals": []
+    }
+    """.data(using: .utf8)!
+
+    func testSecondStoreKindFallsBackToBestSingleForUnknownKind() throws {
+        let json = """
+        {
+          "basket_id": "x", "title": "t", "estimated_total": 10, "estimated_savings": 0,
+          "confidence": "high", "source_status": "verified", "explanation": "",
+          "best_store": { "name": "Publix", "kind": "weird", "score": 0.5,
+            "estimated_total": 10, "estimated_savings": 1, "reason": "ok" },
+          "items": [], "matched_deals": []
+        }
+        """.data(using: .utf8)!
+        let basket = try APIClient.jsonDecoder.decode(BasketDTO.self, from: json).toDomain()
+        XCTAssertEqual(basket.bestStore?.kind, .bestSingle)
+    }
+
+    func testFoodRunDecodesAndMapsToDomain() throws {
+        let json = """
+        {
+          "place": {
+            "id": "p1", "name": "Baraka Shawarma", "category": "food",
+            "price_bucket": "$", "rating": 4.6, "latitude": 33.75, "longitude": -84.39,
+            "why_recommended": "Cheap and filling", "budget_tip": "Get the chicken plate",
+            "primary_photo_url": null
+          },
+          "estimated_cost": 9.50,
+          "reason": "Best under-$10 pick near you",
+          "matched_deal": null,
+          "confidence": "high",
+          "source_status": "source_backed"
+        }
+        """.data(using: .utf8)!
+        let result = try APIClient.jsonDecoder.decode(FoodRunDTO.self, from: json).toDomain()
+        XCTAssertEqual(result.place.name, "Baraka Shawarma")
+        XCTAssertEqual(result.place.category, .food)
+        XCTAssertEqual(result.place.budgetTip, "Get the chicken plate")
+        XCTAssertEqual(result.estimatedCost, Decimal(9.50))
+        XCTAssertEqual(result.confidence, .high)
+        XCTAssertEqual(result.sourceStatus, .sourceBacked)
+        XCTAssertNil(result.matchedDeal)
+        // v1-shaped payloads still map: no alternatives / tags / labels.
+        XCTAssertTrue(result.alternatives.isEmpty)
+        XCTAssertTrue(result.tags.isEmpty)
+        XCTAssertNil(result.rankingLabel)
+        XCTAssertNil(result.recommendedOrder)
+    }
+
+    func testFoodRunV2DecodesTagsAlternativesAndLabels() throws {
+        let json = """
+        {
+          "place": {
+            "id": "p1", "name": "Baraka Shawarma", "category": "food",
+            "price_bucket": "$", "rating": 4.6, "latitude": 33.75, "longitude": -84.39,
+            "why_recommended": "Filling, close, highly rated, and usually under $10.",
+            "budget_tip": "Get the chicken plate", "primary_photo_url": null,
+            "distance_miles": 0.4, "tags": ["under $10", "good for students"]
+          },
+          "ranked_alternatives": [
+            {
+              "id": "p2", "name": "Con Leche Coffee", "category": "food",
+              "price_bucket": "$", "rating": 4.4, "latitude": 33.75, "longitude": -84.39,
+              "why_recommended": "Cheap breakfast", "budget_tip": null,
+              "primary_photo_url": null, "distance_miles": 0.6, "tags": ["quiet study"]
+            }
+          ],
+          "estimated_cost": 9.0,
+          "recommended_order": "Get the falafel wrap",
+          "reason": "Filling, close, highly rated, and usually under $10.",
+          "ranking_label": "Best under $10",
+          "matched_deal": null,
+          "confidence": "high",
+          "tags": ["under $10", "good for students", "high protein"],
+          "source_status": "estimated"
+        }
+        """.data(using: .utf8)!
+        let result = try APIClient.jsonDecoder.decode(FoodRunDTO.self, from: json).toDomain()
+
+        XCTAssertEqual(result.place.name, "Baraka Shawarma")
+        XCTAssertEqual(result.place.distanceMiles, 0.4)
+        XCTAssertEqual(result.place.tags, ["under $10", "good for students"])
+        XCTAssertEqual(result.rankingLabel, "Best under $10")
+        XCTAssertEqual(result.recommendedOrder, "Get the falafel wrap")
+        XCTAssertEqual(result.tags, ["under $10", "good for students", "high protein"])
+        XCTAssertEqual(result.estimatedCost, Decimal(9.0))
+        XCTAssertEqual(result.confidence, .high)
+        XCTAssertEqual(result.sourceStatus, .estimated)
+
+        XCTAssertEqual(result.alternatives.count, 1)
+        let alt = try XCTUnwrap(result.alternatives.first)
+        XCTAssertEqual(alt.name, "Con Leche Coffee")
+        XCTAssertEqual(alt.distanceMiles, 0.6)
+        XCTAssertEqual(alt.tags, ["quiet study"])
+    }
+
+    func testFoodRunV2UnknownFieldsFallBackSafely() throws {
+        // Missing optional v2 fields + unknown enum values stay conservative.
+        let json = """
+        {
+          "place": {
+            "id": "p1", "name": "X", "category": "spaceship",
+            "price_bucket": null, "rating": null, "latitude": null, "longitude": null,
+            "why_recommended": null, "budget_tip": null, "primary_photo_url": null
+          },
+          "estimated_cost": null, "reason": null,
+          "confidence": "ultra", "source_status": "magic"
+        }
+        """.data(using: .utf8)!
+        let result = try APIClient.jsonDecoder.decode(FoodRunDTO.self, from: json).toDomain()
+        XCTAssertEqual(result.place.category, .food)        // unknown slug -> food
+        XCTAssertNil(result.place.distanceMiles)
+        XCTAssertTrue(result.place.tags.isEmpty)
+        XCTAssertTrue(result.alternatives.isEmpty)
+        XCTAssertEqual(result.confidence, .low)             // unknown -> low
+        XCTAssertEqual(result.sourceStatus, .estimated)     // unknown -> estimated
+    }
+}

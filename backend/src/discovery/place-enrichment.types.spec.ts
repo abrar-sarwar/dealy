@@ -2,6 +2,7 @@ import {
   currentHash,
   mapEnrichment,
   FEED_SECTION_VOCAB,
+  ENRICHMENT_BATCH_SCHEMA,
   type PlaceCoreInputs,
   type RawPlaceEnrichment,
 } from './place-enrichment.types';
@@ -52,6 +53,7 @@ describe('mapEnrichment', () => {
     hidden_gem_score: 0.2,
     cheap_eats_score: 0.9,
     feed_section_candidates: ['cheap_eats', 'student_friendly'],
+    budget_tip: '  For under $8, get the drip + a day-old pastry.  ',
   };
 
   it('maps a raw enrichment to persistable fields', () => {
@@ -63,6 +65,15 @@ describe('mapEnrichment', () => {
     expect(f.vibeTags).toEqual(['cozy', 'casual']); // deduped
     expect(f.confidenceLabel).toBe('high');
     expect(f.feedSectionCandidates).toEqual(['cheap_eats', 'student_friendly']);
+    expect(f.budgetTip).toBe('For under $8, get the drip + a day-old pastry.'); // trimmed
+  });
+
+  it('maps a missing/blank budget_tip to null', () => {
+    expect(mapEnrichment({ ...raw, budget_tip: null }).budgetTip).toBeNull();
+    expect(mapEnrichment({ ...raw, budget_tip: '   ' }).budgetTip).toBeNull();
+    const withoutTip: RawPlaceEnrichment = { ...raw };
+    delete withoutTip.budget_tip;
+    expect(mapEnrichment(withoutTip).budgetTip).toBeNull();
   });
 
   it('constrains feedSectionCandidates to the fixed vocabulary', () => {
@@ -88,5 +99,13 @@ describe('mapEnrichment', () => {
     expect(f.affordabilityScore).toBe(0);
     expect(f.priceBucket).toBeNull();
     expect(f.confidenceLabel).toBeNull();
+  });
+});
+
+describe('ENRICHMENT_BATCH_SCHEMA', () => {
+  it('includes budget_tip in the structured output schema + required list', () => {
+    const item = ENRICHMENT_BATCH_SCHEMA.properties.enrichments.items;
+    expect(item.properties).toHaveProperty('budget_tip');
+    expect(item.required).toContain('budget_tip');
   });
 });

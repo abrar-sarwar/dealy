@@ -7,6 +7,8 @@ struct PersistedState: Codable, Equatable {
     var discovery: DiscoveryPreference = .default
     var interests: Set<DealCategory> = []
     var savedDealIDs: [String] = []          // ordered: most recently saved last
+    var savedBaskets: [SmartBasket] = []     // ordered: most recently saved last
+    var savedPlaces: [Place] = []            // saved Food Run places, newest last
     var watchedDealIDs: Set<String> = []
     var swipeHistory: [SwipeAction] = []      // capped, newest last
     var savingsEvents: [SavingsEvent] = []    // realized mock savings, deduped by dealID
@@ -26,6 +28,8 @@ struct PersistedState: Codable, Equatable {
         case radius
         case interests
         case savedDealIDs
+        case savedBaskets
+        case savedPlaces
         case watchedDealIDs
         case swipeHistory
         case savingsEvents
@@ -54,6 +58,8 @@ struct PersistedState: Codable, Equatable {
 
         interests = try container.decodeIfPresent(Set<DealCategory>.self, forKey: .interests) ?? []
         savedDealIDs = try container.decodeIfPresent([String].self, forKey: .savedDealIDs) ?? []
+        savedBaskets = try container.decodeIfPresent([SmartBasket].self, forKey: .savedBaskets) ?? []
+        savedPlaces = try container.decodeIfPresent([Place].self, forKey: .savedPlaces) ?? []
         watchedDealIDs = try container.decodeIfPresent(Set<String>.self, forKey: .watchedDealIDs) ?? []
         swipeHistory = try container.decodeIfPresent([SwipeAction].self, forKey: .swipeHistory) ?? []
         savingsEvents = try container.decodeIfPresent([SavingsEvent].self, forKey: .savingsEvents) ?? []
@@ -68,6 +74,8 @@ struct PersistedState: Codable, Equatable {
         try container.encode(discovery, forKey: .discovery)
         try container.encode(interests, forKey: .interests)
         try container.encode(savedDealIDs, forKey: .savedDealIDs)
+        try container.encode(savedBaskets, forKey: .savedBaskets)
+        try container.encode(savedPlaces, forKey: .savedPlaces)
         try container.encode(watchedDealIDs, forKey: .watchedDealIDs)
         try container.encode(swipeHistory, forKey: .swipeHistory)
         try container.encode(savingsEvents, forKey: .savingsEvents)

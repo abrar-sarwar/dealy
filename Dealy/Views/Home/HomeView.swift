@@ -10,6 +10,9 @@ struct HomeView: View {
     @State private var selectedDeal: Deal?
     @State private var getDeal: Deal?
     @State private var showFilters = false
+    @State private var showSmartBasket = false
+    @State private var showFoodRun = false
+    @State private var foodRunPreset: FoodRunIntent?
     @AppStorage(SwipeTutorialState.key) private var hasSeenSwipeTutorial = false
 
     // First-run self-demo that runs on the real top card until the user acts.
@@ -30,10 +33,25 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 10) {
             header
+            SmartBasketEntryCard(compact: true) { showSmartBasket = true }
+                .padding(.horizontal, 14)
+            FoodRunEntryCard(compact: true) {
+                foodRunPreset = nil; showFoodRun = true
+            }
+            .padding(.horizontal, 14)
+            FoodRunDecisionDeckView(horizontalPadding: 14) { goal in
+                foodRunPreset = goal; showFoodRun = true
+            }
             deckArea
         }
         .padding(.top, 4)
         .background(Theme.background.ignoresSafeArea())
+        .fullScreenCover(isPresented: $showSmartBasket) {
+            SmartBasketSetupView(onClose: { showSmartBasket = false })
+        }
+        .fullScreenCover(isPresented: $showFoodRun) {
+            FoodRunView(onClose: { showFoodRun = false }, presetGoal: foodRunPreset)
+        }
         .onChange(of: app.loadState) { _, _ in rebuild() }
         .onChange(of: app.discovery) { _, _ in rebuild() }
         .onChange(of: app.localDeals) { _, _ in rebuild() }

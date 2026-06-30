@@ -339,6 +339,190 @@
         ]
       }
     },
+    "/v1/feeds/student": {
+      "get": {
+        "operationId": "FeedsController_student_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Curated national student programs, newest first (cursor paginated)",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/local": {
+      "get": {
+        "operationId": "FeedsController_local_v1",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": 33.7531,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": -84.3857,
+              "type": "number"
+            }
+          },
+          {
+            "name": "radiusMiles",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Filter by category slug",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Curated local deals within radius (default 15mi), nearest first",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/missed": {
+      "get": {
+        "operationId": "FeedsController_missed_v1",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": 33.7531,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": -84.3857,
+              "type": "number"
+            }
+          },
+          {
+            "name": "radiusMiles",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Filter by category slug",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Recently-expired curated local deals (last 7 days), most-recent first — never redeemable",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
     "/v1/feeds/recommended": {
       "get": {
         "operationId": "FeedsController_recommended_v1",
@@ -381,10 +565,237 @@
         ]
       }
     },
+    "/v1/feeds/places": {
+      "get": {
+        "operationId": "FeedsController_places_v1",
+        "parameters": [
+          {
+            "name": "region",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Enriched-place feed sections for a region (cheap eats, hidden gems, etc.) — read-only, no live AI. Pass region, or lat+lng to resolve the nearest region automatically.",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/places/map": {
+      "get": {
+        "operationId": "FeedsController_placesMap_v1",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "radiusMiles",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Map-ready place markers near a point: bounded (default ~40), with markerKind + keyless primaryPhotoUrl. Read-only, no live AI or photo fetching. Pass lat+lng (resolves region), optional radiusMiles, optional limit.",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
     "/v1/feeds/trending": {
       "get": {
         "operationId": "FeedsController_trending_v1",
         "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque pagination cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Cross-campus trending deals (high-value/urgent, location-independent)",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/feeds/food-run": {
+      "post": {
+        "operationId": "FeedsController_foodRun_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoodRunRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Cheap Food Run: the single best place to eat right now for an intent (under_10, study_spot, etc.) with estimated cost, reason, budget tip, and an optional matched restaurant deal. Read-only over stored Places — no live AI.",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "operationId": "SearchController_run_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Full-text query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Category slug",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "online",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "student",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "minDiscount",
+            "required": false,
+            "in": "query",
+            "description": "Minimum discount %",
+            "schema": {
+              "minimum": 0,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "required": false,
+            "in": "query",
+            "description": "Max current price (dollars)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "relevance",
+                "newest",
+                "savings",
+                "priceLow",
+                "endingSoon"
+              ]
+            }
+          },
           {
             "name": "limit",
             "required": false,
@@ -412,9 +823,82 @@
             "description": ""
           }
         },
-        "summary": "Trending deals by recent popularity",
+        "summary": "Search deals (full-text, filters, sort; typo-tolerant)",
         "tags": [
-          "feeds"
+          "search"
+        ]
+      }
+    },
+    "/v1/grocery/baskets/generate": {
+      "post": {
+        "operationId": "GroceryController_generate_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateBasketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Generate a Smart Basket: budget-fit student staples, matched real grocery deals, best store + optional second stop, estimated total, and an honest explanation. Works without auth and out-of-area (lower confidence + estimated labels).",
+        "tags": [
+          "grocery"
+        ]
+      }
+    },
+    "/v1/grocery/baskets/{id}/regenerate": {
+      "post": {
+        "operationId": "GroceryController_regenerate_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Re-roll a Smart Basket from its saved parameters (returns a new basket)",
+        "tags": [
+          "grocery"
+        ]
+      }
+    },
+    "/v1/grocery/baskets/{id}": {
+      "get": {
+        "operationId": "GroceryController_getById_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Fetch a previously generated Smart Basket by id",
+        "tags": [
+          "grocery"
         ]
       }
     },
@@ -830,113 +1314,6 @@
         "summary": "The current user's watched deals",
         "tags": [
           "actions"
-        ]
-      }
-    },
-    "/v1/search": {
-      "get": {
-        "operationId": "SearchController_run_v1",
-        "parameters": [
-          {
-            "name": "q",
-            "required": false,
-            "in": "query",
-            "description": "Full-text query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "category",
-            "required": false,
-            "in": "query",
-            "description": "Category slug",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "online",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "student",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "minDiscount",
-            "required": false,
-            "in": "query",
-            "description": "Minimum discount %",
-            "schema": {
-              "minimum": 0,
-              "maximum": 100,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "description": "Max current price (dollars)",
-            "schema": {
-              "minimum": 0,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sort",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "relevance",
-                "newest",
-                "savings",
-                "priceLow",
-                "endingSoon"
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "offset",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "default": 0,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Search deals (full-text, filters, sort; typo-tolerant)",
-        "tags": [
-          "search"
         ]
       }
     },
@@ -1383,6 +1760,130 @@
           "admin"
         ]
       }
+    },
+    "/v1/admin/moderation/queue": {
+      "get": {
+        "operationId": "AdminController_moderationQueue_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "summary": "Pending curated candidates (highest confidence first)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/moderation/{id}/approve": {
+      "post": {
+        "operationId": "AdminController_approve_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/moderation/{id}/reject": {
+      "post": {
+        "operationId": "AdminController_reject_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/moderation/{id}/edit": {
+      "post": {
+        "operationId": "AdminController_edit_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModerationEditDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "supabase": []
+          }
+        ],
+        "tags": [
+          "admin"
+        ]
+      }
     }
   },
   "info": {
@@ -1444,6 +1945,216 @@
             "type": "boolean"
           }
         }
+      },
+      "FoodRunRequestDto": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "example": 33.753
+          },
+          "longitude": {
+            "type": "number",
+            "example": -84.386
+          },
+          "region": {
+            "type": "string",
+            "description": "Region slug; resolved from lat/lng when omitted"
+          },
+          "goal": {
+            "type": "string",
+            "enum": [
+              "under_10",
+              "cheapest",
+              "high_protein",
+              "quick_lunch",
+              "late_night",
+              "study_spot",
+              "coffee_dessert",
+              "date_friends",
+              "group_meal",
+              "best_value",
+              "pickup_deal",
+              "student_friendly",
+              "custom"
+            ],
+            "example": "under_10",
+            "description": "Primary goal"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "under_10",
+              "high_protein",
+              "quick_lunch",
+              "late_night",
+              "study_spot",
+              "date_friends",
+              "closest_cheap"
+            ],
+            "description": "Legacy alias for `goal`; used only when `goal` is omitted"
+          },
+          "budget": {
+            "type": "number",
+            "example": 10,
+            "description": "Budget in dollars"
+          },
+          "maxDistanceMiles": {
+            "type": "number",
+            "example": 2,
+            "description": "Max distance in miles"
+          },
+          "dietary": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "vegetarian",
+                "halal",
+                "high_protein",
+                "healthy"
+              ]
+            }
+          },
+          "timeOfDay": {
+            "type": "string",
+            "enum": [
+              "morning",
+              "lunch",
+              "afternoon",
+              "dinner",
+              "late_night"
+            ],
+            "example": "lunch"
+          },
+          "vibe": {
+            "type": "string",
+            "enum": [
+              "quick",
+              "filling",
+              "healthy",
+              "comfort",
+              "social",
+              "quiet"
+            ],
+            "example": "quick"
+          },
+          "allowChains": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include chain restaurants"
+          },
+          "allowLocal": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include local/independent places"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ]
+      },
+      "GenerateBasketDto": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "example": 33.753
+          },
+          "longitude": {
+            "type": "number",
+            "example": -84.386
+          },
+          "region": {
+            "type": "string",
+            "description": "Region slug; resolved from lat/lng when omitted"
+          },
+          "campus": {
+            "type": "string",
+            "description": "Campus slug, e.g. gsu"
+          },
+          "budget": {
+            "type": "number",
+            "example": 35,
+            "description": "Budget in dollars"
+          },
+          "goal": {
+            "type": "string",
+            "enum": [
+              "cheapest",
+              "meal_prep",
+              "high_protein",
+              "dorm_snacks",
+              "breakfast",
+              "quick_meals",
+              "healthy",
+              "party",
+              "custom"
+            ],
+            "example": "high_protein"
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "today",
+              "3_days",
+              "1_week"
+            ],
+            "example": "3_days"
+          },
+          "dietary": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "vegetarian",
+                "halal",
+                "high_protein",
+                "low_prep",
+                "no_cooking",
+                "healthy",
+                "bulk_value",
+                "snacks_drinks"
+              ]
+            }
+          },
+          "excludedItems": {
+            "example": [
+              "pork"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredStores": {
+            "example": [
+              "Aldi"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxDistance": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10
+          },
+          "allowSecondStop": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "budget",
+          "goal",
+          "timeframe"
+        ]
       },
       "CreateSwipeDto": {
         "type": "object",
@@ -1557,6 +2268,14 @@
         "properties": {}
       },
       "GrantRoleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RejectDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ModerationEditDto": {
         "type": "object",
         "properties": {}
       }

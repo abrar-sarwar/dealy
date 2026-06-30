@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { seedCuratedPlaces } from './curated-places';
 
 const prisma = new PrismaClient();
 
@@ -200,19 +201,125 @@ async function main(): Promise<void> {
   await seedDeals();
   await seedCrawlSources();
   await seedRegionalInventories();
+  await seedGroceryStaples();
+  await seedCuratedPlaces(prisma);
 
-  const [cat, sch, cam, deal, crawl, region] = await Promise.all([
+  const [cat, sch, cam, deal, crawl, region, staple, curated] = await Promise.all([
     prisma.category.count(),
     prisma.school.count(),
     prisma.campus.count(),
     prisma.deal.count(),
     prisma.crawlSource.count(),
     prisma.regionalInventory.count(),
+    prisma.groceryStapleItem.count(),
+    prisma.place.count({ where: { source: 'manual' } }),
   ]);
   // eslint-disable-next-line no-console
   console.log(
-    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources, ${region} regions`,
+    `Seeded: ${cat} categories, ${sch} schools, ${cam} campuses, ${deal} deals, ${crawl} crawl sources, ${region} regions, ${staple} staples, ${curated} curated places`,
   );
+}
+
+// Smart Basket staples catalog — honest national price estimates (minor units),
+// NOT real deals. dietaryTags use the wire dietary enum; goalAffinities use the
+// wire goal enum; prepLevel ∈ no_cook | low | medium | high. Idempotent by slug.
+interface StapleSeed {
+  slug: string;
+  name: string;
+  category: string;
+  unit: string;
+  defaultQuantity: number;
+  estimatedPriceMinor: number;
+  dietaryTags: string[];
+  goalAffinities: string[];
+  prepLevel: string;
+}
+
+const groceryStaples: StapleSeed[] = [
+  // Produce
+  { slug: 'bananas', name: 'Bananas', category: 'produce', unit: 'bunch', defaultQuantity: 1, estimatedPriceMinor: 159, dietaryTags: ['vegetarian', 'halal', 'healthy', 'no_cooking'], goalAffinities: ['cheapest', 'breakfast', 'healthy', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'apples', name: 'Apples (bag)', category: 'produce', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'healthy', 'no_cooking'], goalAffinities: ['healthy', 'dorm_snacks', 'cheapest'], prepLevel: 'no_cook' },
+  { slug: 'baby-carrots', name: 'Baby carrots', category: 'produce', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'healthy', 'no_cooking', 'low_prep'], goalAffinities: ['healthy', 'quick_meals', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'spinach', name: 'Spinach (bag)', category: 'produce', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 279, dietaryTags: ['vegetarian', 'halal', 'healthy'], goalAffinities: ['healthy', 'meal_prep', 'high_protein'], prepLevel: 'low' },
+  { slug: 'broccoli', name: 'Broccoli', category: 'produce', unit: 'head', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'healthy'], goalAffinities: ['healthy', 'meal_prep'], prepLevel: 'low' },
+  { slug: 'onions', name: 'Onions (bag)', category: 'produce', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 249, dietaryTags: ['vegetarian', 'halal', 'healthy'], goalAffinities: ['meal_prep', 'cheapest'], prepLevel: 'low' },
+  { slug: 'potatoes', name: 'Potatoes (5 lb)', category: 'produce', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'bulk_value'], goalAffinities: ['cheapest', 'meal_prep', 'bulk_value'], prepLevel: 'medium' },
+  { slug: 'tomatoes', name: 'Roma tomatoes', category: 'produce', unit: 'lb', defaultQuantity: 1, estimatedPriceMinor: 179, dietaryTags: ['vegetarian', 'halal', 'healthy', 'no_cooking'], goalAffinities: ['healthy', 'meal_prep'], prepLevel: 'no_cook' },
+
+  // Protein
+  { slug: 'eggs', name: 'Eggs (dozen)', category: 'protein', unit: 'dozen', defaultQuantity: 1, estimatedPriceMinor: 249, dietaryTags: ['vegetarian', 'halal', 'high_protein'], goalAffinities: ['high_protein', 'breakfast', 'cheapest', 'meal_prep'], prepLevel: 'low' },
+  { slug: 'chicken-thighs', name: 'Chicken thighs', category: 'protein', unit: 'lb', defaultQuantity: 2, estimatedPriceMinor: 349, dietaryTags: ['halal', 'high_protein'], goalAffinities: ['high_protein', 'meal_prep', 'cheapest'], prepLevel: 'medium' },
+  { slug: 'chicken-breast', name: 'Chicken breast', category: 'protein', unit: 'lb', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['halal', 'high_protein', 'healthy'], goalAffinities: ['high_protein', 'meal_prep', 'healthy'], prepLevel: 'medium' },
+  { slug: 'ground-beef', name: 'Ground beef (1 lb)', category: 'protein', unit: 'lb', defaultQuantity: 1, estimatedPriceMinor: 549, dietaryTags: ['halal', 'high_protein'], goalAffinities: ['high_protein', 'meal_prep'], prepLevel: 'medium' },
+  { slug: 'canned-tuna', name: 'Canned tuna', category: 'protein', unit: 'can', defaultQuantity: 2, estimatedPriceMinor: 99, dietaryTags: ['halal', 'high_protein', 'no_cooking', 'low_prep'], goalAffinities: ['high_protein', 'quick_meals', 'cheapest'], prepLevel: 'no_cook' },
+  { slug: 'black-beans', name: 'Black beans (can)', category: 'protein', unit: 'can', defaultQuantity: 2, estimatedPriceMinor: 109, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'bulk_value'], goalAffinities: ['cheapest', 'high_protein', 'meal_prep'], prepLevel: 'low' },
+  { slug: 'peanut-butter', name: 'Peanut butter', category: 'protein', unit: 'jar', defaultQuantity: 1, estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'no_cooking'], goalAffinities: ['high_protein', 'breakfast', 'cheapest', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'tofu', name: 'Tofu', category: 'protein', unit: 'block', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'healthy'], goalAffinities: ['high_protein', 'healthy', 'meal_prep'], prepLevel: 'low' },
+
+  // Dairy
+  { slug: 'milk', name: 'Milk (gallon)', category: 'dairy', unit: 'gallon', defaultQuantity: 1, estimatedPriceMinor: 379, dietaryTags: ['vegetarian', 'halal', 'high_protein'], goalAffinities: ['breakfast', 'cheapest', 'high_protein'], prepLevel: 'no_cook' },
+  { slug: 'greek-yogurt', name: 'Greek yogurt (tub)', category: 'dairy', unit: 'tub', defaultQuantity: 1, estimatedPriceMinor: 449, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'healthy', 'no_cooking'], goalAffinities: ['high_protein', 'breakfast', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'cheddar-cheese', name: 'Cheddar cheese (block)', category: 'dairy', unit: 'block', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'high_protein'], goalAffinities: ['meal_prep', 'high_protein'], prepLevel: 'no_cook' },
+  { slug: 'butter', name: 'Butter', category: 'dairy', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 449, dietaryTags: ['vegetarian', 'halal'], goalAffinities: ['breakfast', 'meal_prep'], prepLevel: 'no_cook' },
+  { slug: 'string-cheese', name: 'String cheese', category: 'dairy', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'no_cooking', 'snacks_drinks'], goalAffinities: ['dorm_snacks', 'high_protein', 'quick_meals'], prepLevel: 'no_cook' },
+
+  // Grains
+  { slug: 'white-rice', name: 'White rice (5 lb)', category: 'grains', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 549, dietaryTags: ['vegetarian', 'halal', 'bulk_value'], goalAffinities: ['cheapest', 'meal_prep', 'bulk_value'], prepLevel: 'low' },
+  { slug: 'pasta', name: 'Pasta (box)', category: 'grains', unit: 'box', defaultQuantity: 2, estimatedPriceMinor: 119, dietaryTags: ['vegetarian', 'halal', 'bulk_value'], goalAffinities: ['cheapest', 'meal_prep', 'quick_meals'], prepLevel: 'low' },
+  { slug: 'bread', name: 'Bread (loaf)', category: 'grains', unit: 'loaf', defaultQuantity: 1, estimatedPriceMinor: 229, dietaryTags: ['vegetarian', 'halal'], goalAffinities: ['breakfast', 'cheapest', 'quick_meals'], prepLevel: 'no_cook' },
+  { slug: 'oatmeal', name: 'Oatmeal (canister)', category: 'grains', unit: 'canister', defaultQuantity: 1, estimatedPriceMinor: 349, dietaryTags: ['vegetarian', 'halal', 'healthy', 'bulk_value'], goalAffinities: ['breakfast', 'healthy', 'cheapest'], prepLevel: 'low' },
+  { slug: 'tortillas', name: 'Tortillas', category: 'grains', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 269, dietaryTags: ['vegetarian', 'halal'], goalAffinities: ['quick_meals', 'cheapest', 'meal_prep'], prepLevel: 'no_cook' },
+  { slug: 'cereal', name: 'Cereal (box)', category: 'grains', unit: 'box', defaultQuantity: 1, estimatedPriceMinor: 349, dietaryTags: ['vegetarian', 'halal', 'no_cooking'], goalAffinities: ['breakfast', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'ramen', name: 'Ramen (pack)', category: 'grains', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'bulk_value', 'low_prep'], goalAffinities: ['cheapest', 'quick_meals', 'dorm_snacks'], prepLevel: 'low' },
+
+  // Frozen
+  { slug: 'frozen-vegetables', name: 'Frozen mixed vegetables', category: 'frozen', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'healthy', 'low_prep'], goalAffinities: ['healthy', 'meal_prep', 'cheapest'], prepLevel: 'low' },
+  { slug: 'frozen-chicken-nuggets', name: 'Frozen chicken nuggets', category: 'frozen', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 599, dietaryTags: ['halal', 'high_protein', 'low_prep'], goalAffinities: ['quick_meals', 'dorm_snacks', 'high_protein'], prepLevel: 'low' },
+  { slug: 'frozen-pizza', name: 'Frozen pizza', category: 'frozen', unit: 'each', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'low_prep'], goalAffinities: ['quick_meals', 'dorm_snacks', 'party'], prepLevel: 'low' },
+  { slug: 'frozen-berries', name: 'Frozen berries', category: 'frozen', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'healthy', 'no_cooking'], goalAffinities: ['breakfast', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'frozen-burritos', name: 'Frozen burritos', category: 'frozen', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 499, dietaryTags: ['low_prep'], goalAffinities: ['quick_meals', 'dorm_snacks', 'cheapest'], prepLevel: 'low' },
+
+  // Pantry
+  { slug: 'olive-oil', name: 'Olive oil', category: 'pantry', unit: 'bottle', defaultQuantity: 1, estimatedPriceMinor: 599, dietaryTags: ['vegetarian', 'halal', 'healthy'], goalAffinities: ['meal_prep', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'pasta-sauce', name: 'Pasta sauce', category: 'pantry', unit: 'jar', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal'], goalAffinities: ['quick_meals', 'meal_prep', 'cheapest'], prepLevel: 'no_cook' },
+  { slug: 'canned-soup', name: 'Canned soup', category: 'pantry', unit: 'can', defaultQuantity: 2, estimatedPriceMinor: 149, dietaryTags: ['vegetarian', 'low_prep', 'no_cooking'], goalAffinities: ['quick_meals', 'cheapest', 'dorm_snacks'], prepLevel: 'low' },
+  { slug: 'mac-and-cheese', name: 'Mac & cheese (box)', category: 'pantry', unit: 'box', defaultQuantity: 2, estimatedPriceMinor: 109, dietaryTags: ['vegetarian', 'low_prep'], goalAffinities: ['cheapest', 'quick_meals', 'dorm_snacks'], prepLevel: 'low' },
+  { slug: 'honey', name: 'Honey', category: 'pantry', unit: 'bottle', defaultQuantity: 1, estimatedPriceMinor: 449, dietaryTags: ['vegetarian', 'halal', 'no_cooking'], goalAffinities: ['breakfast', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'hot-sauce', name: 'Hot sauce', category: 'pantry', unit: 'bottle', defaultQuantity: 1, estimatedPriceMinor: 199, dietaryTags: ['vegetarian', 'halal', 'no_cooking'], goalAffinities: ['meal_prep', 'party'], prepLevel: 'no_cook' },
+
+  // Snacks
+  { slug: 'tortilla-chips', name: 'Tortilla chips', category: 'snacks', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['dorm_snacks', 'party'], prepLevel: 'no_cook' },
+  { slug: 'granola-bars', name: 'Granola bars', category: 'snacks', unit: 'box', defaultQuantity: 1, estimatedPriceMinor: 349, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['breakfast', 'dorm_snacks', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'popcorn', name: 'Microwave popcorn', category: 'snacks', unit: 'box', defaultQuantity: 1, estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks', 'bulk_value'], goalAffinities: ['dorm_snacks', 'party'], prepLevel: 'no_cook' },
+  { slug: 'trail-mix', name: 'Trail mix', category: 'snacks', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 449, dietaryTags: ['vegetarian', 'halal', 'high_protein', 'no_cooking', 'snacks_drinks', 'healthy'], goalAffinities: ['dorm_snacks', 'healthy', 'high_protein'], prepLevel: 'no_cook' },
+  { slug: 'crackers', name: 'Crackers', category: 'snacks', unit: 'box', defaultQuantity: 1, estimatedPriceMinor: 269, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['dorm_snacks', 'party'], prepLevel: 'no_cook' },
+  { slug: 'cookies', name: 'Chocolate chip cookies', category: 'snacks', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 299, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['dorm_snacks', 'party'], prepLevel: 'no_cook' },
+
+  // Beverage
+  { slug: 'coffee', name: 'Ground coffee', category: 'beverage', unit: 'bag', defaultQuantity: 1, estimatedPriceMinor: 599, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['breakfast', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'orange-juice', name: 'Orange juice', category: 'beverage', unit: 'carton', defaultQuantity: 1, estimatedPriceMinor: 349, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'healthy', 'snacks_drinks'], goalAffinities: ['breakfast', 'healthy'], prepLevel: 'no_cook' },
+  { slug: 'bottled-water', name: 'Bottled water (case)', category: 'beverage', unit: 'case', defaultQuantity: 1, estimatedPriceMinor: 399, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'bulk_value', 'snacks_drinks'], goalAffinities: ['bulk_value', 'party', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'sports-drinks', name: 'Sports drinks (pack)', category: 'beverage', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 499, dietaryTags: ['halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['party', 'dorm_snacks'], prepLevel: 'no_cook' },
+  { slug: 'soda', name: 'Soda (12-pack)', category: 'beverage', unit: 'pack', defaultQuantity: 1, estimatedPriceMinor: 599, dietaryTags: ['vegetarian', 'halal', 'no_cooking', 'snacks_drinks'], goalAffinities: ['party', 'dorm_snacks'], prepLevel: 'no_cook' },
+];
+
+async function seedGroceryStaples(): Promise<void> {
+  for (const s of groceryStaples) {
+    await prisma.groceryStapleItem.upsert({
+      where: { slug: s.slug },
+      update: {
+        name: s.name,
+        category: s.category,
+        unit: s.unit,
+        defaultQuantity: s.defaultQuantity,
+        estimatedPriceMinor: s.estimatedPriceMinor,
+        dietaryTags: s.dietaryTags,
+        goalAffinities: s.goalAffinities,
+        prepLevel: s.prepLevel,
+      },
+      create: s,
+    });
+  }
 }
 
 // Deterministic mock deals scattered around each campus (idempotent by externalId).

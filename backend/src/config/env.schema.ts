@@ -72,6 +72,12 @@ export const envSchema = z
     LOCAL_DEAL_REFRESH_HOURS: z.coerce.number().int().positive().default(12),
     CRAWLER_ENABLED: z.coerce.boolean().default(true),
     AI_ENABLED: z.coerce.boolean().default(true),
+    /** Whether the crawler honours robots.txt before fetching a source URL. */
+    CRAWLER_RESPECT_ROBOTS: z.coerce.boolean().default(true),
+    // Per-IP throttle on the generation endpoints (Smart Basket + Food Run).
+    // Sustained tokens/min + immediate burst. In-memory, single-process.
+    GEN_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),
+    GEN_RATE_LIMIT_BURST: z.coerce.number().int().positive().default(5),
     FIRECRAWL_MAX_PAGES_PER_DAY: z.coerce.number().int().positive().default(100),
     FIRECRAWL_MAX_PAGES_PER_SOURCE_PER_DAY: z.coerce.number().int().positive().default(10),
     FIRECRAWL_MAX_RECRAWLS_PER_DAY: z.coerce.number().int().positive().default(2),

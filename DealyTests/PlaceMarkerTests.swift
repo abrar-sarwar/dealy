@@ -22,6 +22,7 @@ final class PlaceMarkerTests: XCTestCase {
         "priceBucket": "$",
         "rating": 4.2,
         "whyRecommended": "Famous for authentic fried chicken at an accessible price.",
+        "budgetTip": "Get the 2-piece dark with a side to keep it under $12.",
         "primaryPhotoUrl": "https://lh3.googleusercontent.com/places/abc123",
         "imageStatus": "ready",
         "markerKind": "food"
@@ -60,10 +61,12 @@ final class PlaceMarkerTests: XCTestCase {
         XCTAssertEqual(gus.primaryPhotoUrl, "https://lh3.googleusercontent.com/places/abc123")
         XCTAssertEqual(gus.imageStatus, "ready")
         XCTAssertEqual(gus.kind, .food)
+        XCTAssertEqual(gus.budgetTip, "Get the 2-piece dark with a side to keep it under $12.")
 
         let market = markers[1]
         XCTAssertNil(market.priceBucket)
         XCTAssertNil(market.primaryPhotoUrl)
+        XCTAssertNil(market.budgetTip) // absent in JSON → nil
         XCTAssertEqual(market.kind, .hiddenGem)
     }
 
@@ -172,6 +175,25 @@ final class PlaceMarkerTests: XCTestCase {
             .map { $0.toSection() }[0].places[0]
         XCTAssertEqual(place.primaryPhotoUrl, "https://lh3.googleusercontent.com/p/abc")
         XCTAssertEqual(place.imageStatus, "ready")
+    }
+
+    // MARK: budgetTipDisplay (drives the preview card tip line show/hide)
+
+    func testMarkerBudgetTipDisplayShowsWhenPresent() {
+        let m = PlaceMarker(id: "1", name: "X", category: .food, latitude: 0, longitude: 0,
+                            priceBucket: nil, rating: nil, whyRecommended: nil,
+                            budgetTip: "Split the platter to save.",
+                            primaryPhotoUrl: nil, imageStatus: nil, kind: .food)
+        XCTAssertEqual(m.budgetTipDisplay, "Split the platter to save.")
+    }
+
+    func testMarkerBudgetTipDisplayHiddenWhenNilOrBlank() {
+        let none = makeMarker(id: "n", lat: 0, lng: 0) // budgetTip defaults to nil
+        XCTAssertNil(none.budgetTipDisplay)
+        let blank = PlaceMarker(id: "1", name: "X", category: .food, latitude: 0, longitude: 0,
+                                priceBucket: nil, rating: nil, whyRecommended: nil,
+                                budgetTip: "  ", primaryPhotoUrl: nil, imageStatus: nil, kind: .food)
+        XCTAssertNil(blank.budgetTipDisplay)
     }
 
     // MARK: Helpers

@@ -304,4 +304,19 @@ final class MapCameraModelTests: XCTestCase {
         XCTAssertEqual(MapCameraModel.routeSummary(distanceMeters: 80, etaSeconds: 40), "1 min · <0.1 mi")
     }
 
+
+    func testClusterMarkersGroupsNearbyAndKeepsCount() {
+        func mk(_ id: String, _ lat: Double, _ lng: Double) -> PlaceMarker {
+            PlaceMarker(id: id, name: id, category: .food, latitude: lat, longitude: lng,
+                        priceBucket: nil, rating: nil, whyRecommended: nil, budgetTip: nil,
+                        primaryPhotoUrl: nil, imageStatus: nil, kind: .food)
+        }
+        // three almost on top of each other + one far away → 2 clusters, counts 3 and 1
+        let markers = [mk("a",33.750,-84.386), mk("b",33.7501,-84.3861), mk("c",33.7502,-84.3862), mk("far",33.80,-84.30)]
+        let clusters = MapCameraModel.clusterMarkers(markers, radiusMiles: 5)
+        XCTAssertEqual(clusters.count, 2)
+        XCTAssertEqual(clusters.map(\.count).sorted(), [1, 3])
+        XCTAssertEqual(MapCameraModel.clusterMarkers([], radiusMiles: 5).count, 0)
+    }
+
 }

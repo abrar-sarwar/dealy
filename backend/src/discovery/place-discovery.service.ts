@@ -9,6 +9,36 @@ const MILES_TO_METERS = 1609.34;
  *  so the trial cost stays bounded and predictable. */
 export const DEFAULT_CATEGORIES = ['restaurant', 'cafe'];
 
+/**
+ * Named category presets selectable from the CLI (BH5). The `launch` preset is a
+ * fuller food/grocery sweep for the GSU/GT launch regions. Each category is one
+ * Places call, so a preset's length is its API cost — never the safe default.
+ * Late-night / study-spot remain enrichment-derived tags, not discovery queries.
+ */
+export const CATEGORY_PRESETS: Record<string, string[]> = {
+  launch: [
+    'restaurant',
+    'cafe',
+    'bakery',
+    'supermarket',
+    'grocery_or_supermarket',
+    'bar',
+    'meal_takeaway',
+  ],
+};
+
+/** Resolve a `--categories=` value: a preset name, a comma list, or undefined. */
+export function resolveCategories(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const preset = CATEGORY_PRESETS[value];
+  if (preset) return preset;
+  const list = value
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
+  return list.length ? list : undefined;
+}
+
 /** Hard default cap on places stored per run — keeps Google Places spend low. */
 export const DEFAULT_MAX_PLACES = 40;
 

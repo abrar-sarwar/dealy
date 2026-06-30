@@ -104,4 +104,40 @@ struct APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.http(status: -1) }
         guard (200..<300).contains(http.statusCode) else { throw APIError.http(status: http.statusCode) }
     }
+
+    /// JSON POST that decodes a typed response body. Same auth/transport/decoding
+    /// behavior as `get`; used by endpoints that create or re-roll server state
+    /// (e.g. Smart Basket generation).
+    func post<T: Decodable>(_ path: String, body: [String: Any] = [:], as _: T.Type) async throws -> T {
+        guard let url = URLComponents(url: baseURL.appendingPathComponent(path),
+                                      resolvingAgainstBaseURL: false)?.url else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if let token = await tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw APIError.transport(error)
+        }
+
+        guard let http = response as? HTTPURLResponse else { throw APIError.http(status: -1) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.http(status: http.statusCode) }
+
+        do {
+            return try Self.jsonDecoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(error)
+        }
+    }
 }

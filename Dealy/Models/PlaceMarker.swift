@@ -14,6 +14,8 @@ struct PlaceMarker: Identifiable, Equatable, Sendable {
     let priceBucket: String?
     let rating: Double?
     let whyRecommended: String?
+    /// Gemini money-saving tip ("what to order / how to save here"); nil → hidden.
+    let budgetTip: String?
     /// Real remote photo URL (keyless `lh3.googleusercontent.com`), or nil → artwork.
     let primaryPhotoUrl: String?
     let imageStatus: String?
@@ -27,6 +29,34 @@ struct PlaceMarker: Identifiable, Equatable, Sendable {
     /// Deterministic seed for `CategoryArtwork`, derived from the stable id so the
     /// same place always renders the same artwork.
     var visualSeed: Int { abs(id.hashValue) % 1000 }
+
+    /// The budget tip to render, or nil when there is nothing usable to show — the
+    /// preview card binds its tip line to this so an empty/whitespace tip is hidden.
+    var budgetTipDisplay: String? {
+        guard let tip = budgetTip?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !tip.isEmpty else { return nil }
+        return tip
+    }
+
+    /// Memberwise init with `budgetTip` defaulted to nil so existing call sites
+    /// (mock fixtures, tests) that predate the budget-tip upgrade keep compiling.
+    init(id: String, name: String, category: DealCategory, latitude: Double,
+         longitude: Double, priceBucket: String?, rating: Double?,
+         whyRecommended: String?, budgetTip: String? = nil,
+         primaryPhotoUrl: String?, imageStatus: String?, kind: PlaceMarkerKind) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.latitude = latitude
+        self.longitude = longitude
+        self.priceBucket = priceBucket
+        self.rating = rating
+        self.whyRecommended = whyRecommended
+        self.budgetTip = budgetTip
+        self.primaryPhotoUrl = primaryPhotoUrl
+        self.imageStatus = imageStatus
+        self.kind = kind
+    }
 }
 
 /// The map-feed `markerKind` taxonomy. Each kind carries its own SF Symbol + tint
@@ -81,6 +111,7 @@ struct PlaceMarkerDTO: Decodable {
     let priceBucket: String?
     let rating: Double?
     let whyRecommended: String?
+    let budgetTip: String?
     let primaryPhotoUrl: String?
     let imageStatus: String?
     let markerKind: String?
@@ -97,6 +128,7 @@ struct PlaceMarkerDTO: Decodable {
             priceBucket: priceBucket,
             rating: rating,
             whyRecommended: whyRecommended,
+            budgetTip: budgetTip,
             primaryPhotoUrl: primaryPhotoUrl,
             imageStatus: imageStatus,
             kind: PlaceMarkerKind.from(markerKind)

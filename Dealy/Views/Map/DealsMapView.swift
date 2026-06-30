@@ -78,6 +78,12 @@ struct DealsMapView: View {
         MapCameraModel.markersWithin(app.placeMarkers, center: center, radiusMiles: radiusMiles)
     }
 
+    /// Place markers grouped into clusters at the current radius so dense areas don't
+    /// overlap. Single → photo pin; group → lead photo + "+N".
+    private var placeClusters: [MapCameraModel.MarkerCluster] {
+        MapCameraModel.clusterMarkers(app.placeMarkers, radiusMiles: radiusMiles)
+    }
+
     /// The currently-selected place marker (if still visible), backing the preview card.
     private var selectedPlace: PlaceMarker? {
         guard let id = selectedPlaceID else { return nil }
@@ -140,9 +146,8 @@ struct DealsMapView: View {
     // MARK: Map
 
     private var mapArea: some View {
-        // interactionModes [] LOCKS the camera to the user's location: no manual
-        // pan/zoom, so the centered spotlight bubble always stays on you. The radius
-        // slider is the only thing that changes the view.
+        // Locked to your location (no manual pan/zoom) so the spotlight bubble stays
+        // centered on you. The radius slider is the only thing that moves the view.
         Map(position: $position, bounds: cameraBounds, interactionModes: []) {
             Annotation("You", coordinate: center) { centerPin }
                 .annotationTitles(.hidden)
@@ -157,12 +162,18 @@ struct DealsMapView: View {
 
             // Place markers render AFTER (on top of) the deal pins. They sit under the
             // spotlight overlay (clear inside the bubble, dimmed outside) — intended.
-            // Render ALL loaded markers (not just within-radius): the ones outside the
-            // bubble show through the frosted blur as a "there's more out here" teaser.
-            ForEach(app.placeMarkers) { marker in
-                Annotation(marker.name, coordinate: marker.coordinate) {
-                    PlaceMapPin(marker: marker, selected: selectedPlaceID == marker.id)
-                        .onTapGesture { selectPlace(marker.id) }
+            // Place markers, CLUSTERED so dense areas don't overlap: a single marker
+            // shows its photo pin; a group shows the lead photo + a "+N" badge. Tighten
+            // the radius slider to break clusters into individual pins.
+            ForEach(placeClusters) { cluster in
+                Annotation(cluster.lead.name, coordinate: cluster.coordinate) {
+                    if cluster.count == 1 {
+                        PlaceMapPin(marker: cluster.lead, selected: selectedPlaceID == cluster.lead.id)
+                            .onTapGesture { selectPlace(cluster.lead.id) }
+                    } else {
+                        ClusterPin(cluster: cluster)
+                            .onTapGesture { selectPlace(cluster.lead.id) }
+                    }
                 }
                 .annotationTitles(.hidden)
             }
@@ -183,9 +194,6 @@ struct DealsMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
-        // Spotlight: dim everything OUTSIDE the radius bubble. The camera frames the
-        // bubble centered (spotlightRegion), so a centered circular cutout aligns with
-        // the range. Sits under the chrome overlays (slider/filters stay bright).
         .overlay { spotlightMask }
         .overlay(alignment: .top) { permissionBanner }
         .overlay(alignment: .top) { routeBanner }
@@ -206,14 +214,13 @@ struct DealsMapView: View {
             let diameter = side * 0.62
             let r = diameter / 2
             ZStack {
-                // Frosted "locked" blur OUTSIDE the bubble — a heavier GREY blur of the
-                // city (you can faintly make out streets/icons but it reads as locked,
-                // like you'd pay to unlock the rest). regularMaterial blurs the map +
-                // markers behind it; a grey wash neutralizes the blue/green and covers
-                // it down to the edges; a radial mask keeps the bubble crisp + feathers.
+                // Light FROSTED blur OUTSIDE the bubble — reads as blurred glass, not a
+                // dark overlay. A faint Dealy-blue tint keeps it from looking grey; you
+                // can still see the city softly through it. Radial mask keeps the bubble
+                // crisp + feathers the edge.
                 ZStack {
-                    Rectangle().fill(.regularMaterial)
-                    Color(white: 0.32).opacity(0.55)
+                    Rectangle().fill(.ultraThinMaterial)
+                    Theme.primary.opacity(0.10)
                 }
                 .compositingGroup()
                 .mask(
@@ -244,7 +251,8 @@ struct DealsMapView: View {
     private var radiusSlider: some View {
         VStack(spacing: 6) {
             HStack {
-                Label(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll),
+                Label(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll,
+                                                 places: visibleMarkers.count),
                       systemImage: "scope")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(Theme.primaryText)
@@ -274,23 +282,27 @@ struct DealsMapView: View {
         .padding(.bottom, Spacing.sm)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Search radius")
-        .accessibilityValue(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll))
+        .accessibilityValue(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll,
+                                                       places: visibleMarkers.count))
     }
 
     @ViewBuilder private var permissionBanner: some View {
         if app.locationAuthorization == .denied || app.locationAuthorization == .restricted {
             Button { openSettings() } label: {
-                HStack(spacing: Spacing.xs) {
+                HStack(spacing: Spacing.sm) {
                     Image(systemName: "location.slash.fill")
-                    Text("Location is off — tap to share your location")
+                    Text("Turn on location to see places and deals around you — or browse online picks from Anywhere.")
                         .font(.caption.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     Image(systemName: "arrow.up.forward")
                 }
                 .foregroundStyle(.white)
-                .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
-                .background(Theme.primary, in: Capsule())
+                .padding(.vertical, 10).padding(.horizontal, Spacing.md)
+                .background(Theme.primary, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, Spacing.lg)
             .padding(.top, Spacing.xs)
         }
     }
@@ -439,19 +451,29 @@ struct DealsMapView: View {
 
     @ViewBuilder private var emptyOverlay: some View {
         if MapCameraModel.isRadiusEmpty(shown: visible, totalMappable: mappableAll) {
-            // Honest empty state: the radius + filters hide everything, but the area
-            // has inventory. Point at the (still-visible) slider and the Filters sheet.
+            // Honest empty state: the radius + filters hide all DEALS. When place pins are
+            // still on the map, never imply the area is empty — point the user at the pins
+            // so "0 deals" doesn't read as broken (deals ≠ places).
+            let hasPlaces = !visibleMarkers.isEmpty
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text("No deals within \(radiusMiles) mi")
+                Text(hasPlaces ? "No deals within \(radiusMiles) mi yet" : "No deals within \(radiusMiles) mi")
                     .font(.headline).foregroundStyle(Theme.primaryText)
                     .multilineTextAlignment(.center)
-                Text("Drag the slider to widen\(filter.isDefault ? "" : ", or change Filters")")
+                Text(hasPlaces
+                     ? "Tap a place pin to explore nearby spots — or drag the slider to widen."
+                     : "Drag the slider to widen\(filter.isDefault ? "" : ", or change Filters")")
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedText)
                     .multilineTextAlignment(.center)
+                if hasPlaces {
+                    Text("Deals = discounts · Places = local spots")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                }
                 if radiusMiles < MapCameraModel.maxRadiusMiles {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -478,12 +500,26 @@ struct DealsMapView: View {
             // Keep clear of the bottom slider.
             .padding(.bottom, 120)
         } else if mappableAll.isEmpty {
+            // No DEALS to map. If place pins are present, say so and point at them rather
+            // than calling the whole map empty.
+            let hasPlaces = !visibleMarkers.isEmpty
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text("No deals to map here")
+                Text(hasPlaces ? "No deals here yet" : "No deals to map here")
                     .font(.headline).foregroundStyle(Theme.primaryText)
+                    .multilineTextAlignment(.center)
+                if hasPlaces {
+                    Text("Tap a place pin to explore nearby spots.")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                    Text("Deals = discounts · Places = local spots")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(Spacing.lg)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))
@@ -714,26 +750,69 @@ private struct DealMapPin: View {
 /// Compact, kind-tinted place pin — a smaller teardrop, deliberately distinct from
 /// the round category-gradient deal pins, so real places read as a separate layer.
 /// Grows + brightens when selected.
+/// A little circular PHOTO of the actual place, ringed in its category color — the
+/// distinctive Dealy pin. Falls back to a category-tinted icon when there's no photo.
 private struct PlaceMapPin: View {
     let marker: PlaceMarker
     let selected: Bool
 
-    private var size: CGFloat { selected ? 34 : 26 }
-    private var iconSize: CGFloat { selected ? 15 : 12 }
+    private var size: CGFloat { selected ? 54 : 40 }
+    private var photoURL: URL? {
+        guard let s = marker.primaryPhotoUrl, !s.isEmpty, let u = URL(string: s), u.scheme == "https"
+        else { return nil }
+        return u
+    }
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(marker.kind.tint)
-                .frame(width: size, height: size)
-                .overlay(Circle().stroke(.white, lineWidth: selected ? 2.5 : 1.5))
-                .shadow(color: .black.opacity(0.25), radius: selected ? 4 : 2, y: 1)
-            Image(systemName: marker.kind.symbol)
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundStyle(.white)
+            Group {
+                if let url = photoURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image): image.resizable().scaledToFill()
+                        default: fallbackFill
+                        }
+                    }
+                } else {
+                    fallbackFill
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(marker.kind.tint, lineWidth: selected ? 4 : 3))
+            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1))
+            .shadow(color: .black.opacity(0.4), radius: selected ? 7 : 3, y: 2)
         }
         .accessibilityLabel("\(marker.name), place")
         .accessibilityHint("Shows a preview with directions")
+    }
+
+    private var fallbackFill: some View {
+        ZStack {
+            marker.kind.tint
+            Image(systemName: marker.kind.symbol)
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+/// A cluster of nearby places: the lead's photo pin with a "+N" badge for the rest.
+private struct ClusterPin: View {
+    let cluster: MapCameraModel.MarkerCluster
+
+    var body: some View {
+        PlaceMapPin(marker: cluster.lead, selected: false)
+            .overlay(alignment: .topTrailing) {
+                Text("+\(cluster.count - 1)")
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Capsule().fill(Theme.primary))
+                    .overlay(Capsule().stroke(.white, lineWidth: 1))
+                    .offset(x: 8, y: -4)
+            }
+            .accessibilityLabel("\(cluster.count) places here")
     }
 }
 
@@ -776,6 +855,19 @@ private struct PlacePreviewCard: View {
                         .foregroundStyle(Theme.mutedText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                }
+                if let tip = marker.budgetTipDisplay {
+                    // "How to save here" line — keep it to 1 line on the compact card.
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.yellow)
+                        Text(tip)
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
                 Button(action: onDirections) {
                     HStack(spacing: 5) {

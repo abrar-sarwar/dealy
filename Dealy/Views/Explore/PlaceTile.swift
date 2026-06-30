@@ -52,6 +52,19 @@ struct PlaceTile: View {
                             .lineLimit(2, reservesSpace: true)
                             .multilineTextAlignment(.leading)
                     }
+                    if let tip = place.budgetTipDisplay {
+                        // Compact "how to save here" line — subtle lightbulb + tip.
+                        HStack(alignment: .top, spacing: 4) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.caption2)
+                                .foregroundStyle(Color.yellow)
+                            Text(tip)
+                                .font(.caption2)
+                                .foregroundStyle(Theme.mutedText)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
                 }
                 .padding(Spacing.sm)
             }

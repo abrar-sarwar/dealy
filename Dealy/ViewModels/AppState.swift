@@ -45,6 +45,7 @@ final class AppState {
     private let store: PreferenceStoring
     private let dealService: DealServicing
     private let placeFeedService: PlaceFeedServicing
+    private let smartBasketService: SmartBasketServicing
     private let locationProvider: LocationProviding
     private let interactionRecorder: DealInteractionRecording
     let redemptionHandler: RedemptionHandling
@@ -86,6 +87,7 @@ final class AppState {
     init(store: PreferenceStoring = UserDefaultsPreferencesStore(),
          dealService: DealServicing = MockDealService(),
          placeFeedService: PlaceFeedServicing = MockPlaceFeedService(),
+         smartBasketService: SmartBasketServicing = MockSmartBasketService(),
          locationProvider: LocationProviding = MockLocationProvider(),
          redemptionHandler: RedemptionHandling = MockRedemptionHandler(),
          interactionRecorder: DealInteractionRecording = NoopInteractionRecorder(),
@@ -93,6 +95,7 @@ final class AppState {
         self.store = store
         self.dealService = dealService
         self.placeFeedService = placeFeedService
+        self.smartBasketService = smartBasketService
         self.nearbyStores = nearbyStores
         self.locationProvider = locationProvider
         self.redemptionHandler = redemptionHandler
@@ -445,6 +448,133 @@ final class AppState {
     func toggleSaved(_ id: String) -> Bool {
         if isSaved(id) { unsave(id); return false }
         save(id); return true
+    }
+
+    // MARK: - Smart Basket
+
+    /// Build a `BasketRequest` from the current discovery center plus the user's
+    /// quiz selections. Pure mapping — the single testable seam for the setup flow.
+    func makeBasketRequest(
+        goal: BasketGoal,
+        budgetDollars: Int,
+        timeframe: BasketTimeframe,
+        dietary: [DietaryPreference] = [],
+        excludedItems: [String] = [],
+        preferredStores: [String] = [],
+        allowSecondStop: Bool = true
+    ) -> BasketRequest {
+        let center = persisted.discovery.center
+        return BasketRequest(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            budget: budgetDollars,
+            goal: goal,
+            timeframe: timeframe,
+            dietary: dietary,
+            excludedItems: excludedItems,
+            preferredStores: preferredStores,
+            maxDistance: persisted.discovery.radiusMiles,
+            allowSecondStop: allowSecondStop
+        )
+    }
+
+    /// Build a `FoodRunRequest` from the current discovery center plus the user's
+    /// quiz selections. Pure mapping — the single testable seam for the setup flow.
+    func makeFoodRunRequest(
+        goal: FoodRunIntent,
+        budgetDollars: Int? = nil,
+        maxDistanceMiles: Double? = nil,
+        dietary: [DietaryPreference] = [],
+        timeOfDay: FoodRunTimeOfDay? = nil,
+        vibe: FoodRunVibe? = nil,
+        allowChains: Bool = true,
+        allowLocal: Bool = true
+    ) -> FoodRunRequest {
+        let center = persisted.discovery.center
+        return FoodRunRequest(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            goal: goal,
+            budget: budgetDollars,
+            maxDistanceMiles: maxDistanceMiles,
+            dietary: dietary,
+            timeOfDay: timeOfDay,
+            vibe: vibe,
+            allowChains: allowChains,
+            allowLocal: allowLocal
+        )
+    }
+
+    func generateBasket(_ request: BasketRequest) async throws -> SmartBasket {
+        try await smartBasketService.generate(request)
+    }
+
+    func regenerateBasket(id: String) async throws -> SmartBasket {
+        try await smartBasketService.regenerate(id: id)
+    }
+
+    func fetchFoodRun(_ request: FoodRunRequest) async throws -> FoodRunResult {
+        try await smartBasketService.foodRun(request)
+    }
+
+    // MARK: - Saved baskets (local, mirrors saved deals)
+
+    /// Saved Smart Baskets, most-recently-saved first.
+    var savedBaskets: [SmartBasket] { persisted.savedBaskets.reversed() }
+
+    var savedBasketCount: Int { persisted.savedBaskets.count }
+
+    func isBasketSaved(_ id: String) -> Bool {
+        persisted.savedBaskets.contains { $0.id == id }
+    }
+
+    /// Save a basket (or replace the existing entry with the same id so edits and
+    /// regenerations persist their latest state). Appends so newest stays last.
+    func saveBasket(_ basket: SmartBasket) {
+        persisted.savedBaskets.removeAll { $0.id == basket.id }
+        persisted.savedBaskets.append(basket)
+        persist()
+    }
+
+    func removeBasket(_ id: String) {
+        persisted.savedBaskets.removeAll { $0.id == id }
+        persist()
+    }
+
+    @discardableResult
+    func toggleBasketSaved(_ basket: SmartBasket) -> Bool {
+        if isBasketSaved(basket.id) { removeBasket(basket.id); return false }
+        saveBasket(basket); return true
+    }
+
+    // MARK: - Saved places (Food Run, local, mirrors saved baskets)
+
+    /// Saved Food Run places, most-recently-saved first.
+    var savedPlaces: [Place] { persisted.savedPlaces.reversed() }
+
+    var savedPlaceCount: Int { persisted.savedPlaces.count }
+
+    func isPlaceSaved(_ id: String) -> Bool {
+        persisted.savedPlaces.contains { $0.id == id }
+    }
+
+    /// Save a place (replacing any existing entry with the same id). Appends so
+    /// the newest stays last.
+    func savePlace(_ place: Place) {
+        persisted.savedPlaces.removeAll { $0.id == place.id }
+        persisted.savedPlaces.append(place)
+        persist()
+    }
+
+    func removePlace(_ id: String) {
+        persisted.savedPlaces.removeAll { $0.id == id }
+        persist()
+    }
+
+    @discardableResult
+    func togglePlaceSaved(_ place: Place) -> Bool {
+        if isPlaceSaved(place.id) { removePlace(place.id); return false }
+        savePlace(place); return true
     }
 
     // MARK: - Watched deals

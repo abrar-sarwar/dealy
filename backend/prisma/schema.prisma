@@ -10,9 +10,9 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_DATABASE_URL")
   // The postgis/postgis image pre-creates these; declare them all so Prisma
   // treats them as managed (no false drift). Dealy only queries `postgis`.
   extensions = [postgis, postgis_topology, postgis_tiger_geocoder, fuzzystrmatch]
@@ -203,75 +203,75 @@ model Store {
 }
 
 model Deal {
-  id                  String           @id @default(uuid()) @db.Uuid
+  id                        String                                 @id @default(uuid()) @db.Uuid
   /// Stable provider/seed identifier for idempotent upserts + dedupe.
-  externalId          String?          @unique @map("external_id")
-  title               String
-  merchant            String
-  storeId             String?          @map("store_id") @db.Uuid
-  categoryId          String           @map("category_id") @db.Uuid
-  shortDescription    String           @default("") @map("short_description")
-  detailedDescription String           @default("") @map("detailed_description")
-  terms               String           @default("")
+  externalId                String?                                @unique @map("external_id")
+  title                     String
+  merchant                  String
+  storeId                   String?                                @map("store_id") @db.Uuid
+  categoryId                String                                 @map("category_id") @db.Uuid
+  shortDescription          String                                 @default("") @map("short_description")
+  detailedDescription       String                                 @default("") @map("detailed_description")
+  terms                     String                                 @default("")
   /// Money as integer minor units (cents). Never floating point.
-  currentPriceMinor   BigInt?          @map("current_price_minor")
-  originalPriceMinor  BigInt?          @map("original_price_minor")
-  currency            String           @default("USD")
-  dealScore           Int              @default(50) @map("deal_score")
-  isOnline            Boolean          @default(false) @map("is_online")
-  isStudentOnly       Boolean          @default(false) @map("is_student_only")
-  couponCode          String?          @map("coupon_code")
-  destinationUrl      String?          @map("destination_url")
-  redemptionBrand     String?          @map("redemption_brand")
-  latitude            Float?
-  longitude           Float?
-  locationPrecision   String           @default("approximate") @map("location_precision")
-  geog                Unsupported("geography(Point, 4326)")?
-  locationTags        String[]         @map("location_tags")
-  visualSeed          Int              @default(0) @map("visual_seed")
-  status              DealStatus       @default(published)
-  moderationStatus    ModerationStatus @default(approved) @map("moderation_status")
-  source              String           @default("seed")
+  currentPriceMinor         BigInt?                                @map("current_price_minor")
+  originalPriceMinor        BigInt?                                @map("original_price_minor")
+  currency                  String                                 @default("USD")
+  dealScore                 Int                                    @default(50) @map("deal_score")
+  isOnline                  Boolean                                @default(false) @map("is_online")
+  isStudentOnly             Boolean                                @default(false) @map("is_student_only")
+  couponCode                String?                                @map("coupon_code")
+  destinationUrl            String?                                @map("destination_url")
+  redemptionBrand           String?                                @map("redemption_brand")
+  latitude                  Float?
+  longitude                 Float?
+  locationPrecision         String                                 @default("approximate") @map("location_precision")
+  geog                      Unsupported("geography(Point, 4326)")?
+  locationTags              String[]                               @map("location_tags")
+  visualSeed                Int                                    @default(0) @map("visual_seed")
+  status                    DealStatus                             @default(published)
+  moderationStatus          ModerationStatus                       @default(approved) @map("moderation_status")
+  source                    String                                 @default("seed")
   /// Provenance trust tier. Defaults to `fixture` (the safe non-authoritative
   /// default): an unknown source is never treated as source-confirmed.
-  sourceTrust         SourceTrust      @default(fixture) @map("source_trust")
+  sourceTrust               SourceTrust                            @default(fixture) @map("source_trust")
   /// Source provenance: canonical URL / external identifier the deal was confirmed
   /// against, and the human-facing attribution string required by some providers.
-  sourceUrl           String?          @map("source_url")
-  providerAttribution String?          @map("provider_attribution")
+  sourceUrl                 String?                                @map("source_url")
+  providerAttribution       String?                                @map("provider_attribution")
   /// Server-controlled verification lifecycle. Defaults to `pending`; the ingest
   /// + daily re-verification jobs are the only writers. Clients never set these.
-  verificationStatus  VerificationStatus @default(pending) @map("verification_status")
-  lastVerifiedAt      DateTime?        @map("last_verified_at")
-  lastVerificationAttemptAt DateTime?  @map("last_verification_attempt_at")
-  verificationFailureReason String?    @map("verification_failure_reason")
+  verificationStatus        VerificationStatus                     @default(pending) @map("verification_status")
+  lastVerifiedAt            DateTime?                              @map("last_verified_at")
+  lastVerificationAttemptAt DateTime?                              @map("last_verification_attempt_at")
+  verificationFailureReason String?                                @map("verification_failure_reason")
   /// Cross-source dedup fingerprint (merchant+title+location+price+category).
-  fingerprint         String?
-  confidenceScore     Int?             @map("confidence_score")
+  fingerprint               String?
+  confidenceScore           Int?                                   @map("confidence_score")
   /// Area-aware deal-quality score (0..100) copied from the promoted candidate.
-  qualityScore        Float            @default(0) @map("quality_score")
-  imageUrl            String?          @map("image_url")
-  campusSlug          String?          @map("campus_slug")
-  requiresStudentId   Boolean          @default(false) @map("requires_student_id")
-  audience            String           @default("general") @map("audience")
-  campusDealType      String?          @map("campus_deal_type")
-  crawlSourceId       String?          @map("crawl_source_id") @db.Uuid
-  crawlSource         CrawlSource?     @relation(fields: [crawlSourceId], references: [id], onDelete: SetNull)
-  placeId             String?          @map("place_id") @db.Uuid
-  place               Place?           @relation(fields: [placeId], references: [id], onDelete: SetNull)
-  startAt             DateTime?        @map("start_at")
-  expiresAt           DateTime         @map("expires_at")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
+  qualityScore              Float                                  @default(0) @map("quality_score")
+  imageUrl                  String?                                @map("image_url")
+  campusSlug                String?                                @map("campus_slug")
+  requiresStudentId         Boolean                                @default(false) @map("requires_student_id")
+  audience                  String                                 @default("general") @map("audience")
+  campusDealType            String?                                @map("campus_deal_type")
+  crawlSourceId             String?                                @map("crawl_source_id") @db.Uuid
+  crawlSource               CrawlSource?                           @relation(fields: [crawlSourceId], references: [id], onDelete: SetNull)
+  placeId                   String?                                @map("place_id") @db.Uuid
+  place                     Place?                                 @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  startAt                   DateTime?                              @map("start_at")
+  expiresAt                 DateTime                               @map("expires_at")
+  createdAt                 DateTime                               @default(now()) @map("created_at")
+  updatedAt                 DateTime                               @updatedAt @map("updated_at")
 
-  store        Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  category     Category          @relation(fields: [categoryId], references: [id])
-  savedBy      SavedDeal[]
-  watchedBy    WatchedDeal[]
-  swipes       DealSwipe[]
-  redemptions  DealRedemption[]
-  interactions DealInteraction[]
-  priceHistory PriceHistory[]
+  store         Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  category      Category          @relation(fields: [categoryId], references: [id])
+  savedBy       SavedDeal[]
+  watchedBy     WatchedDeal[]
+  swipes        DealSwipe[]
+  redemptions   DealRedemption[]
+  interactions  DealInteraction[]
+  priceHistory  PriceHistory[]
   notifications Notification[]
 
   @@index([status, expiresAt])
@@ -708,23 +708,23 @@ enum CrawlKind {
 }
 
 model CrawlSource {
-  id                  String     @id @default(uuid()) @db.Uuid
-  url                 String     @unique
+  id                  String    @id @default(uuid()) @db.Uuid
+  url                 String    @unique
   kind                CrawlKind
-  merchantHint        String?    @map("merchant_hint")
-  defaultCategorySlug String?    @map("default_category_slug")
-  zoneSlug            String?    @map("zone_slug")
-  enabled             Boolean    @default(true)
-  crawlIntervalHours  Int        @default(24) @map("crawl_interval_hours")
-  lastCrawledAt       DateTime?  @map("last_crawled_at")
-  sourceType          String     @default("merchant_site") @map("source_type")
-  dealUrl             String?    @map("deal_url")
-  targetPaths         String[]   @default([]) @map("target_paths")
-  reliabilityScore    Int        @default(50) @map("reliability_score")
-  lastSuccessAt       DateTime?  @map("last_success_at")
-  averageDealsFound   Float      @default(0) @map("average_deals_found")
-  placeId             String?    @unique @map("place_id") @db.Uuid
-  createdAt           DateTime   @default(now()) @map("created_at")
+  merchantHint        String?   @map("merchant_hint")
+  defaultCategorySlug String?   @map("default_category_slug")
+  zoneSlug            String?   @map("zone_slug")
+  enabled             Boolean   @default(true)
+  crawlIntervalHours  Int       @default(24) @map("crawl_interval_hours")
+  lastCrawledAt       DateTime? @map("last_crawled_at")
+  sourceType          String    @default("merchant_site") @map("source_type")
+  dealUrl             String?   @map("deal_url")
+  targetPaths         String[]  @default([]) @map("target_paths")
+  reliabilityScore    Int       @default(50) @map("reliability_score")
+  lastSuccessAt       DateTime? @map("last_success_at")
+  averageDealsFound   Float     @default(0) @map("average_deals_found")
+  placeId             String?   @unique @map("place_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
 
   place         Place?          @relation(fields: [placeId], references: [id], onDelete: SetNull)
   deals         Deal[]
@@ -737,18 +737,18 @@ model CrawlSource {
 }
 
 model CrawlRun {
-  id         String          @id @default(uuid()) @db.Uuid
-  sourceId   String          @map("source_id") @db.Uuid
-  status     IngestionStatus @default(running)
-  fetched    Int             @default(0)
-  queued     Int             @default(0)
-  deduped    Int             @default(0)
-  failed     Int             @default(0)
-  firecrawlPages Int     @default(0) @map("firecrawl_pages")
-  unchanged      Boolean @default(false)
-  error      String?
-  startedAt  DateTime        @default(now()) @map("started_at")
-  finishedAt DateTime?       @map("finished_at")
+  id             String          @id @default(uuid()) @db.Uuid
+  sourceId       String          @map("source_id") @db.Uuid
+  status         IngestionStatus @default(running)
+  fetched        Int             @default(0)
+  queued         Int             @default(0)
+  deduped        Int             @default(0)
+  failed         Int             @default(0)
+  firecrawlPages Int             @default(0) @map("firecrawl_pages")
+  unchanged      Boolean         @default(false)
+  error          String?
+  startedAt      DateTime        @default(now()) @map("started_at")
+  finishedAt     DateTime?       @map("finished_at")
 
   source   CrawlSource    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   failures CrawlFailure[]
@@ -829,6 +829,7 @@ model Place {
   vibeTags              String[]  @default([]) @map("vibe_tags")
   categoryTags          String[]  @default([]) @map("category_tags")
   whyRecommended        String?   @map("why_recommended")
+  budgetTip             String?   @map("budget_tip")
   confidenceLabel       String?   @map("confidence_label")
   dealLikelihoodScore   Float?    @map("deal_likelihood_score")
   hiddenGemScore        Float?    @map("hidden_gem_score")
@@ -836,6 +837,25 @@ model Place {
   feedSectionCandidates String[]  @default([]) @map("feed_section_candidates")
   enrichedAt            DateTime? @map("enriched_at")
   enrichmentHash        String?   @map("enrichment_hash")
+
+  // Admin-curated "student-friendly" flag (Food Run v2). Boosts studentValue +
+  // the student_friendly goal ranking; not derived from Google/Gemini.
+  curatedStudentFriendly Boolean  @default(false) @map("curated_student_friendly")
+
+  // Launch Region Data Hardening (GSU/GT). Enrichment-derived or curated signals
+  // the Food Run decision engine reads. All nullable/defaulted so existing rows
+  // stay valid and the place stays feed-ready before any of these are set.
+  lateNight             Boolean? @map("late_night")
+  studySpot             Boolean? @map("study_spot")
+  /// chain | local | unknown — drives the chain/local filter (name-list fallback).
+  chainClassification   String?  @map("chain_classification")
+  estimatedMealMinMinor Int?     @map("estimated_meal_min_minor")
+  estimatedMealMaxMinor Int?     @map("estimated_meal_max_minor")
+  recommendedOrder      String?  @map("recommended_order")
+  campusAffinity        String?  @map("campus_affinity")
+  launchRegionPriority  Int      @default(0) @map("launch_region_priority")
+  /// none | pending | approved | rejected — curation/review state for the place.
+  manualReviewStatus    String   @default("none") @map("manual_review_status")
 
   // Real Google Places photos (keyless, client-loadable URLs). Populated by a
   // capped batch job — NEVER live-fetched on app open. See docs/places-photos.md.
@@ -867,8 +887,8 @@ model ContentHash {
   processedAt    DateTime? @map("processed_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  source         CrawlSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  candidates     DealCandidate[]
+  source          CrawlSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  candidates      DealCandidate[]
   classifications AiClassification[]
 
   @@unique([sourceUrl, hash])
@@ -878,41 +898,41 @@ model ContentHash {
 }
 
 model DealCandidate {
-  id                 String    @id @default(uuid()) @db.Uuid
-  sourceId           String?   @map("source_id") @db.Uuid
-  sourceUrl          String    @map("source_url")
-  contentHashId      String?   @map("content_hash_id") @db.Uuid
-  regionalInventoryId String?  @map("regional_inventory_id") @db.Uuid
-  placeId            String?   @map("place_id") @db.Uuid
-  title              String
-  merchant           String
-  discount           String?
-  categorySlug       String    @map("category_slug")
-  expiration         DateTime?
-  locationText       String?   @map("location_text")
-  latitude           Float?
-  longitude          Float?
-  locationPrecision  String    @default("approximate") @map("location_precision")
-  summary            String
-  confidence         Float     @default(0)
+  id                  String             @id @default(uuid()) @db.Uuid
+  sourceId            String?            @map("source_id") @db.Uuid
+  sourceUrl           String             @map("source_url")
+  contentHashId       String?            @map("content_hash_id") @db.Uuid
+  regionalInventoryId String?            @map("regional_inventory_id") @db.Uuid
+  placeId             String?            @map("place_id") @db.Uuid
+  title               String
+  merchant            String
+  discount            String?
+  categorySlug        String             @map("category_slug")
+  expiration          DateTime?
+  locationText        String?            @map("location_text")
+  latitude            Float?
+  longitude           Float?
+  locationPrecision   String             @default("approximate") @map("location_precision")
+  summary             String
+  confidence          Float              @default(0)
   /// Area-aware deal-quality score (0..100): concreteness-dominant blend used to
   /// rank promotion. Higher = a more concrete, area-relevant, locatable offer.
-  qualityScore       Float     @default(0) @map("quality_score")
+  qualityScore        Float              @default(0) @map("quality_score")
   /// Gemini's per-deal area relevance (0..1) — input to qualityScore. Null when unscored.
-  areaRelevance      Float?    @map("area_relevance")
+  areaRelevance       Float?             @map("area_relevance")
   /// Gemini's per-deal concreteness (0..1) — input to qualityScore. Null when unscored.
-  concreteOfferScore Float?    @map("concrete_offer_score")
-  verificationStatus VerificationStatus @default(pending) @map("verification_status")
-  fingerprint        String?
-  raw                Json?
-  imageUrl           String?   @map("image_url")
-  campusSlug         String?   @map("campus_slug")
-  requiresStudentId  Boolean   @default(false) @map("requires_student_id")
-  audience           String    @default("general") @map("audience")
-  campusDealType     String?   @map("campus_deal_type")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
-  promotedAt         DateTime? @map("promoted_at")
+  concreteOfferScore  Float?             @map("concrete_offer_score")
+  verificationStatus  VerificationStatus @default(pending) @map("verification_status")
+  fingerprint         String?
+  raw                 Json?
+  imageUrl            String?            @map("image_url")
+  campusSlug          String?            @map("campus_slug")
+  requiresStudentId   Boolean            @default(false) @map("requires_student_id")
+  audience            String             @default("general") @map("audience")
+  campusDealType      String?            @map("campus_deal_type")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  promotedAt          DateTime?          @map("promoted_at")
 
   source            CrawlSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   contentHash       ContentHash?       @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
@@ -931,16 +951,16 @@ model DealCandidate {
 }
 
 model AiClassification {
-  id             String   @id @default(uuid()) @db.Uuid
-  candidateId    String?  @map("candidate_id") @db.Uuid
-  contentHashId  String?  @map("content_hash_id") @db.Uuid
-  task           String
-  model          String
-  promptHash     String   @map("prompt_hash")
-  schemaVersion  String   @default("v1") @map("schema_version")
-  output         Json
-  confidence     Float    @default(0)
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  candidateId   String?  @map("candidate_id") @db.Uuid
+  contentHashId String?  @map("content_hash_id") @db.Uuid
+  task          String
+  model         String
+  promptHash    String   @map("prompt_hash")
+  schemaVersion String   @default("v1") @map("schema_version")
+  output        Json
+  confidence    Float    @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
 
   candidate   DealCandidate? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   contentHash ContentHash?   @relation(fields: [contentHashId], references: [id], onDelete: SetNull)
@@ -953,19 +973,168 @@ model AiClassification {
 }
 
 model AiCache {
-  id            String   @id @default(uuid()) @db.Uuid
-  cacheKey      String   @unique @map("cache_key")
+  id            String    @id @default(uuid()) @db.Uuid
+  cacheKey      String    @unique @map("cache_key")
   task          String
   model         String
-  schemaVersion String  @default("v1") @map("schema_version")
-  promptHash    String  @map("prompt_hash")
+  schemaVersion String    @default("v1") @map("schema_version")
+  promptHash    String    @map("prompt_hash")
   output        Json
-  expiresAt     DateTime @map("expires_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  expiresAt     DateTime  @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
   lastHitAt     DateTime? @map("last_hit_at")
-  hitCount      Int      @default(0) @map("hit_count")
+  hitCount      Int       @default(0) @map("hit_count")
 
   @@index([task, model])
   @@index([expiresAt])
   @@map("ai_cache")
+}
+
+// ===========================================================================
+// Smart Basket (Grocery Autopilot) — deterministic catalog + generated baskets.
+// Estimated prices are honest national estimates, NEVER fabricated deals. Real
+// grocery `Deal`s are matched in and labeled separately. See
+// docs/superpowers/specs/2026-06-27-smart-basket-grocery-autopilot-design.md §5.
+// ===========================================================================
+
+/// Seeded reference catalog of student grocery staples with honest national
+/// price estimates. Read-only at runtime (the recommendation engine selects from
+/// these); never shown as a verified deal.
+model GroceryStapleItem {
+  id                  String   @id @default(uuid()) @db.Uuid
+  slug                String   @unique
+  name                String
+  category            String
+  unit                String
+  defaultQuantity     Int      @default(1) @map("default_quantity")
+  /// Honest national-estimate price in minor units (cents). Never a real deal price.
+  estimatedPriceMinor Int      @map("estimated_price_minor")
+  dietaryTags         String[] @map("dietary_tags")
+  goalAffinities      String[] @map("goal_affinities")
+  /// How much cooking is required: no_cook | low | medium | high.
+  prepLevel           String   @default("low") @map("prep_level")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@map("grocery_staple_items")
+}
+
+/// A generated Smart Basket. Guest-safe (`userId` nullable). Money in minor units.
+model GroceryBasket {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String?  @map("user_id")
+  title                 String
+  goal                  String
+  budgetMinor           Int      @map("budget_minor")
+  timeframe             String
+  latitude              Float
+  longitude             Float
+  regionSlug            String?  @map("region_slug")
+  campusSlug            String?  @map("campus_slug")
+  estimatedTotalMinor   Int      @map("estimated_total_minor")
+  estimatedSavingsMinor Int      @default(0) @map("estimated_savings_minor")
+  confidence            String   @default("medium")
+  explanation           String   @default("")
+  sourceStatus          String   @default("estimated") @map("source_status")
+  routeSummary          String?  @map("route_summary")
+  dietaryPrefs          String[] @map("dietary_prefs")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  items     GroceryBasketItem[]
+  storeRecs GroceryStoreRecommendation[]
+  saves     UserBasketSave[]
+
+  @@index([userId, createdAt])
+  @@map("grocery_baskets")
+}
+
+/// A single line item inside a generated basket. Carries its trust label so the
+/// client never confuses an estimated staple with a verified deal.
+model GroceryBasketItem {
+  id                  String   @id @default(uuid()) @db.Uuid
+  basketId            String   @map("basket_id") @db.Uuid
+  name                String
+  stapleSlug          String?  @map("staple_slug")
+  category            String
+  estimatedPriceMinor Int      @map("estimated_price_minor")
+  quantity            Int      @default(1)
+  unit                String
+  storeName           String?  @map("store_name")
+  matchedDealId       String?  @map("matched_deal_id") @db.Uuid
+  confidence          String   @default("medium")
+  /// verified | source_backed | estimated | user_reported | mock.
+  trustLabel          String   @default("estimated") @map("trust_label")
+  substitutions       Json     @default("[]")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  basket    GroceryBasket     @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  dealMatch GroceryDealMatch?
+
+  @@index([basketId])
+  @@map("grocery_basket_items")
+}
+
+/// A store recommendation attached to a basket: the best single store and an
+/// optional second stop.
+model GroceryStoreRecommendation {
+  id                    String   @id @default(uuid()) @db.Uuid
+  basketId              String   @map("basket_id") @db.Uuid
+  storeName             String   @map("store_name")
+  placeId               String?  @map("place_id") @db.Uuid
+  /// best_single | second_stop.
+  kind                  String
+  score                 Float    @default(0)
+  estimatedTotalMinor   Int      @map("estimated_total_minor")
+  estimatedSavingsMinor Int      @default(0) @map("estimated_savings_minor")
+  distanceMiles         Float?   @map("distance_miles")
+  /// Coordinates of the chosen store (from its Place/Deal) so iOS can map it.
+  latitude              Float?
+  longitude             Float?
+  reason                String   @default("")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  basket GroceryBasket @relation(fields: [basketId], references: [id], onDelete: Cascade)
+
+  @@index([basketId])
+  @@map("grocery_store_recommendations")
+}
+
+/// A real published grocery `Deal` matched into a basket item. This is the ONLY
+/// place a basket carries source-backed / verified pricing.
+model GroceryDealMatch {
+  id             String    @id @default(uuid()) @db.Uuid
+  basketItemId   String    @unique @map("basket_item_id") @db.Uuid
+  dealId         String?   @map("deal_id") @db.Uuid
+  merchant       String
+  title          String
+  discount       String?
+  priceMinor     Int       @map("price_minor")
+  validUntil     DateTime? @map("valid_until")
+  source         String    @default("")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  confidence     String    @default("medium")
+  sourceUrl      String?   @map("source_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  basketItem GroceryBasketItem @relation(fields: [basketItemId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("grocery_deal_matches")
+}
+
+/// Scaffold for future authed "Save Basket". Not used by iOS yet (Save is local
+/// UserDefaults today), but the table exists so saved baskets migrate cleanly.
+model UserBasketSave {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id")
+  basketId  String   @map("basket_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  basket GroceryBasket @relation(fields: [basketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, basketId])
+  @@index([userId])
+  @@map("user_basket_saves")
 }
