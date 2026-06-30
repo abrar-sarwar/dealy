@@ -251,7 +251,8 @@ struct DealsMapView: View {
     private var radiusSlider: some View {
         VStack(spacing: 6) {
             HStack {
-                Label(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll),
+                Label(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll,
+                                                 places: visibleMarkers.count),
                       systemImage: "scope")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(Theme.primaryText)
@@ -281,23 +282,27 @@ struct DealsMapView: View {
         .padding(.bottom, Spacing.sm)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Search radius")
-        .accessibilityValue(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll))
+        .accessibilityValue(MapCameraModel.radiusLabel(radiusMiles: radiusMiles, filtered: filteredAll,
+                                                       places: visibleMarkers.count))
     }
 
     @ViewBuilder private var permissionBanner: some View {
         if app.locationAuthorization == .denied || app.locationAuthorization == .restricted {
             Button { openSettings() } label: {
-                HStack(spacing: Spacing.xs) {
+                HStack(spacing: Spacing.sm) {
                     Image(systemName: "location.slash.fill")
-                    Text("Location is off — tap to share your location")
+                    Text("Turn on location to see places and deals around you — or browse online picks from Anywhere.")
                         .font(.caption.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     Image(systemName: "arrow.up.forward")
                 }
                 .foregroundStyle(.white)
-                .padding(.vertical, 8).padding(.horizontal, Spacing.sm)
-                .background(Theme.primary, in: Capsule())
+                .padding(.vertical, 10).padding(.horizontal, Spacing.md)
+                .background(Theme.primary, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, Spacing.lg)
             .padding(.top, Spacing.xs)
         }
     }
@@ -446,19 +451,29 @@ struct DealsMapView: View {
 
     @ViewBuilder private var emptyOverlay: some View {
         if MapCameraModel.isRadiusEmpty(shown: visible, totalMappable: mappableAll) {
-            // Honest empty state: the radius + filters hide everything, but the area
-            // has inventory. Point at the (still-visible) slider and the Filters sheet.
+            // Honest empty state: the radius + filters hide all DEALS. When place pins are
+            // still on the map, never imply the area is empty — point the user at the pins
+            // so "0 deals" doesn't read as broken (deals ≠ places).
+            let hasPlaces = !visibleMarkers.isEmpty
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text("No deals within \(radiusMiles) mi")
+                Text(hasPlaces ? "No deals within \(radiusMiles) mi yet" : "No deals within \(radiusMiles) mi")
                     .font(.headline).foregroundStyle(Theme.primaryText)
                     .multilineTextAlignment(.center)
-                Text("Drag the slider to widen\(filter.isDefault ? "" : ", or change Filters")")
+                Text(hasPlaces
+                     ? "Tap a place pin to explore nearby spots — or drag the slider to widen."
+                     : "Drag the slider to widen\(filter.isDefault ? "" : ", or change Filters")")
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedText)
                     .multilineTextAlignment(.center)
+                if hasPlaces {
+                    Text("Deals = discounts · Places = local spots")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                }
                 if radiusMiles < MapCameraModel.maxRadiusMiles {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -485,12 +500,26 @@ struct DealsMapView: View {
             // Keep clear of the bottom slider.
             .padding(.bottom, 120)
         } else if mappableAll.isEmpty {
+            // No DEALS to map. If place pins are present, say so and point at them rather
+            // than calling the whole map empty.
+            let hasPlaces = !visibleMarkers.isEmpty
             VStack(spacing: Spacing.sm) {
                 Image(systemName: "mappin.slash")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.mutedText)
-                Text("No deals to map here")
+                Text(hasPlaces ? "No deals here yet" : "No deals to map here")
                     .font(.headline).foregroundStyle(Theme.primaryText)
+                    .multilineTextAlignment(.center)
+                if hasPlaces {
+                    Text("Tap a place pin to explore nearby spots.")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                    Text("Deals = discounts · Places = local spots")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(Spacing.lg)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.lg))

@@ -212,12 +212,18 @@ enum MapCameraModel {
         Int(min(max(raw.rounded(), Double(minRadiusMiles)), Double(maxRadiusMiles)))
     }
 
-    /// Live "Within N mi · M deals" label for the slider, given the deals already
-    /// scoped by the sheet filters (category/toggles) — radius applied here.
-    static func radiusLabel(radiusMiles: Int, filtered: [Deal]) -> String {
+    /// Live "Within N mi · M deals · P places" label for the slider. Deals are scoped
+    /// by the sheet filters (category/toggles) with radius applied here; `places` is the
+    /// count of place pins in range, appended only when present so the slider never reads
+    /// "0 deals" while the map is clearly full of place pins (deals ≠ places).
+    static func radiusLabel(radiusMiles: Int, filtered: [Deal], places: Int = 0) -> String {
         let count = within(filtered, radiusMiles: radiusMiles).count
         let unit = count == 1 ? "deal" : "deals"
-        return "Within \(radiusMiles) mi · \(count) \(unit)"
+        var label = "Within \(radiusMiles) mi · \(count) \(unit)"
+        if places > 0 {
+            label += " · \(places) \(places == 1 ? "place" : "places")"
+        }
+        return label
     }
 
     /// Empty-state predicate: true when the radius + sheet filters yield zero deals

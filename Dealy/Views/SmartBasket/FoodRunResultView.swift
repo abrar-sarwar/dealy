@@ -93,22 +93,40 @@ struct FoodRunResultView: View {
                 }
 
                 if !result.reason.isEmpty {
-                    Text(result.reason)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Why this pick")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Theme.mutedText)
+                            .textCase(.uppercase)
+                        Text(result.reason)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 if let order = result.recommendedOrder, !order.isEmpty {
-                    Label(order, systemImage: "lightbulb.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("What to order")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Theme.mutedText)
+                            .textCase(.uppercase)
+                        Label(order, systemImage: "lightbulb.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } else if let tip = place.budgetTipDisplay {
-                    Label(tip, systemImage: "lightbulb.fill")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Budget tip")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Theme.mutedText)
+                            .textCase(.uppercase)
+                        Label(tip, systemImage: "lightbulb.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 if let deal = result.matchedDeal {
