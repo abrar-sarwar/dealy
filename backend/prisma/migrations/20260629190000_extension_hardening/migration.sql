@@ -20,6 +20,19 @@
 -- owner role (postgres, used by Prisma) can always execute regardless, and the
 -- app never calls this function, so the backend is unaffected. Reversible via
 -- GRANT (see prisma/drafts/2026-06-29_extension_hardening.DRAFT.sql rollback).
-REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text)                FROM anon, authenticated, public;
-REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text, text)          FROM anon, authenticated, public;
-REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text, text, boolean) FROM anon, authenticated, public;
+--
+-- PORTABILITY: the `anon`/`authenticated` roles exist only on Supabase. On vanilla
+-- Postgres (CI, local dev) they don't, and an unguarded `REVOKE ... FROM anon`
+-- aborts the migration with `role "anon" does not exist` (SQLSTATE 42704). Guard on
+-- their presence so this migration is a clean no-op off-Supabase while behaving
+-- exactly as before on Supabase. (On Supabase the REVOKE is itself a no-op because
+-- these functions are owned by `supabase_admin`, not the `postgres` role Prisma uses.)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text)                FROM anon, authenticated, public;
+    REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text, text)          FROM anon, authenticated, public;
+    REVOKE EXECUTE ON FUNCTION public.st_estimatedextent(text, text, text, boolean) FROM anon, authenticated, public;
+  END IF;
+END $$;
